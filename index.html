@@ -2863,6 +2863,7 @@ const[kvLastSynced,setKvLastSynced]=useState(null);
 const kvTimer=useRef(null);
 const kvPulled=useRef(false);
 const kvSuppressUntil=useRef(0);
+const kvDataRef=useRef({entries:[],receipts:[],invoices:[],clients:[],trash:[]});
 
 useEffect(()=>{
   (async()=>{
@@ -2963,13 +2964,14 @@ useEffect(()=>{
   });
 },[booted]);
 
+useEffect(()=>{kvDataRef.current={entries,receipts,invoices,clients,trash};},[entries,receipts,invoices,clients,trash]);
 // KV sync: pull (merge server → local; server wins for same-ID records)
 const kvPull=async(key)=>{
   if(!key)return false;
   setKvStatus('syncing');
   try{
     const res=await fetch(PROXY_URL+'/sync?key='+encodeURIComponent(key));
-    if(res.status===404){kvPulled.current=true;kvSuppressUntil.current=Date.now()+15000;setKvStatus('ok');return true;}
+    if(res.status===404){kvPulled.current=true;setKvStatus('ok');setKvLastSynced(new Date().toISOString());setTimeout(()=>kvPush(kvDataRef.current,key),800);return true;}
     if(!res.ok)throw new Error('HTTP '+res.status);
     const srv=await res.json();
     if(srv.entries)setEntries(l=>mergeById(l,srv.entries,true));
