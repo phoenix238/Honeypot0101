@@ -1,14 +1,17 @@
 /**
  * Honey API Proxy — Cloudflare Worker
  *
- * Sits between honey.html and api.anthropic.com.
- * The Anthropic API key is stored as a Cloudflare secret (never touches the browser).
+ * Routes:
+ *   POST /          → forward to Anthropic (AI proxy)
+ *   GET  /sync?key= → pull synced data from KV
+ *   POST /sync      → push synced data to KV (body: {key, data})
  *
- * To set the key:
- *   wrangler secret put ANTHROPIC_KEY
+ * Secrets:
+ *   ANTHROPIC_KEY   — set via: wrangler secret put ANTHROPIC_KEY
  *
- * To lock to your domain, set ALLOWED_ORIGIN in wrangler.toml:
- *   ALLOWED_ORIGIN = "https://honey.yourdomain.com"
+ * KV namespace:
+ *   HONEY_SYNC      — bound in wrangler.toml; create with:
+ *                     wrangler kv namespace create honey-sync
  */
 
 export default {
@@ -18,26 +21,79 @@ export default {
 
     const corsHeaders = {
       'Access-Control-Allow-Origin': allowed === '*' ? '*' : origin,
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     };
 
-    // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // Only POST allowed
-    if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405, headers: corsHeaders });
-    }
-
-    // Block requests from disallowed origins (when ALLOWED_ORIGIN is locked down)
     if (allowed !== '*' && origin !== allowed) {
       return new Response('Forbidden', { status: 403 });
     }
 
-    // Check the secret is configured
+    const url = new URL(request.url);
+
+    // ── Sync routes ──────────────────────────────────────────────────────────
+
+    if (url.pathname === '/sync') {
+      if (!env.HONEY_SYNC) {
+        return new Response(
+          JSON.stringify({ error: 'Sync not configured — HONEY_SYNC KV namespace not bound' }),
+          { status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        );
+      }
+
+      // Pull: GET /sync?key=<syncKey>
+      if (request.method === 'GET') {
+        const key = url.searchParams.get('key');
+        if (!key || key.length < 16) {
+          return new Response(
+            JSON.stringify({ error: 'Missing or invalid sync key' }),
+            { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+          );
+        }
+        const stored = await env.HONEY_SYNC.get(key);
+        if (stored === null) {
+          return new Response(null, { status: 404, headers: corsHeaders });
+        }
+        return new Response(stored, {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+
+      // Push: POST /sync  body: {key, data}
+      if (request.method === 'POST') {
+        let body;
+        try { body = await request.json(); } catch {
+          return new Response(
+            JSON.stringify({ error: 'Invalid JSON' }),
+            { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+          );
+        }
+        const { key, data } = body || {};
+        if (!key || key.length < 16 || !data) {
+          return new Response(
+            JSON.stringify({ error: 'Missing key or data' }),
+            { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+          );
+        }
+        await env.HONEY_SYNC.put(key, JSON.stringify(data));
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+
+      return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+    }
+
+    // ── AI proxy route ───────────────────────────────────────────────────────
+
+    if (request.method !== 'POST') {
+      return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+    }
+
     if (!env.ANTHROPIC_KEY) {
       return new Response(
         JSON.stringify({ error: { message: 'ANTHROPIC_KEY secret not set on Worker' } }),
@@ -55,7 +111,6 @@ export default {
       );
     }
 
-    // Forward to Anthropic
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {

@@ -34,6 +34,7 @@ body{background:#100f0b}
 .hf-scr input[type=time],.hf-scr input[type=date]{color-scheme:dark}
 .hf-scr *::-webkit-scrollbar{width:0;height:0}
 @media(max-width:480px){.hf-stage{padding:0;align-items:stretch}.hf-frame{width:100vw;border-radius:0;padding:0}.hf-scr{width:100%;height:100dvh;border-radius:0}}
+@media(min-width:700px){.hf-stage{padding:0;align-items:stretch;justify-content:stretch}.hf-frame{width:100%;max-width:none;border-radius:0;padding:0;box-shadow:none;background:transparent}.hf-scr{border-radius:0;height:100dvh;width:100%}.hf-handle{display:none}}
 </style>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2316140F'/%3E%3Ctext x='16' y='24' font-size='22' font-family='sans-serif' font-weight='800' fill='%23E0A92E' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 </head>
@@ -98,6 +99,9 @@ const aiScanImage=async(dataUrl,isPdf)=>{
   return JSON.parse(txt);
 };
 const LS={get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
+const genSyncKey=()=>{const a=new Uint8Array(24);crypto.getRandomValues(a);return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('');};
+const mergeById=(local,server,srvWins)=>{const m=new Map();if(srvWins){local.forEach(x=>m.set(x.id,x));server.forEach(x=>m.set(x.id,x));}else{server.forEach(x=>m.set(x.id,x));local.forEach(x=>m.set(x.id,x));}return[...m.values()];};
+const mergeTrash=(local,server)=>{const m=new Map();local.forEach(t=>m.set(t.item?.id||t.tid,t));server.forEach(t=>m.set(t.item?.id||t.tid,t));return[...m.values()];};
 
 const Sheets={
   _url:'',init(url){this._url=url||'';},
@@ -1482,12 +1486,13 @@ function scanFolders(seenCsv){
 }
 function getOrCreateFolder(name){ var it=DriveApp.getFoldersByName(name); return it.hasNext()?it.next():DriveApp.createFolder(name); }
 function getSubFolder(parent,name){ var it=parent.getFoldersByName(name); return it.hasNext()?it.next():parent.createFolder(name); }
+function getHoneyTrashFolder(){ return getSubFolder(getMasterFolder(),'Trash'); }
 function setupFolders(ss){
   var props=PropertiesService.getScriptProperties();
   if(props.getProperty('mhq_folders_v1')==='1')return;
   try{
     var master=getMasterFolder();
-    getSubFolder(master,'Invoices');getSubFolder(master,'Business Expenses');getSubFolder(master,'Reimbursable Expenses');getSubFolder(master,'Gmail Receipts');
+    getSubFolder(master,'Invoices');getSubFolder(master,'Business Expenses');getSubFolder(master,'Reimbursable Expenses');getSubFolder(master,'Gmail Receipts');getSubFolder(master,'Trash');
     var ssFile=DriveApp.getFileById(ss.getId());var parents=ssFile.getParents();var inM=false;
     while(parents.hasNext()){if(parents.next().getId()===master.getId()){inM=true;break;}}
     if(!inM){master.addFile(ssFile);try{DriveApp.getRootFolder().removeFile(ssFile);}catch(e2){}}
@@ -1730,7 +1735,7 @@ function deleteReceiptFiles(threadId, driveFileId) {
   } catch(e) { Logger.log('deleteReceiptFiles label error: ' + e); }
   try {
     if (driveFileId) {
-      DriveApp.getFileById(driveFileId).setTrashed(true);
+      DriveApp.getFileById(driveFileId).moveTo(getHoneyTrashFolder());
       deleted = 1;
     }
   } catch(e) { Logger.log('deleteReceiptFiles drive error: ' + e); }
@@ -2073,7 +2078,8 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
 </Card>);}
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
-function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,onAlign,aligning=false,onImportBank,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onImportOld,trash=[],onRestoreTrash,onPurgeTrashItem,onEmptyTrash}){
+
+function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,onAlign,aligning=false,onImportBank,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onImportOld,trash=[],onRestoreTrash,onPurgeTrashItem,onEmptyTrash,kvSyncStatus='idle',kvLastSynced=null,onKVSync}){
 const set=(k,v)=>setSettings(s=>({...s,[k]:v}));
 const[flash,setFlash]=useState(false);
 const[showSetup,setShowSetup]=useState(!settings.sheetsUrl);
@@ -2128,6 +2134,7 @@ return(<Page>
     </div>
   </div>}
 </Card>
+
 <Card style={{marginBottom:20,border:`1px solid ${T.drive}30`}}>
   <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:10}}><I n="money" sz={19} c={T.drive}/><div style={{fontWeight:700,fontSize:15,flex:1}}>Reconcile income</div></div>
   <div style={{fontSize:12,color:T.textMuted,lineHeight:1.5,marginBottom:14}}>Scan your Drive folders for invoices and receipts, or import a bank statement CSV to match payments. You review everything before anything is saved.</div>
@@ -2143,6 +2150,36 @@ return(<Page>
     <input type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={e=>{const f=e.target.files&&e.target.files[0];if(f&&onImportBank)onImportBank(f);e.target.value='';}}/>
   </label>
   <div style={{fontSize:11,color:T.textFaint,marginTop:8,lineHeight:1.5}}>Download a CSV from your bank's website. Credits are matched to unpaid invoices by amount — you approve each one before it saves.</div>
+</Card>
+<Card style={{marginBottom:20,border:`1px solid ${T.timed}30`}}>
+  <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:10}}>
+    <I n="sync" sz={19} c={T.timed}/>
+    <div style={{fontWeight:700,fontSize:15,flex:1}}>Device Sync</div>
+    {kvSyncStatus==='ok'&&<span style={{fontSize:11,color:T.lumpGreen,fontWeight:700,display:'flex',alignItems:'center',gap:4}}><I n="check" sz={12} c={T.lumpGreen}/>Synced</span>}
+    {kvSyncStatus==='syncing'&&<span style={{fontSize:11,color:T.timed,fontWeight:700,display:'flex',alignItems:'center',gap:4}}><Spinner/>Syncing</span>}
+    {kvSyncStatus==='error'&&<span style={{fontSize:11,color:T.danger,fontWeight:700}}>✗ Error</span>}
+  </div>
+  <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,marginBottom:14}}>
+    Sync entries, expenses, invoices, and clients between your phone and laptop. Your API key and PIN stay on each device — only your financial data syncs. Data is stored encrypted at rest on Cloudflare (your sync key is never logged).
+  </div>
+  {!settings.syncKey?(
+    <Btn full color={T.timed} onClick={()=>set('syncKey',genSyncKey())}>Generate sync key</Btn>
+  ):(
+    <>
+      <Field label="Sync key">
+        <div style={{display:'flex',gap:8}}>
+          <input style={{...iBase,flex:1,fontSize:10,fontFamily:"'Geist Mono',monospace",letterSpacing:'.05em'}} value={settings.syncKey} onChange={e=>set('syncKey',e.target.value)} placeholder="Paste your sync key here"/>
+          <button onClick={()=>navigator.clipboard.writeText(settings.syncKey)} style={{background:T.timed+'18',border:`1.5px solid ${T.timed}44`,borderRadius:12,padding:'0 13px',color:T.timed,fontWeight:700,fontSize:12,flexShrink:0,cursor:'pointer'}}>Copy</button>
+        </div>
+      </Field>
+      <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5,marginBottom:12}}>To add another device: tap Copy → open Honey on that device → Settings → Device Sync → paste key → tap Sync now.</div>
+      <Btn full color={kvSyncStatus==='syncing'?T.textMuted:T.timed} onClick={()=>onKVSync&&onKVSync(settings.syncKey)} disabled={kvSyncStatus==='syncing'}>
+        {kvSyncStatus==='syncing'?<><Spinner/> Syncing…</>:<><I n="sync" sz={16} c="#08060c"/> Sync now</>}
+      </Btn>
+      {kvLastSynced&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',marginTop:8}}>Last synced {new Date(kvLastSynced).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>}
+      <button onClick={()=>{if(window.confirm('Remove sync key from this device? Cloud data is NOT deleted.'))set('syncKey','');}} style={{display:'block',margin:'12px auto 0',background:'none',border:'none',color:T.textFaint,fontSize:11,cursor:'pointer'}}>Remove key from this device</button>
+    </>
+  )}
 </Card>
 <Lbl>Your details (appear on invoices)</Lbl><div style={{height:8}}/>
 <Field label="Your name"><Inp placeholder="Name on invoices" value={settings.name||''} onChange={e=>set('name',e.target.value)}/></Field>
@@ -2810,7 +2847,7 @@ const[clients,setClients]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
-const[settings,setSettings]=useState({name:'',business:'',email:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07});
+const[settings,setSettings]=useState({name:'',business:'',email:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,syncKey:''});
 const[syncStatus,setSyncStatus]=useState('loading');
 const[loaded,setLoaded]=useState(false);
 const[booted,setBooted]=useState(false);
@@ -2821,6 +2858,11 @@ const isSaving=useRef(false);
 const sheetHydrated=useRef(false); // true once we've successfully READ the sheet — guards against empty-state overwrite
 const[aligning,setAligning]=useState(false);
 const[alignResult,setAlignResult]=useState(null); // {matched,uninvoiced,untagged,restored,balance,err,at}
+const[kvStatus,setKvStatus]=useState('idle');
+const[kvLastSynced,setKvLastSynced]=useState(null);
+const kvTimer=useRef(null);
+const kvPulled=useRef(false);
+const kvSuppressUntil=useRef(0);
 
 useEffect(()=>{
   (async()=>{
@@ -2920,6 +2962,54 @@ useEffect(()=>{
     return changed?next:p;
   });
 },[booted]);
+
+// KV sync: pull (merge server → local; server wins for same-ID records)
+const kvPull=async(key)=>{
+  if(!key)return false;
+  setKvStatus('syncing');
+  try{
+    const res=await fetch(PROXY_URL+'/sync?key='+encodeURIComponent(key));
+    if(res.status===404){kvPulled.current=true;kvSuppressUntil.current=Date.now()+15000;setKvStatus('ok');return true;}
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const srv=await res.json();
+    if(srv.entries)setEntries(l=>mergeById(l,srv.entries,true));
+    if(srv.receipts)setReceipts(l=>mergeById(l,srv.receipts,true));
+    if(srv.invoices)setInvoices(l=>mergeById(l,srv.invoices,true));
+    if(srv.clients)setClients(l=>mergeById(l,srv.clients,true));
+    if(srv.trash)setTrash(l=>mergeTrash(l,srv.trash));
+    kvPulled.current=true;
+    kvSuppressUntil.current=Date.now()+15000;
+    setKvStatus('ok');
+    setKvLastSynced(new Date().toISOString());
+    return true;
+  }catch{setKvStatus('error');return false;}
+};
+// KV sync: push local state → server
+const kvPush=async(data,key)=>{
+  if(!key||!kvPulled.current)return;
+  setKvStatus('syncing');
+  try{
+    const res=await fetch(PROXY_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,data})});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    setKvStatus('ok');
+    setKvLastSynced(new Date().toISOString());
+  }catch{setKvStatus('error');}
+};
+// Pull on app open (once, when booted and key is available)
+useEffect(()=>{if(!booted)return;const k=settings.syncKey;if(k&&k.length>=32)kvPull(k);},[booted]);
+// Debounced push whenever data changes (guards: must have pulled first, not within 15s of a pull)
+useEffect(()=>{
+  if(!loaded||!settings.syncKey||!kvPulled.current)return;
+  if(Date.now()<kvSuppressUntil.current)return;
+  clearTimeout(kvTimer.current);
+  const snap={entries,receipts,invoices,clients,trash};
+  const key=settings.syncKey;
+  kvTimer.current=setTimeout(()=>{
+    if(Date.now()<kvSuppressUntil.current)return;
+    kvPush(snap,key);
+  },5000);
+},[entries,receipts,invoices,clients,trash,settings.syncKey,loaded]);
+
 const testConn=async()=>{Sheets.init(settings.sheetsUrl||'');return await Sheets.testDiag();};
 
 // ── Align everything: scan the Honey folders, AI-read new files, review, then write ──
@@ -3120,7 +3210,8 @@ return(<>
     {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
     {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl}/>}
     {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
-    {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} onAlign={runFolderAlign} aligning={ingesting} onImportBank={handleBankCSV} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} trash={trash} onRestoreTrash={restoreTrash} onPurgeTrashItem={purgeTrashItem} onEmptyTrash={emptyTrash}/>}
+
+    {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} onAlign={runFolderAlign} aligning={ingesting} onImportBank={handleBankCSV} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} trash={trash} onRestoreTrash={restoreTrash} onPurgeTrashItem={purgeTrashItem} onEmptyTrash={emptyTrash} kvSyncStatus={kvStatus} kvLastSynced={kvLastSynced} onKVSync={kvPull}/>}
   </div>}
   {ingestMsg&&<div style={{position:'fixed',bottom:84,left:'50%',transform:'translateX(-50%)',background:T.text,color:T.bg,padding:'10px 16px',borderRadius:12,fontSize:13,fontWeight:700,zIndex:300,maxWidth:'88%',textAlign:'center',boxShadow:'0 6px 20px rgba(0,0,0,.22)'}}>{ingestMsg}</div>}
   {ingestFound&&(()=>{const neu=ingestFound.filter(c=>c.ok&&c.amount&&!c.dup);const dups=ingestFound.filter(c=>c.ok&&c.amount&&c.dup);const bad=ingestFound.filter(c=>!(c.ok&&c.amount));const tot=neu.reduce((a,c)=>a+(c.amount||0),0);return(
