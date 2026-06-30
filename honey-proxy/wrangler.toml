@@ -6,3 +6,12 @@ compatibility_date = "2024-01-01"
 # Set this to your actual domain, e.g. "https://honey.yourdomain.com"
 # Or keep "*" during development and lock it down before going live
 ALLOWED_ORIGIN = "https://phoenix238.github.io"
+
+# KV namespace for cross-device sync.
+# To set up:
+#   1. Run: wrangler kv namespace create honey-sync
+#   2. Copy the id from the output and paste it below
+#   3. Run: wrangler deploy
+[[kv_namespaces]]
+binding = "HONEY_SYNC"
+id = "PASTE_YOUR_KV_ID_HERE"
