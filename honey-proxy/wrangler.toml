@@ -14,4 +14,4 @@ ALLOWED_ORIGIN = "https://phoenix238.github.io"
 #   3. Run: wrangler deploy
 [[kv_namespaces]]
 binding = "HONEY_SYNC"
-id = "PASTE_YOUR_KV_ID_HERE"
+id = "17575ac8559e40a7a7d6235c4a10ad3d"
