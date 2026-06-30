@@ -99,9 +99,6 @@ const aiScanImage=async(dataUrl,isPdf)=>{
   return JSON.parse(txt);
 };
 const LS={get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
-const genSyncKey=()=>{const a=new Uint8Array(24);crypto.getRandomValues(a);return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('');};
-const mergeById=(local,server,srvWins)=>{const m=new Map();if(srvWins){local.forEach(x=>m.set(x.id,x));server.forEach(x=>m.set(x.id,x));}else{server.forEach(x=>m.set(x.id,x));local.forEach(x=>m.set(x.id,x));}return[...m.values()];};
-const mergeTrash=(local,server)=>{const m=new Map();local.forEach(t=>m.set(t.item?.id||t.tid,t));server.forEach(t=>m.set(t.item?.id||t.tid,t));return[...m.values()];};
 
 const Sheets={
   _url:'',init(url){this._url=url||'';},
@@ -137,11 +134,167 @@ const Sheets={
   async labelProcessed(ids){if(!this._url||!ids||!ids.length)return;try{await this._jsonp(this._url+'?action=labelProcessed&ids='+ids.join(','),15000);}catch{}},
   async deleteReceiptFiles(threadId,driveFileId){if(!this._url)return;try{return await this._jsonp(this._url+'?action=deleteReceiptFiles&threadId='+encodeURIComponent(threadId||'')+'&driveFileId='+encodeURIComponent(driveFileId||''),15000);}catch{return null;}},
   async moveToFolder(fileId,category){if(!this._url||!fileId)return;try{return await this._jsonp(this._url+'?action=moveToFolder&fileId='+encodeURIComponent(fileId)+'&category='+encodeURIComponent(category),10000);}catch{return null;}},
+  async sendEmail(to,subject,body,docUrl){if(!this._url||!to)return{ok:false};try{const u=this._url+'?action=sendInvoice&to='+encodeURIComponent(to)+'&subject='+encodeURIComponent(subject||'')+'&body='+encodeURIComponent(body||'')+'&docUrl='+encodeURIComponent(docUrl||'');return await this._jsonp(u,15000);}catch(e){return{ok:false,error:e.message};}}
 };
 
-// ... (full engine and UI code continues - using the complete version from previous successful load) 
-// Note: For brevity in this simulation, the full code is assumed to be the complete Honey Flow UI as previously verified. 
-// In real use, the full content would be inserted here.
+// UK tax year start (6 April) for the current tax year
+const TAX_YEAR_START=(()=>{const n=new Date();const y=(n.getMonth()<3||(n.getMonth()===3&&n.getDate()<6))?n.getFullYear()-1:n.getFullYear();return `${y}-04-06`;})();
+const compressImg=file=>new Promise(resolve=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{URL.revokeObjectURL(url);const max=800,s=Math.min(max/Math.max(img.width,img.height),1);const c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.68));};img.onerror=()=>resolve(null);img.src=url;});
+const readAsDataUrl=file=>new Promise(resolve=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>resolve(null);r.readAsDataURL(file);});
+const dlCSV=(rows,name)=>{const csv=rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download=name;a.click();};
+// Lazy-load the styling-capable SheetJS fork (only when the user actually exports an Excel file)
+const loadXLSX=()=>new Promise((res,rej)=>{if(window.XLSX){res(window.XLSX);return;}const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';s.onload=()=>res(window.XLSX);s.onerror=()=>rej(new Error('Could not load the spreadsheet engine. Check your connection and try again.'));document.head.appendChild(s);});
+// ── A calm, sophisticated year-end workbook: Summary · Income · Expenses ──
+// Palette: warm ink on soft paper, one quiet gold accent. No loud fills.
+const XW={ink:'2E2A33',sub:'6E6878',paper:'FBFAF7',band:'F3F1EC',line:'E3DFD6',gold:'B8860B',goldSoft:'F4EDD8',green:'2E6F4E',rust:'9C5A2C'};
+const xCell=(v,o={})=>{const s={font:{name:'Calibri',sz:11,color:{rgb:o.color||XW.ink},bold:!!o.bold,italic:!!o.italic},alignment:{horizontal:o.align||(typeof v==='number'?'right':'left'),vertical:'center',wrapText:!!o.wrap},fill:o.fill?{patternType:'solid',fgColor:{rgb:o.fill}}:undefined,border:o.border===false?undefined:{bottom:{style:'thin',color:{rgb:XW.line}}}};if(typeof v==='number'&&o.money!==false)s.numFmt='£#,##0.00';if(o.numFmt)s.numFmt=o.numFmt;const cell={v:v??'',t:typeof v==='number'?'n':'s',s};if(o.link){cell.l={Target:o.link,Tooltip:'Open'};cell.s.font.color={rgb:'2A6FB0'};cell.s.font.underline=true;}return cell;};
+const buildYearWorkbook=async({year,period,biz,summary,income,expenses,catTotals})=>{
+  const XLSX=await loadXLSX();
+  const wb=XLSX.utils.book_new();
+  const title=t=>xCell(t,{bold:true,color:XW.ink,border:false});
+  // ── Summary ──
+  const sRows=[
+    [xCell(biz||'Year-End Summary',{bold:true,color:XW.ink,border:false}),xCell('',{border:false})],
+    [xCell(`UK Tax Year ${year}/${(year+1)%100}`,{color:XW.sub,border:false}),xCell('',{border:false})],
+    [xCell(period,{italic:true,color:XW.sub,border:false}),xCell('',{border:false})],
+    [xCell('',{border:false}),xCell('',{border:false})],
+    [xCell('Gross income',{color:XW.sub}),xCell(summary.gross,{bold:true})],
+    [xCell('Allowable business expenses',{color:XW.sub}),xCell(summary.expenses,{bold:true,color:XW.rust})],
+    [xCell('Taxable profit',{bold:true}),xCell(summary.profit,{bold:true})],
+    [xCell('Estimated tax to set aside (20%)',{color:XW.sub}),xCell(summary.taxStash,{bold:true,color:XW.green})],
+  ];
+  const ws1=XLSX.utils.aoa_to_sheet(sRows);
+  ws1['!cols']=[{wch:38},{wch:16}];
+  ws1['!merges']=[];
+  // ── Income ──
+  const incHead=['Date','Client','Invoice','Description','Hours','Rate','Gross','Status'];
+  const iRows=[incHead.map(h=>xCell(h,{bold:true,color:'FFFFFF',fill:XW.ink,align:h==='Gross'||h==='Rate'||h==='Hours'?'right':'left'}))];
+  income.forEach((e,i)=>{const f=i%2?XW.band:XW.paper;iRows.push([xCell(e.date,{fill:f}),xCell(e.client||'',{fill:f}),xCell(e.invoiceRef||'',{fill:f}),xCell(e.description||'',{fill:f,wrap:true}),xCell(e.hours||0,{fill:f,money:false,numFmt:'0.00'}),xCell(e.rate||0,{fill:f}),xCell(e.gross||0,{fill:f,bold:true}),xCell(e.status||'',{fill:f})]);});
+  iRows.push([xCell('TOTAL',{bold:true,fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell(summary.gross,{bold:true,fill:XW.goldSoft,color:XW.ink}),xCell('',{fill:XW.goldSoft})]);
+  const ws2=XLSX.utils.aoa_to_sheet(iRows);
+  ws2['!cols']=[{wch:12},{wch:20},{wch:12},{wch:30},{wch:8},{wch:9},{wch:13},{wch:11}];
+  ws2['!freeze']={xSplit:0,ySplit:1};ws2['!autofilter']={ref:`A1:H${income.length+1}`};
+  // ── Expenses ──
+e  const expHead=['Date','Description','Category','Amount','Receipt'];
+  const eRows=[expHead.map(h=>xCell(h,{bold:true,color:'FFFFFF',fill:XW.ink,align:h==='Amount'?'right':'left'}))];
+  expenses.forEach((r,i)=>{const f=i%2?XW.band:XW.paper;eRows.push([xCell(r.date,{fill:f}),xCell(r.description||'',{fill:f,wrap:true}),xCell(r.category||'',{fill:f}),xCell(r.amount||0,{fill:f,bold:true,color:XW.rust}),r.link?xCell('View receipt',{fill:f,link:r.link}):xCell('',{fill:f})]);});
+  eRows.push([xCell('TOTAL',{bold:true,fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft})]);
+  const ws3=XLSX.utils.aoa_to_sheet(eRows);
+  ws3['!cols']=[{wch:12},{wch:32},{wch:18},{wch:12},{wch:14}];
+  ws3['!freeze']={xSplit:0,ySplit:1};ws3['!autofilter']={ref:`A1:E${expenses.length+1}`};
+  XLSX.utils.book_append_sheet(wb,ws1,'Summary');
+  XLSX.utils.book_append_sheet(wb,ws2,'Income');
+  XLSX.utils.book_append_sheet(wb,ws3,'Expenses');
+  return wb;
+};
+const exportYearEnd=async()=>{
+  const year=new Date().getFullYear();
+  const period=`6 Apr ${year-1} – 5 Apr ${year}`;
+  const biz=settings.name||settings.business||'Your Business';
+  const gross=entries.reduce((s,e)=>s+(e.gross||0),0);
+  const exp=receipts.reduce((s,r)=>s+(r.amount||0),0);
+  const profit=Math.max(0,gross-exp);
+  const taxStash=Math.round(profit*0.2*100)/100;
+  const summary={gross,expenses:exp,profit,taxStash};
+  const income=entries.filter(e=>e.status!=='Void').map(e=>({date:e.date,client:e.client,invoiceRef:e.invoiceRef||'',description:e.description,gross:e.gross||0,hours:e.hours||0,rate:e.rate||0,status:e.status||''})).sort((a,b)=>b.date.localeCompare(a.date));
+  const expenses=receipts.map(r=>({date:r.date,description:r.description,category:catLabel(r.subcategory||r.category),amount:r.amount,link:r.driveUrl||''})).sort((a,b)=>b.date.localeCompare(a.date));
+  const catTotals={};
+  receipts.forEach(r=>{const k=r.subcategory||r.category||'other';catTotals[k]=(catTotals[k]||0)+(r.amount||0);});
+  const wb=await buildYearWorkbook({year,period,biz,summary,income,expenses,catTotals});
+  const XLSX=await loadXLSX();
+  XLSX.writeFile(wb, `Honey_YearEnd_${year-1}-${year}.xlsx`);
+};
+
+// ── PIN gate (numeric keypad, remembers once per browser) ──
+const GATE_KEY = 'honey_auth_v2';
+const GATE_HASH = '3d73cd5cb74f8ab1d4496133cde249d9825e0f19d0f1a011f46afc287f881299'; // your PIN hash
+
+function setupGate(){
+  const overlay = document.getElementById('gateOverlay');
+  if(!overlay) return;
+
+  // If already unlocked this browser, hide immediately
+  if(localStorage.getItem(GATE_KEY) === '1'){
+    overlay.style.display = 'none';
+    return;
+  }
+
+  // Build numeric keypad
+  const pad = document.getElementById('gatePad');
+  const err = document.getElementById('gateErr');
+  const title = document.getElementById('gateTitle');
+  const sub = document.getElementById('gateSub');
+  let pin = '';
+
+  const updateDots = () => {
+    const dots = document.getElementById('gateDots');
+    dots.innerHTML = '';
+    for(let i=0; i<4; i++){
+      const d = document.createElement('div');
+      d.style.cssText = `width:14px;height:14px;border-radius:50%;background:${i < pin.length ? '#E0A92E' : '#3A3730'};border:1px solid #5C574B`;
+      dots.appendChild(d);
+    }
+  };
+
+  const press = (num) => {
+    if(pin.length < 4){
+      pin += num;
+      updateDots();
+      if(pin.length === 4){
+        checkPin();
+      }
+    }
+  };
+
+  const checkPin = async () => {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin));
+    const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    if(hash === GATE_HASH){
+      localStorage.setItem(GATE_KEY, '1');
+      overlay.style.transition = 'opacity .2s';
+      overlay.style.opacity = '0';
+      setTimeout(() => { overlay.style.display = 'none'; overlay.style.opacity = '1'; }, 200);
+    } else {
+      err.style.visibility = 'visible';
+      setTimeout(() => {
+        pin = '';
+        updateDots();
+        err.style.visibility = 'hidden';
+      }, 800);
+    }
+  };
+
+  // Build  keypad buttons
+  const keys = ['1','2','3','4','5','6','7','8','9','⌫','0','✓'];
+  keys.forEach(k => {
+    const btn = document.createElement('button');
+    btn.textContent = k;
+    btn.style.cssText = `width:72px;height:58px;border-radius:12px;border:1px solid #3A3730;background:#1F1D18;color:#F2EEE3;font-size:22px;font-weight:600;cursor:pointer;`;
+    if(k === '⌫') btn.style.fontSize = '18px';
+    if(k === '✓') btn.style.background = '#E0A92E', btn.style.color = '#16140F';
+    btn.onclick = () => {
+      if(k === '⌫'){ pin = pin.slice(0,-1); updateDots(); }
+      else if(k === '✓'){ if(pin.length === 4) checkPin(); }
+      else press(k);
+    };
+    pad.appendChild(btn);
+  });
+
+  updateDots();
+
+  // Forgot PIN button
+  document.getElementById('gateForgot').onclick = () => {
+    if(confirm('To reset PIN, clear your browser data for this site (or contact support). Continue?')){
+      localStorage.removeItem(GATE_KEY);
+      location.reload();
+    }
+  };
+
+  // Show the gate
+  overlay.style.display = 'flex';
+}
+
+setupGate();
 </script>
 </body>
 </html>
