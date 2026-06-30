@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+*::-webkit-scrollbar{width:0;height:0}
+body{margin:0;background:#E9E6DD;font-family:'Space Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.ph{width:336px;border-radius:48px;padding:9px;background:#0C0B08;box-shadow:0 30px 70px -26px rgba(30,22,8,.6),0 2px 8px rgba(0,0,0,.18)}
+.scr{border-radius:40px;overflow:hidden;height:712px;position:relative;display:flex;flex-direction:column}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+input[type=time]{color-scheme:dark}
+input,textarea{font-family:inherit}
+input:focus,textarea:focus{outline:none;border-color:#E0A92E!important}
+textarea{resize:none}
+.drag-handle{flex:none;padding:10px 0 2px;display:flex;justify-content:center;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}
+.set-section{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.14em;color:#8A8576;margin:20px 0 10px}
+.set-row{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-radius:14px;background:#211E17;border:1px solid #322D23;margin-bottom:8px}
+.set-label{font-size:13px;color:#C9C3B4;font-weight:500}
+.set-val{font-size:13px;color:#F2EEE3;font-weight:600;text-align:right}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:30px;background:radial-gradient(120% 90% at 50% 0%,#EFEDE4,#E4E1D7)">
+<div class="ph"><div class="scr" data-screen-label="Home" style="background:#16140F">
+
+  <!-- STATUS BAR -->
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 24px 0;font-family:'Geist Mono',monospace;font-size:12px;color:#F2EEE3;flex:none">
+    <span>9:41</span>
+    <span style="display:flex;gap:5px;align-items:center"><span style="width:6px;height:6px;border-radius:50%;background:#F2EEE3"></span><span style="width:6px;height:6px;border-radius:50%;background:#F2EEE3"></span><span style="width:20px;height:10px;border:1.5px solid #F2EEE3;border-radius:3px"></span></span>
+  </div>
+
+  <!-- HEADER -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:12px 24px 16px;flex:none">
+    <div>
+      <div onClick="{{ openSettings }}" style="font-family:'Bricolage Grotesque',sans-serif;font-size:26px;font-weight:800;color:#E0A92E;letter-spacing:-.02em;line-height:1;margin-bottom:10px;cursor:pointer">Honey</div>
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8A8576">JUNE · TAKE-HOME</div>
+      <div style="position:relative;display:inline-block">
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:46px;font-weight:800;color:#E0A92E;line-height:1;margin-top:8px;letter-spacing:-.02em">{{ takeHome }}</div>
+        <svg width="10" height="22" viewBox="0 0 10 22" fill="none" style="position:absolute;bottom:-19px;left:16px">
+          <path d="M5 0 C5 0 2 6 1.5 11 C1 16 9 16 8.5 11 C8 6 5 0 5 0Z" fill="#E0A92E"/>
+          <ellipse cx="3.2" cy="10" rx="1.1" ry="2.2" fill="rgba(255,255,255,0.32)" transform="rotate(-18 3.2 10)"/>
+        </svg>
+      </div>
+      <div style="font-family:'Space Grotesk';font-size:12px;color:#8A8576;margin-top:20px">{{ earnedLine }}</div>
+    </div>
+    <div onClick="{{ openTax }}" style="text-align:center;cursor:pointer;margin-top:36px">
+      <div style="width:44px;height:58px;border-radius:7px 7px 12px 12px;border:1.6px solid #3A352A;background:#1E1B14;position:relative;overflow:hidden">
+        <div style="{{ jarFillStyle }}"></div>
+        <div style="position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:24px;height:6px;border-radius:3px;background:#3A352A"></div>
+      </div>
+      <div style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#8A8576;margin-top:5px;letter-spacing:.06em">POT {{ jarPct }}</div>
+    </div>
+  </div>
+
+  <!-- FEED -->
+  <div style="flex:1;overflow-y:auto;padding:0 22px 8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8A8576">ACTIVITY</div>
+      <button onClick="{{ resetSim }}" style="background:none;border:1px solid #2A2620;border-radius:7px;padding:4px 10px;font-family:'Geist Mono',monospace;font-size:9px;color:#5C574B;cursor:pointer;letter-spacing:.06em">RESET</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <sc-for list="{{ feed }}" as="it" hint-placeholder-count="5">
+        <div style="position:relative;border-radius:14px;overflow:hidden">
+          <div onClick="{{ it.onDelete }}" style="position:absolute;left:0;top:0;bottom:0;width:72px;background:#B8392F;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;z-index:1;cursor:pointer">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            <span style="font-family:'Geist Mono',monospace;font-size:8px;letter-spacing:.05em">DELETE</span>
+          </div>
+          <sc-if value="{{ it.billable }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ it.onBill }}" style="position:absolute;right:0;top:0;bottom:0;width:72px;background:#B07A12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;z-index:1;cursor:pointer">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
+              <span style="font-family:'Geist Mono',monospace;font-size:8px;letter-spacing:.05em">BILL</span>
+            </div>
+          </sc-if>
+          <div data-id="{{ it.id }}" data-billable="{{ it.billableFlag }}" style="{{ it.slideStyle }}" onPointerDown="{{ onDown }}" onPointerMove="{{ onMove }}" onPointerUp="{{ onUp }}" onClick="{{ it.onTap }}">
+            <sc-if value="{{ it.paid }}" hint-placeholder-val="{{ false }}">
+              <div style="width:20px;height:20px;border-radius:50%;background:#5BBF8A;color:#10130F;display:flex;align-items:center;justify-content:center;flex:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M5 12l4 4L19 6"/></svg></div>
+            </sc-if>
+            <sc-if value="{{ it.showDot }}" hint-placeholder-val="{{ true }}">
+              <div style="width:9px;height:9px;border-radius:50%;flex:none;background: {{ it.dot }}"></div>
+            </sc-if>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13.5px;font-weight:600;color: {{ it.titleColor }}">{{ it.title }}</div>
+              <div style="font-size:11px;color:#8A8576">{{ it.sub }}</div>
+              <sc-if value="{{ it.invoiced }}" hint-placeholder-val="{{ false }}">
+                <div style="display:inline-flex;align-items:center;gap:5px;margin-top:5px;padding:3px 8px;border-radius:7px;background:#B07A1222;border:1px solid #B07A1244;color:#D9A23A;font-family:'Geist Mono',monospace;font-size:9px;font-weight:600"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg>{{ it.invoicedNum }} &rsaquo;</div>
+              </sc-if>
+            </div>
+            <span style="font-family:'Geist Mono',monospace;font-size:13px;color: {{ it.amtColor }}">{{ it.amount }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="text-align:center;margin-top:16px;font-family:'Geist Mono',monospace;font-size:9.5px;color:#5C574B;letter-spacing:.05em">&lsaquo; SWIPE LEFT TO BILL · SWIPE RIGHT TO DELETE</div>
+  </div>
+
+  <!-- DOCK -->
+  <div style="flex:none;padding:11px 22px 20px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #221F18">
+    <button onClick="{{ openSnap }}" style="background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;color:#8A8576;cursor:pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="7" width="18" height="12" rx="2.5"/><circle cx="12" cy="13" r="3.2"/><path d="M8 7l1.2-2.2h5.6L16 7"/></svg><span style="font-family:'Geist Mono',monospace;font-size:8px;letter-spacing:.04em">SNAP</span></button>
+    <button onClick="{{ openIncome }}" style="background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;color:#8A8576;cursor:pointer;position:relative">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 7.5h18v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/><path d="M3 7.5l3-3h12l3 3M12 12v4M9.5 13.5h5"/></svg>
+      <span style="font-family:'Geist Mono',monospace;font-size:8px;letter-spacing:.04em">INCOME</span>
+      <sc-if value="{{ showBadge }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:-3px;right:2px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#E0A92E;color:#16140F;font-family:'Geist Mono',monospace;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ incomeBadge }}</span></sc-if>
+    </button>
+    <button onClick="{{ openLog }}" style="width:60px;height:60px;border-radius:50%;background:#E0A92E;color:#16140F;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 6px rgba(224,169,46,.12),0 12px 24px -6px rgba(224,169,46,.5)"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button onClick="{{ openBill }}" style="background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;color:#8A8576;cursor:pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg><span style="font-family:'Geist Mono',monospace;font-size:8px;letter-spacing:.04em">BILL</span></button>
+  </div>
+
+  <!-- ============ SETTINGS SHEET ============ -->
+  <sc-if value="{{ sheetSettings }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Settings" style="position:absolute;inset:0;background:#16140F;z-index:50;display:flex;flex-direction:column;animation:sheetUp .3s cubic-bezier(.2,.85,.25,1)">
+      <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+      <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+        <button onClick="{{ close }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">Settings</span>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:4px 22px 24px">
+
+        <!-- YOU -->
+        <div onClick="{{ togYou }}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin:20px 0 10px"><div class="set-section" style="margin:0">YOU</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8576" stroke-width="2.2" stroke-linecap="round" style="transform: {{ chevYou }};transition:transform .2s"><path d="M6 9l6 6 6-6"/></svg></div>
+        <sc-if value="{{ soYou }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:4px">
+            <div style="border-radius:14px;background:#211E17;border:1px solid #322D23;overflow:hidden">
+              <div style="padding:10px 14px;border-bottom:1px solid #322D23"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576;margin-bottom:5px">YOUR NAME</div><input value="{{ setName }}" onChange="{{ setSetName }}" placeholder="Sam Taylor" style="width:100%;background:none;border:none;color:#F2EEE3;font-size:14px;font-weight:600"></div>
+              <div style="padding:10px 14px;border-bottom:1px solid #322D23"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576;margin-bottom:5px">TRADING NAME</div><input value="{{ setTradingName }}" onChange="{{ setSetTradingName }}" placeholder="Sam Taylor Studio" style="width:100%;background:none;border:none;color:#F2EEE3;font-size:14px;font-weight:600"></div>
+              <div style="padding:10px 14px;border-bottom:1px solid #322D23"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576;margin-bottom:5px">EMAIL</div><input value="{{ setEmail }}" onChange="{{ setSetEmail }}" placeholder="you@studio.co" type="email" style="width:100%;background:none;border:none;color:#F2EEE3;font-size:14px"></div>
+              <div style="padding:10px 14px;border-bottom:1px solid #322D23"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576;margin-bottom:5px">PHONE</div><input value="{{ setPhone }}" onChange="{{ setSetPhone }}" placeholder="+44 7700 000000" style="width:100%;background:none;border:none;color:#F2EEE3;font-size:14px"></div>
+              <div style="padding:10px 14px"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576;margin-bottom:5px">ADDRESS</div><textarea value="{{ setAddress }}" onChange="{{ setSetAddress }}" rows="2" placeholder="Studio address…" style="width:100%;background:none;border:none;color:#F2EEE3;font-size:13px;line-height:1.5"></textarea></div>
+            </div>
+            <div style="border-radius:14px;background:#211E17;border:1px solid #322D23;overflow:hidden">
+              <div style="padding:10px 14px;border-bottom:1px solid #322D23"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576;margin-bottom:5px">VAT NUMBER (optional)</div><input value="{{ setVat }}" onChange="{{ setSetVat }}" placeholder="GB 123 456 789" style="width:100%;background:none;border:none;color:#F2EEE3;font-size:14px"></div>
+              <div style="padding:10px 14px"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576;margin-bottom:5px">BANK DETAILS (shown on invoices)</div><input value="{{ setBankDetails }}" onChange="{{ setSetBankDetails }}" placeholder="Sort: 00-00-00 · Acc: 00000000" style="width:100%;background:none;border:none;color:#F2EEE3;font-size:13px"></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- MONEY -->
+        <div onClick="{{ togMoney }}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin:20px 0 10px"><div class="set-section" style="margin:0">MONEY</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8576" stroke-width="2.2" stroke-linecap="round" style="transform: {{ chevMoney }};transition:transform .2s"><path d="M6 9l6 6 6-6"/></svg></div>
+        <sc-if value="{{ soMoney }}" hint-placeholder-val="{{ false }}">
+          <div style="border-radius:14px;background:#211E17;border:1px solid #322D23;overflow:hidden;margin-bottom:4px">
+            <div style="padding:10px 14px;border-bottom:1px solid #322D23;display:flex;align-items:center;justify-content:space-between"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576">DEFAULT RATE (£/HR)</div><input value="{{ setDefaultRate }}" onChange="{{ setSetDefaultRate }}" type="number" style="width:70px;text-align:right;background:none;border:none;color:#E0A92E;font-size:16px;font-weight:700;font-family:'Geist Mono',monospace"></div>
+            <div style="padding:10px 14px;border-bottom:1px solid #322D23;display:flex;align-items:center;justify-content:space-between"><div><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576">TAX SET-ASIDE %</div><div style="font-size:11px;color:#5C574B;margin-top:3px">Honey pots this % every time you earn</div></div><input value="{{ setTaxPct }}" onChange="{{ setSetTaxPct }}" type="number" style="width:50px;text-align:right;background:none;border:none;color:#E0A92E;font-size:16px;font-weight:700;font-family:'Geist Mono',monospace"></div>
+            <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576">PAYMENT TERMS (DAYS)</div><input value="{{ setPayTerms }}" onChange="{{ setSetPayTerms }}" type="number" style="width:50px;text-align:right;background:none;border:none;color:#F2EEE3;font-size:15px;font-weight:600;font-family:'Geist Mono',monospace"></div>
+          </div>
+        </sc-if>
+
+        <!-- INVOICE -->
+        <div onClick="{{ togInvoice }}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin:20px 0 10px"><div class="set-section" style="margin:0">INVOICE</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8576" stroke-width="2.2" stroke-linecap="round" style="transform: {{ chevInvoice }};transition:transform .2s"><path d="M6 9l6 6 6-6"/></svg></div>
+        <sc-if value="{{ soInvoice }}" hint-placeholder-val="{{ false }}">
+          <div style="border-radius:14px;background:#211E17;border:1px solid #322D23;overflow:hidden;margin-bottom:4px">
+            <div style="padding:10px 14px;border-bottom:1px solid #322D23;display:flex;align-items:center;justify-content:space-between"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576">NUMBER PREFIX</div><input value="{{ setInvPrefix }}" onChange="{{ setSetInvPrefix }}" placeholder="INV" style="width:80px;text-align:right;background:none;border:none;color:#F2EEE3;font-size:14px;font-weight:600;font-family:'Geist Mono',monospace"></div>
+            <div style="padding:10px 14px"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.1em;color:#8A8576;margin-bottom:5px">INVOICE FOOTER TEXT</div><input value="{{ setFooter }}" onChange="{{ setSetFooter }}" placeholder="Thank you for working with me!" style="width:100%;background:none;border:none;color:#F2EEE3;font-size:13px"></div>
+          </div>
+        </sc-if>
+
+        <!-- CLIENTS -->
+        <div onClick="{{ togClients }}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin:20px 0 10px"><div class="set-section" style="margin:0">SAVED CLIENTS</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8576" stroke-width="2.2" stroke-linecap="round" style="transform: {{ chevClients }};transition:transform .2s"><path d="M6 9l6 6 6-6"/></svg></div>
+        <sc-if value="{{ soClients }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:4px">
+            <sc-for list="{{ settingsClients }}" as="sc" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-radius:14px;background:#211E17;border:1px solid #322D23">
+                <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:#F2EEE3">{{ sc.name }}</div><div style="font-size:11.5px;color:#8A8576;margin-top:2px">{{ sc.email }}</div></div>
+                <button onClick="{{ sc.remove }}" style="background:none;border:none;color:#5C574B;cursor:pointer;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- CONNECTIONS -->
+        <div onClick="{{ togConnections }}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin:20px 0 10px"><div class="set-section" style="margin:0">CONNECTIONS</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8576" stroke-width="2.2" stroke-linecap="round" style="transform: {{ chevConnections }};transition:transform .2s"><path d="M6 9l6 6 6-6"/></svg></div>
+        <sc-if value="{{ soConnections }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:4px">
+            <div style="padding:13px 15px;border-radius:14px;background:#211E17;border:1px solid #322D23">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:14px;font-weight:600;color:#F2EEE3">Google Sheets</span><span style="font-family:'Geist Mono',monospace;font-size:9px;color:#5BBF8A;background:#2E7D5B22;padding:3px 8px;border-radius:6px">CONNECTED</span></div>
+              <div style="font-size:11.5px;color:#8A8576">Syncs logs, receipts &amp; invoices · creates PDFs via Google Docs</div>
+            </div>
+            <div style="padding:13px 15px;border-radius:14px;background:#211E17;border:1px solid #322D23">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:14px;font-weight:600;color:#F2EEE3">Monzo Business</span><span style="font-family:'Geist Mono',monospace;font-size:9px;color:#5BBF8A;background:#2E7D5B22;padding:3px 8px;border-radius:6px">LIVE</span></div>
+              <div style="font-size:11.5px;color:#8A8576">Bank feed for income inbox · auto-reconcile</div>
+            </div>
+            <div style="padding:13px 15px;border-radius:14px;background:#211E17;border:1px solid #322D23">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:14px;font-weight:600;color:#F2EEE3">Gmail receipt scan</span><div onClick="{{ toggleGmail }}" style="{{ gmailToggleStyle }}"><div style="{{ gmailThumbStyle }}"></div></div></div>
+              <div style="font-size:11.5px;color:#8A8576">Scans your inbox for receipts automatically</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- TAX -->
+        <div onClick="{{ togTax }}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin:20px 0 10px"><div class="set-section" style="margin:0">TAX</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8576" stroke-width="2.2" stroke-linecap="round" style="transform: {{ chevTax }};transition:transform .2s"><path d="M6 9l6 6 6-6"/></svg></div>
+        <sc-if value="{{ soTax }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:4px">
+            <div style="border-radius:14px;background:#211E17;border:1px solid #322D23;overflow:hidden;margin-bottom:8px">
+              <div style="padding:12px 15px;border-bottom:1px solid #322D23;display:flex;align-items:center;justify-content:space-between"><span style="font-size:13.5px;color:#C9C3B4">UK tax year</span><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#F2EEE3">6 Apr 25 – 5 Apr 26</span></div>
+              <div style="padding:12px 15px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:13.5px;color:#C9C3B4">Estimated tax bill</span><span style="font-family:'Geist Mono',monospace;font-size:13px;color:#E0A92E">{{ estBill }}</span></div>
+            </div>
+            <button onClick="{{ exportTax }}" style="width:100%;padding:14px;border:none;border-radius:14px;background:#E0A92E;color:#16140F;font-size:14px;font-weight:700;cursor:pointer">Export for Self Assessment</button>
+          </div>
+        </sc-if>
+
+        <!-- APP -->
+        <div onClick="{{ togApp }}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin:20px 0 10px"><div class="set-section" style="margin:0">APP</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8576" stroke-width="2.2" stroke-linecap="round" style="transform: {{ chevApp }};transition:transform .2s"><path d="M6 9l6 6 6-6"/></svg></div>
+        <sc-if value="{{ soApp }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button onClick="{{ resetSim }}" style="width:100%;padding:13px;border:1px solid #3A352A;border-radius:14px;background:none;color:#C9C3B4;font-size:14px;font-weight:600;cursor:pointer">Reset simulation</button>
+            <button style="width:100%;padding:13px;border:1px solid #3A352A;border-radius:14px;background:none;color:#8A8576;font-size:14px;font-weight:600;cursor:pointer">Export all data as CSV</button>
+          </div>
+        </sc-if>
+        <div style="text-align:center;font-family:'Geist Mono',monospace;font-size:9px;color:#3A352A;margin-top:24px;letter-spacing:.08em">HONEY · PROTOTYPE · v0.1</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ LOG SHEET ============ -->
+  <sc-if value="{{ sheetLog }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Log work" style="position:absolute;inset:0;background:#16140F;z-index:50;display:flex;flex-direction:column;animation:sheetUp .3s cubic-bezier(.2,.85,.25,1)">
+      <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+      <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+        <button onClick="{{ close }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">Log work</span>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:8px 22px 8px">
+        <div style="display:flex;gap:6px;padding:5px;border-radius:14px;background:#211E17;border:1px solid #322D23;margin-bottom:16px">
+          <div onClick="{{ setManual }}" style="{{ segHours }}">HOURS</div>
+          <div onClick="{{ setLump }}" style="{{ segLump }}">LUMP SUM</div>
+        </div>
+
+        <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576;margin-bottom:9px">CLIENT</div>
+        <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px">
+          <sc-for list="{{ clientChips }}" as="c" hint-placeholder-count="4">
+            <div onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.name }}</div>
+          </sc-for>
+          <div onClick="{{ newClient }}" style="{{ newClientStyle }}">+ New</div>
+        </div>
+        <sc-if value="{{ isNewClient }}" hint-placeholder-val="{{ false }}">
+          <input value="{{ logClient }}" onChange="{{ setClient }}" placeholder="New client name" style="width:100%;background:#211E17;border:1px solid #322D23;border-radius:12px;padding:12px 14px;color:#F2EEE3;font-size:14px;margin-bottom:10px">
+          <sc-if value="{{ hasNewClientName }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ toggleSaveNewClient }}" style="display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:12px;background:#211E17;border:1px solid #322D23;cursor:pointer;margin-bottom:12px">
+              <div style="width:20px;height:20px;border-radius:6px;border:1.5px solid #3A352A;display:flex;align-items:center;justify-content:center;flex:none;background: {{ saveNewClientBg }}"><sc-if value="{{ saveNewClientToggle }}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><path d="M5 12l4 4L19 6"/></svg></sc-if></div>
+              <div style="flex:1;font-size:13px;color:#C9C3B4">Save <b style="color:#F2EEE3">{{ logClient }}</b> to my clients</div>
+            </div>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ isManual }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576;flex:none">RATE £/HR</span><input value="{{ logRate }}" onChange="{{ setRate }}" type="number" style="flex:1;background:#211E17;border:1px solid #322D23;border-radius:12px;padding:12px 14px;color:#F2EEE3;font-size:14px"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
+            <span style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576">DAYS WORKED</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#E0A92E">{{ totalHoursLabel }}</span>
+          </div>
+          <sc-if value="{{ hasDays }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+              <sc-for list="{{ dayRows }}" as="d" hint-placeholder-count="2">
+                <div style="border-radius:14px;background:#211E17;border:1px solid #322D23;padding:10px 13px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#F2EEE3">{{ d.dateLabel }}</div><div style="font-size:10.5px;color:#8A8576;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.label }}</div></div>
+                    <div onClick="{{ d.toggleMode }}" style="{{ d.modeStyle }}">{{ d.modeLabel }}</div>
+                    <sc-if value="{{ d.isHours }}" hint-placeholder-val="{{ true }}">
+                      <input value="{{ d.hours }}" onChange="{{ d.setHours }}" type="number" placeholder="0" style="width:48px;text-align:center;background:#16140F;border:1px solid #322D23;border-radius:10px;padding:8px 4px;color:#F2EEE3;font-size:14px;font-family:'Geist Mono',monospace">
+                      <span style="font-size:12px;color:#8A8576">h</span>
+                    </sc-if>
+                    <button onClick="{{ d.remove }}" style="background:none;border:none;color:#5C574B;cursor:pointer;display:flex;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+                  </div>
+                  <sc-if value="{{ d.isTime }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:9px">
+                      <input type="time" value="{{ d.startT }}" onChange="{{ d.setStart }}" style="flex:1;background:#16140F;border:1px solid #322D23;border-radius:10px;padding:8px 10px;color:#F2EEE3;font-size:13px">
+                      <span style="color:#8A8576;font-size:12px">→</span>
+                      <input type="time" value="{{ d.endT }}" onChange="{{ d.setEnd }}" style="flex:1;background:#16140F;border:1px solid #322D23;border-radius:10px;padding:8px 10px;color:#F2EEE3;font-size:13px">
+                      <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#E0A92E;min-width:24px">{{ d.hoursCalc }}</span>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <div style="display:flex;gap:9px">
+            <button onClick="{{ addDay }}" style="flex:1;padding:11px;border:1px dashed #3A352A;border-radius:13px;background:none;color:#C9C3B4;font-size:12.5px;font-weight:600;cursor:pointer">+ Add a day</button>
+            <button onClick="{{ openCal }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border:1px solid #3F6FB055;border-radius:13px;background:#3F6FB014;color:#7FA8E0;font-size:12.5px;font-weight:600;cursor:pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>Calendar</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isLump }}" hint-placeholder-val="{{ false }}">
+          <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576;margin-bottom:7px">WHAT YOU DID</div>
+          <input value="{{ logDesc }}" onChange="{{ setDesc }}" placeholder="Short description" style="width:100%;background:#211E17;border:1px solid #322D23;border-radius:12px;padding:12px 14px;color:#F2EEE3;font-size:14px;margin-bottom:14px">
+          <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576;margin-bottom:7px">AMOUNT £</div>
+          <input value="{{ logAmount }}" onChange="{{ setAmount }}" type="number" placeholder="0.00" style="width:100%;background:#211E17;border:1px solid #322D23;border-radius:12px;padding:14px;color:#F2EEE3;font-size:20px;font-family:'Geist Mono',monospace">
+        </sc-if>
+      </div>
+      <div style="flex:none;padding:8px 22px 22px">
+        <div style="text-align:center;font-size:11.5px;color:#8A8576;margin-bottom:10px">{{ logPreview }}</div>
+        <button onClick="{{ doInvoiceIt }}" style="width:100%;padding:16px;border:none;border-radius:16px;background:#E0A92E;color:#16140F;font-size:15px;font-weight:800;cursor:pointer;margin-bottom:9px;opacity: {{ saveOpacity }}">Invoice it &rarr;</button>
+        <button onClick="{{ saveLog }}" style="width:100%;padding:12px;border:1px solid #322D23;border-radius:16px;background:none;color:#8A8576;font-size:13.5px;font-weight:600;cursor:pointer;opacity: {{ saveOpacity }}">Log only (bill later)</button>
+      </div>
+
+      <!-- CALENDAR OVERLAY -->
+      <sc-if value="{{ calOpen }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Calendar import" style="position:absolute;inset:0;background:#16140F;z-index:55;display:flex;flex-direction:column;animation:sheetUp .28s cubic-bezier(.2,.85,.25,1)">
+          <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+          <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+            <button onClick="{{ closeCal }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">From your calendar</span>
+          </div>
+          <sc-if value="{{ calLoading }}" hint-placeholder-val="{{ true }}">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:22px">
+              <div style="width:50px;height:50px;border-radius:50%;border:3px solid #322D23;border-top-color:#3F6FB0;animation:spin .8s linear infinite"></div>
+              <div style="font-family:'Space Grotesk';font-size:15px;color:#8A8576">Reading your week…</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ calList }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;overflow-y:auto;padding:8px 22px">
+              <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.1em;color:#8A8576;margin-bottom:11px">TAP THE SESSIONS YOU WORKED</div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ calEvents }}" as="ev" hint-placeholder-count="5">
+                  <div onClick="{{ ev.toggle }}" style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:14px;background:#211E17;border:1px solid #322D23;cursor:pointer">
+                    <div style="width:21px;height:21px;border-radius:6px;border:1.5px solid #3A352A;display:flex;align-items:center;justify-content:center;flex:none;background: {{ ev.checkBg }}"><sc-if value="{{ ev.checked }}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><path d="M5 12l4 4L19 6"/></svg></sc-if></div>
+                    <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:#F2EEE3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ev.title }}</div><div style="font-size:11px;color:#8A8576">{{ ev.date }}</div></div>
+                    <span style="font-family:'Geist Mono',monospace;font-size:13px;color:#E0A92E">{{ ev.hoursLabel }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="flex:none;padding:8px 22px 22px">
+              <button onClick="{{ addCalDays }}" style="width:100%;padding:15px;border:none;border-radius:16px;background:#3F6FB0;color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;opacity: {{ calAddOpacity }}">Add {{ calSelCount }} session(s)</button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ============ SEND INVOICE SHEET ============ -->
+  <sc-if value="{{ sheetSend }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Send invoice" style="position:absolute;inset:0;background:#16140F;z-index:52;display:flex;flex-direction:column;animation:sheetUp .3s cubic-bezier(.2,.85,.25,1)">
+      <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+      <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+        <button onClick="{{ closeSend }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">Send invoice</span>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:10px 22px">
+        <div style="padding:16px 17px;border-radius:16px;background:#211E17;border:1px solid #322D23;margin-bottom:16px">
+          <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576">TO</div>
+          <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:800;color:#F2EEE3;margin-top:3px">{{ sendClient }}</div>
+          <div style="height:1px;background:#322D23;margin:12px 0"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:13px;color:#8A8576;flex:1;min-width:0;margin-right:8px">{{ sendDesc }}</div>
+            <span style="font-family:'Geist Mono',monospace;font-size:15px;color:#F2EEE3;flex:none">{{ sendAmt }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid #322D23">
+            <span style="font-size:13px;color:#8A8576;font-weight:600">Total</span>
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:800;color:#5BBF8A">{{ sendAmt }}</span>
+          </div>
+        </div>
+        <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576;margin-bottom:9px">SEND TO</div>
+        <input value="{{ sendEmail }}" onChange="{{ setSendEmail }}" placeholder="{{ sendEmailPlaceholder }}" type="email" style="width:100%;background:#211E17;border:1px solid #322D23;border-radius:12px;padding:13px 15px;color:#F2EEE3;font-size:14px;margin-bottom:8px">
+        <sc-if value="{{ sendIsNewEmail }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ toggleSaveEmail }}" style="display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:12px;background:#211E17;border:1px solid #322D23;cursor:pointer;margin-bottom:8px">
+            <div style="width:20px;height:20px;border-radius:6px;border:1.5px solid #3A352A;display:flex;align-items:center;justify-content:center;flex:none;background: {{ saveEmailBg }}"><sc-if value="{{ saveEmailToggle }}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><path d="M5 12l4 4L19 6"/></svg></sc-if></div>
+            <div style="flex:1;font-size:13px;color:#C9C3B4">Save email for <b style="color:#F2EEE3">{{ sendClient }}</b></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ sendHasEmail }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:11px;color:#5BBF8A;margin-bottom:6px;padding-left:2px">✓ Saved for {{ sendClient }}</div>
+        </sc-if>
+        <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576;margin:12px 0 7px">INVOICE NUMBER</div>
+        <div style="padding:11px 14px;border-radius:12px;background:#211E17;border:1px solid #322D23;font-family:'Geist Mono',monospace;font-size:13px;color:#8A8576">{{ sendInvNum }}</div>
+        <div style="margin-top:12px;padding:12px 14px;border-radius:12px;background:#1B2A22;border:1px solid #2E7D5B33;font-size:12px;color:#8A8576;line-height:1.5">{{ sendParked }} will be <span style="color:#5BBF8A;font-weight:600">parked in the pot</span> automatically.</div>
+      </div>
+      <div style="flex:none;padding:8px 22px 22px">
+        <button onClick="{{ doSend }}" style="width:100%;padding:16px;border:none;border-radius:16px;background:#E0A92E;color:#16140F;font-size:15.5px;font-weight:800;cursor:pointer;margin-bottom:10px">Send PDF to {{ sendClient }} &rarr;</button>
+        <button onClick="{{ doSavePdf }}" style="width:100%;padding:12px;border:1px solid #322D23;border-radius:16px;background:none;color:#8A8576;font-size:13.5px;font-weight:600;cursor:pointer">Save PDF without sending</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ SNAP SHEET ============ -->
+  <sc-if value="{{ sheetSnap }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Snap receipt" style="position:absolute;inset:0;background:#16140F;z-index:50;display:flex;flex-direction:column;animation:sheetUp .3s cubic-bezier(.2,.85,.25,1)">
+      <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+      <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+        <button onClick="{{ close }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">Snap a receipt</span>
+      </div>
+      <sc-if value="{{ isCam }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
+          <div style="width:100%;flex:1;max-height:380px;border-radius:24px;background:repeating-linear-gradient(45deg,#1C1A14,#1C1A14 12px,#191711 12px,#191711 24px);border:1px solid #322D23;position:relative;display:flex;align-items:center;justify-content:center">
+            <div style="position:absolute;top:16px;left:16px;width:26px;height:26px;border-top:2px solid #E0A92E;border-left:2px solid #E0A92E;border-radius:5px 0 0 0"></div>
+            <div style="position:absolute;top:16px;right:16px;width:26px;height:26px;border-top:2px solid #E0A92E;border-right:2px solid #E0A92E;border-radius:0 5px 0 0"></div>
+            <div style="position:absolute;bottom:16px;left:16px;width:26px;height:26px;border-bottom:2px solid #E0A92E;border-left:2px solid #E0A92E;border-radius:0 0 0 5px"></div>
+            <div style="position:absolute;bottom:16px;right:16px;width:26px;height:26px;border-bottom:2px solid #E0A92E;border-right:2px solid #E0A92E;border-radius:0 0 5px 0"></div>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#5C574B;letter-spacing:.08em">POINT AT YOUR RECEIPT</span>
+          </div>
+          <button onClick="{{ shoot }}" style="margin-top:18px;width:70px;height:70px;border-radius:50%;background:#F2EEE3;border:4px solid #322D23;cursor:pointer;box-shadow:0 0 0 4px #16140F inset"></button>
+          <div style="display:flex;gap:10px;margin-top:14px;width:100%">
+            <button onClick="{{ fromPhotos }}" style="flex:1;padding:11px 8px;border:1px solid #322D23;border-radius:13px;background:#211E17;color:#C9C3B4;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>Photos</button>
+            <button onClick="{{ fromFiles }}" style="flex:1;padding:11px 8px;border:1px solid #322D23;border-radius:13px;background:#211E17;color:#C9C3B4;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Files</button>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isScan }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:22px">
+          <div style="width:54px;height:54px;border-radius:50%;border:3px solid #322D23;border-top-color:#E0A92E;animation:spin .8s linear infinite"></div>
+          <div style="font-family:'Space Grotesk';font-size:15px;color:#8A8576">Reading your receipt…</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isResult }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;overflow-y:auto;padding:14px 22px">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.1em;color:#5BBF8A;margin-bottom:12px">✓ SCANNED — LOOKS RIGHT?</div>
+          <div style="border-radius:18px;background:#211E17;border:1px solid #322D23;padding:18px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;justify-content:space-between"><span style="color:#8A8576;font-size:13px">Vendor</span><span style="color:#F2EEE3;font-size:14px;font-weight:600">Ryman</span></div>
+            <div style="height:1px;background:#322D23"></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#8A8576;font-size:13px">Amount</span><span style="color:#F2EEE3;font-family:'Geist Mono',monospace;font-size:16px">£23.50</span></div>
+            <div style="height:1px;background:#322D23"></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#8A8576;font-size:13px">Category</span><span style="color:#7E62C0;font-size:14px;font-weight:600">Office supplies</span></div>
+            <div style="height:1px;background:#322D23"></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#8A8576;font-size:13px">Date</span><span style="color:#F2EEE3;font-size:14px">30 Jun 2026</span></div>
+          </div>
+        </div>
+        <div style="flex:none;padding:8px 22px 22px;display:flex;gap:12px">
+          <button onClick="{{ resetSnap }}" style="flex:none;padding:16px 20px;border:1px solid #322D23;border-radius:16px;background:none;color:#8A8576;font-size:14px;font-weight:600;cursor:pointer">Retake</button>
+          <button onClick="{{ saveReceipt }}" style="flex:1;padding:16px;border:none;border-radius:16px;background:#E0A92E;color:#16140F;font-size:15px;font-weight:700;cursor:pointer">Save &amp; file</button>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ============ BILL SHEET ============ -->
+  <sc-if value="{{ sheetBill }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="New invoice" style="position:absolute;inset:0;background:#16140F;z-index:50;display:flex;flex-direction:column;animation:sheetUp .3s cubic-bezier(.2,.85,.25,1)">
+      <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+      <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+        <button onClick="{{ close }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">New invoice</span>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:10px 22px 8px">
+        <div style="padding:14px 17px;border-radius:16px;background:#211E17;border:1px solid #322D23;margin-bottom:14px">
+          <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576;margin-bottom:8px">BILL TO</div>
+          <sc-if value="{{ billClientSet }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">{{ billClientName }}</div>
+              <div onClick="{{ clearBillClient }}" style="font-size:12px;color:#E0A92E;font-weight:600;cursor:pointer">change</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ billClientUnset }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-wrap:wrap;gap:7px">
+              <sc-for list="{{ billClientChips }}" as="bc" hint-placeholder-count="3">
+                <div onClick="{{ bc.pick }}" style="{{ bc.style }}">{{ bc.name }}</div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+        <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576;margin-bottom:9px">UNBILLED WORK · TAP TO INCLUDE</div>
+        <sc-if value="{{ hasCandidates }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:8px">
+            <sc-for list="{{ candidates }}" as="it" hint-placeholder-count="2">
+              <div onClick="{{ it.toggle }}" style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:15px;background:#211E17;border:1px solid #322D23;cursor:pointer">
+                <div style="width:22px;height:22px;border-radius:7px;border:1.5px solid #3A352A;display:flex;align-items:center;justify-content:center;flex:none;background: {{ it.checkBg }}"><sc-if value="{{ it.checked }}" hint-placeholder-val="{{ true }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><path d="M5 12l4 4L19 6"/></svg></sc-if></div>
+                <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:#F2EEE3">{{ it.desc }}</div><div style="font-size:11px;color:#8A8576">{{ it.client }}</div></div>
+                <span style="font-family:'Geist Mono',monospace;font-size:13px;color:#F2EEE3">{{ it.amountStr }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noCandidates }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:30px 20px;text-align:center;border-radius:16px;background:#211E17;border:1px dashed #322D23;color:#8A8576;font-size:13px">All caught up — nothing left to bill.</div>
+        </sc-if>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 17px;border-radius:16px;background:#1B2A22;margin-top:6px">
+          <span style="font-size:13px;color:#8A8576">Invoice total</span>
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:23px;font-weight:800;color:#5BBF8A">{{ billTotal }}</span>
+        </div>
+      </div>
+      <div style="flex:none;padding:8px 22px 22px">
+        <button onClick="{{ openSendFromBill }}" style="width:100%;padding:16px;border:none;border-radius:16px;background:#E0A92E;color:#16140F;font-size:15.5px;font-weight:800;cursor:pointer;margin-bottom:9px;opacity: {{ sendOpacity }}">Send to {{ billClientName }} &rarr;</button>
+        <div style="text-align:center;font-family:'Geist Mono',monospace;font-size:9.5px;color:#5C574B;letter-spacing:.04em">{{ billParked }} PARKED FOR TAX AUTOMATICALLY</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ TAX SHEET ============ -->
+  <sc-if value="{{ sheetTax }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Tax pot" style="position:absolute;inset:0;background:#16140F;z-index:50;display:flex;flex-direction:column;animation:sheetUp .3s cubic-bezier(.2,.85,.25,1)">
+      <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+      <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+        <button onClick="{{ close }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">The honey pot</span>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:6px 24px;display:flex;flex-direction:column;align-items:center">
+        <div style="font-family:'Space Grotesk';font-size:12.5px;color:#8A8576;align-self:flex-start;margin-bottom:14px">Filled automatically, every time you get paid.</div>
+        <div style="width:134px;height:188px;border-radius:16px 16px 28px 28px;border:2px solid #3A352A;background:#1E1B14;position:relative;overflow:hidden;margin:4px 0">
+          <div style="{{ jarFillStyle }}"></div>
+          <div style="{{ jarLineStyle }}"></div>
+          <div style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);width:62px;height:11px;border-radius:5px;background:#3A352A"></div>
+          <div style="position:absolute;bottom:20px;left:0;right:0;text-align:center;font-family:'Bricolage Grotesque',sans-serif;font-size:30px;font-weight:800;color:#16140F">{{ jarPct }}</div>
+        </div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:38px;font-weight:800;color:#E0A92E;margin-top:14px">{{ jarAmount }}</div>
+        <div style="font-family:'Space Grotesk';font-size:13px;color:#8A8576;margin-top:3px;text-align:center">set aside of <span style="color:#F2EEE3">{{ estBill }}</span> estimated<br>{{ toGo }} to go</div>
+        <div style="display:flex;gap:7px;margin-top:20px;align-self:stretch">
+          <div style="flex:1;text-align:center;padding:10px 4px;border-radius:11px;background:#211E17"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#8A8576">Q1</div><div style="font-family:'Geist Mono',monospace;font-size:11px;color:#5BBF8A;margin-top:2px">£2.1k</div></div>
+          <div style="flex:1;text-align:center;padding:10px 4px;border-radius:11px;background:#211E17"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#8A8576">Q2</div><div style="font-family:'Geist Mono',monospace;font-size:11px;color:#5BBF8A;margin-top:2px">£2.4k</div></div>
+          <div style="flex:1;text-align:center;padding:10px 4px;border-radius:11px;background:#211E17"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#8A8576">Q3</div><div style="font-family:'Geist Mono',monospace;font-size:11px;color:#E0A92E;margin-top:2px">£2.3k</div></div>
+          <div style="flex:1;text-align:center;padding:10px 4px;border-radius:11px;background:#1A1813;border:1px dashed #3A352A"><div style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#5C574B">Q4</div><div style="font-family:'Geist Mono',monospace;font-size:11px;color:#5C574B;margin-top:2px">—</div></div>
+        </div>
+      </div>
+      <div style="flex:none;padding:8px 24px 22px">
+        <button onClick="{{ exportTax }}" style="width:100%;padding:16px;border:none;border-radius:16px;background:#E0A92E;color:#16140F;font-size:15px;font-weight:700;cursor:pointer">Export for Self Assessment</button>
+        <div style="text-align:center;font-family:'Geist Mono',monospace;font-size:9.5px;color:#5C574B;margin-top:10px;letter-spacing:.04em">EVERY FIGURE CATEGORISED &amp; RECEIPT-BACKED</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ INCOME SHEET ============ -->
+  <sc-if value="{{ sheetIncome }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Income inbox" style="position:absolute;inset:0;background:#16140F;z-index:50;display:flex;flex-direction:column;animation:sheetUp .3s cubic-bezier(.2,.85,.25,1)">
+      <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+      <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:6px 22px 8px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <button onClick="{{ close }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">Income</span>
+        </div>
+        <button onClick="{{ syncBank }}" style="display:flex;align-items:center;gap:6px;padding:8px 13px;border-radius:11px;background:#211E17;border:1px solid #322D23;color:#7FA8E0;font-size:12px;font-weight:600;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 0 0-14-5M4 13a8 8 0 0 0 14 5M18 4v3h-3M6 20v-3h3"/></svg>Sync</button>
+      </div>
+      <div style="flex:none;padding:0 22px 6px;font-family:'Space Grotesk';font-size:11.5px;color:#8A8576;display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#5BBF8A"></span>Monzo · Business · synced just now</div>
+      <div style="flex:none;display:flex;padding:6px 22px 0;gap:4px;border-bottom:1px solid #221F18">
+        <div onClick="{{ setReview }}" style="{{ tabReviewStyle }}">To review · {{ reviewCount }}</div>
+        <div onClick="{{ setDismissed }}" style="{{ tabDismissedStyle }}">Dismissed · {{ dismissedCount }}</div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:16px 22px">
+        <sc-if value="{{ reviewTab }}" hint-placeholder-val="{{ true }}">
+          <sc-if value="{{ showAutoBanner }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:14px;background:#1B2A22;border:1px solid #2E7D5B40;margin-bottom:14px">
+              <div style="width:24px;height:24px;border-radius:50%;background:#5BBF8A;color:#10130F;display:flex;align-items:center;justify-content:center;flex:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M5 12l4 4L19 6"/></svg></div>
+              <div style="font-size:12.5px;color:#C9D8CF;line-height:1.4"><b style="color:#5BBF8A">{{ autoMatchedCount }} auto-matched</b> to invoices — already marked paid.</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ hasPending }}" hint-placeholder-val="{{ true }}">
+            <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.1em;color:#8A8576;margin-bottom:10px">{{ reviewSummary }}</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ pendingCards }}" as="p" hint-placeholder-count="3">
+                <div onClick="{{ p.open }}" style="padding:15px 16px;border-radius:16px;background:#211E17;border:1px solid #322D23;cursor:pointer">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;color:#F2EEE3">{{ p.payer }}</div><div style="font-size:11.5px;color:#8A8576;margin-top:2px">{{ p.meta }}</div></div>
+                    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:20px;font-weight:800;color:#5BBF8A">{{ p.amount }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:11px;color:#E0A92E;font-size:11.5px;font-weight:600"><span>Tap to handle</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ noPending }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:50px 24px;text-align:center"><div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;color:#F2EEE3">Inbox zero</div><div style="font-size:13px;color:#8A8576;margin-top:6px">Every payment handled.</div></div>
+          </sc-if>
+        </sc-if>
+        <sc-if value="{{ dismissedTab }}" hint-placeholder-val="{{ false }}">
+          <sc-if value="{{ hasDismissed }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ dismissedCards }}" as="p" hint-placeholder-count="1">
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:15px;background:#1B1915;border:1px solid #2A2620">
+                  <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:#B9B3A4">{{ p.payer }}</div><div style="font-size:11px;color:#6B6556">{{ p.amount }}</div></div>
+                  <button onClick="{{ p.restore }}" style="padding:8px 13px;border-radius:10px;background:none;border:1px solid #3A352A;color:#7FA8E0;font-size:12px;font-weight:600;cursor:pointer">Restore</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ noDismissed }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:50px 24px;text-align:center;color:#8A8576;font-size:13px">Nothing dismissed.</div>
+          </sc-if>
+        </sc-if>
+      </div>
+      <sc-if value="{{ payActionOpen }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Handle payment" style="position:absolute;inset:0;background:#16140F;z-index:55;display:flex;flex-direction:column;animation:sheetUp .28s cubic-bezier(.2,.85,.25,1)">
+          <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+          <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+            <button onClick="{{ closePay }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">Handle payment</span>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:10px 22px">
+            <div style="padding:18px;border-radius:18px;background:#1B2A22;border:1px solid #2E7D5B33;margin-bottom:18px;text-align:center">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:34px;font-weight:800;color:#5BBF8A">{{ payAmt }}</div>
+              <div style="font-size:14px;color:#F2EEE3;font-weight:600;margin-top:4px">{{ payPayer }}</div>
+              <div style="font-size:11.5px;color:#8A8576;margin-top:2px">{{ payRef }}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div onClick="{{ payLogLump }}" style="display:flex;align-items:center;gap:14px;padding:16px;border-radius:16px;background:#211E17;border:1px solid #322D23;cursor:pointer">
+                <div style="width:42px;height:42px;border-radius:12px;background:#E0A92E1A;color:#E0A92E;display:flex;align-items:center;justify-content:center;flex:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 3v18M7 7h7a3 3 0 0 1 0 6H8m9 5H9"/></svg></div>
+                <div style="flex:1"><div style="font-size:15px;font-weight:700;color:#F2EEE3">Mark as received</div><div style="font-size:11.5px;color:#8A8576">No invoice needed · parks tax &amp; done</div></div>
+              </div>
+              <div onClick="{{ openMatch }}" style="display:flex;align-items:center;gap:14px;padding:16px;border-radius:16px;background:#211E17;border:1px solid #322D23;cursor:pointer">
+                <div style="width:42px;height:42px;border-radius:12px;background:#3F6FB01A;color:#7FA8E0;display:flex;align-items:center;justify-content:center;flex:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 7H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h3M16 7h3a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-3M8 12h8"/></svg></div>
+                <div style="flex:1"><div style="font-size:15px;font-weight:700;color:#F2EEE3">Match to invoice I sent</div><div style="font-size:11.5px;color:#8A8576">Settle an invoice already in honey</div></div>
+              </div>
+              <div onClick="{{ payInvoice }}" style="display:flex;align-items:center;gap:14px;padding:16px;border-radius:16px;background:#211E17;border:1px solid #322D23;cursor:pointer">
+                <div style="width:42px;height:42px;border-radius:12px;background:#B07A121A;color:#D9A23A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></div>
+                <div style="flex:1"><div style="font-size:15px;font-weight:700;color:#F2EEE3">Create invoice (already paid)</div><div style="font-size:11.5px;color:#8A8576">No prior invoice — for your records</div></div>
+              </div>
+              <div onClick="{{ dismissPay }}" style="display:flex;align-items:center;gap:14px;padding:16px;border-radius:16px;background:#1B1915;border:1px solid #2A2620;cursor:pointer">
+                <div style="width:42px;height:42px;border-radius:12px;background:#6B65561A;color:#8A8576;display:flex;align-items:center;justify-content:center;flex:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 8.5l7 7"/></svg></div>
+                <div style="flex:1"><div style="font-size:15px;font-weight:700;color:#C9C3B4">Not freelance income</div><div style="font-size:11.5px;color:#6B6556">Dismiss · you can restore it later</div></div>
+              </div>
+            </div>
+          </div>
+          <sc-if value="{{ matchOpen }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="Match to invoice" style="position:absolute;inset:0;background:#16140F;z-index:60;display:flex;flex-direction:column;animation:sheetUp .26s cubic-bezier(.2,.85,.25,1)">
+              <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+              <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+                <button onClick="{{ closeMatch }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">Match to invoice</span>
+              </div>
+              <div style="flex:1;overflow-y:auto;padding:10px 22px">
+                <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.1em;color:#8A8576;margin-bottom:11px">YOUR UNPAID INVOICES</div>
+                <sc-if value="{{ hasUnpaid }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;flex-direction:column;gap:9px">
+                    <sc-for list="{{ unpaidInvoices }}" as="iv" hint-placeholder-count="2">
+                      <div onClick="{{ iv.match }}" style="display:flex;align-items:center;gap:12px;padding:14px 15px;border-radius:15px;background:#211E17;border:1px solid #322D23;cursor:pointer">
+                        <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:#F2EEE3">{{ iv.client }}</div><div style="font-family:'Geist Mono',monospace;font-size:11px;color:#8A8576">{{ iv.num }}</div></div>
+                        <span style="font-family:'Geist Mono',monospace;font-size:14px;color:#F2EEE3">{{ iv.amt }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ noUnpaid }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:40px 24px;text-align:center;color:#8A8576;font-size:13px">No unpaid invoices to match.</div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ============ INVOICE PEEK ============ -->
+  <sc-if value="{{ peekOpen }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Invoice" style="position:absolute;inset:0;background:#16140F;z-index:62;display:flex;flex-direction:column;animation:sheetUp .28s cubic-bezier(.2,.85,.25,1)">
+      <div class="drag-handle" onPointerDown="{{ sdDown }}" onPointerMove="{{ sdMove }}" onPointerUp="{{ sdUp }}"><div style="width:40px;height:5px;border-radius:99px;background:#322D23"></div></div>
+      <div style="flex:none;display:flex;align-items:center;gap:12px;padding:6px 22px 8px">
+        <button onClick="{{ closePeek }}" style="background:none;border:none;color:#F2EEE3;cursor:pointer;display:flex"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#F2EEE3">Invoice</span>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:10px 22px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+          <div><div style="font-family:'Geist Mono',monospace;font-size:13px;color:#E0A92E">{{ peekNum }}</div><div style="font-family:'Bricolage Grotesque',sans-serif;font-size:26px;font-weight:800;color:#F2EEE3;margin-top:3px">{{ peekClient }}</div></div>
+          <span style="padding:5px 11px;border-radius:99px;font-family:'Geist Mono',monospace;font-size:10px;font-weight:600;color:#16140F;background: {{ peekStatusColor }}">{{ peekStatus }}</span>
+        </div>
+        <div style="font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.12em;color:#8A8576;margin:18px 0 9px">LINE ITEMS</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ peekLines }}" as="ln" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:14px;background:#211E17;border:1px solid #322D23">
+              <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:#F2EEE3">{{ ln.desc }}</div><div style="font-size:11px;color:#8A8576">{{ ln.client }}</div></div>
+              <span style="font-family:'Geist Mono',monospace;font-size:13px;color:#F2EEE3">{{ ln.amt }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 17px;border-radius:16px;background:#1B2A22;margin-top:12px">
+          <span style="font-size:13px;color:#8A8576">Total</span>
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:800;color:#5BBF8A">{{ peekTotal }}</span>
+        </div>
+      </div>
+      <div style="flex:none;padding:8px 22px 22px">
+        <sc-if value="{{ peekCanSimulate }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ openClientPreview }}" style="width:100%;padding:14px;border:1px solid #E0A92E44;border-radius:16px;background:#E0A92E14;color:#E0A92E;font-size:13.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Preview what they received</button>
+        </sc-if>
+        <div style="text-align:center;font-family:'Geist Mono',monospace;font-size:9.5px;color:#5C574B;letter-spacing:.04em;margin-top:12px">{{ peekFooter }}</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ CLIENT PREVIEW ============ -->
+  <sc-if value="{{ clientPreviewOpen }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Client view" style="position:absolute;inset:0;background:#F5F3EC;z-index:66;display:flex;flex-direction:column;animation:sheetUp .3s cubic-bezier(.2,.85,.25,1)">
+      <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:18px 22px 12px">
+        <button onClick="{{ closeClientPreview }}" style="background:none;border:none;color:#5C574B;cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>Close</button>
+        <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;color:#9A9384;background:#E9E5D8;padding:4px 10px;border-radius:20px">CLIENT VIEW</div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:8px 22px">
+        <div style="background:#fff;border-radius:20px;padding:22px;border:1px solid #E5E1D5;margin-bottom:14px">
+          <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:800;color:#1A1813;margin-bottom:4px">honey</div>
+          <div style="font-size:12px;color:#9A9384">Invoice from your freelancer</div>
+          <div style="height:1px;background:#EAE6DA;margin:16px 0"></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:12px;color:#9A9384">Invoice</span><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#1A1813">{{ clientInvNum }}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:12px;color:#9A9384">Date</span><span style="font-size:12px;color:#1A1813">30 Jun 2026</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:16px"><span style="font-size:12px;color:#9A9384">Due</span><span style="font-size:12px;color:#1A1813">30 Jul 2026</span></div>
+          <div style="height:1px;background:#EAE6DA;margin-bottom:14px"></div>
+          <sc-for list="{{ clientInvLines }}" as="ln" hint-placeholder-count="1">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F2EEE6"><span style="font-size:13px;color:#1A1813">{{ ln.desc }}</span><span style="font-family:'Geist Mono',monospace;font-size:13px;color:#1A1813">{{ ln.amt }}</span></div>
+          </sc-for>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0"><span style="font-size:14px;font-weight:700;color:#1A1813">Total due</span><span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:800;color:#1A1813">{{ clientInvTotal }}</span></div>
+        </div>
+        <div style="font-size:12px;color:#9A9384;text-align:center;margin-bottom:4px">Simulation — tap below to see what happens when the client pays</div>
+      </div>
+      <div style="flex:none;padding:8px 22px 26px">
+        <button onClick="{{ payAsClient }}" style="width:100%;padding:17px;border:none;border-radius:18px;background:#1A1813;color:#F5F3EC;font-size:16px;font-weight:800;cursor:pointer">Pay invoice {{ clientInvTotal }}</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- TOAST -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="">
+    <div style="position:absolute;bottom:98px;left:50%;transform:translateX(-50%);background:#F2EEE3;color:#16140F;padding:11px 18px;border-radius:13px;font-size:13px;font-weight:700;z-index:80;box-shadow:0 12px 32px rgba(0,0,0,.45);max-width:280px;text-align:center;animation:toastIn .25s">{{ toast }}</div>
+  </sc-if>
+
+</div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:420,&quot;height&quot;:820}}">
+class Component extends DCLogic {
+  state = {
+    sheet:null, openLogId:null, deleteRevealId:null, toast:null,
+    earned:4280, jarAmount:6840, estBill:9200,
+    nextOrd:6, invCounter:19,
+    entries:[
+      {id:'e1',client:'Brightside',desc:'Homepage build · 3.5h',type:'timed',amount:245,ord:5,billed:false,invoiceNum:null},
+      {id:'e2',client:'Lena Studio',desc:'Logo revisions · 2h',type:'manual',amount:140,ord:2,billed:false,invoiceNum:null},
+      {id:'e-h1',client:'Northwind',desc:'Brand identity · 6h',type:'manual',amount:420,ord:-1,billed:true,invoiceNum:'INV-2026-015'},
+      {id:'e-h2',client:'Maple & Co',desc:'Strategy session · 2h',type:'manual',amount:140,ord:-3,billed:true,invoiceNum:'INV-2026-014'},
+    ],
+    receipts:[
+      {id:'r1',vendor:'Pret',desc:'Lunch w/ client · today',amount:14,ord:4},
+      {id:'r-h1',vendor:'Uber',desc:'Client travel · last week',amount:22,ord:-2},
+    ],
+    events:[
+      {id:'v1',kind:'paid',client:'Acme',desc:'INV-2026-018 · auto-matched',amount:1200,ord:3},
+      {id:'v-h1',kind:'paid',client:'Northwind',desc:'INV-2026-015 · paid',amount:420,ord:-4},
+    ],
+    invoices:[
+      {id:'i18',num:'INV-2026-018',client:'Acme',amount:1200,status:'paid'},
+      {id:'i17',num:'INV-2026-017',client:'Maple & Co',amount:540,status:'sent'},
+      {id:'i16',num:'INV-2026-016',client:'Northwind',amount:880,status:'sent'},
+      {id:'i15',num:'INV-2026-015',client:'Northwind',amount:420,status:'paid'},
+      {id:'i14',num:'INV-2026-014',client:'Maple & Co',amount:140,status:'paid'},
+    ],
+    payments:[
+      {id:'p1',payer:'JKL Design Ltd',ref:'Ref: website build',amount:600,date:'Today',status:'pending'},
+      {id:'p2',payer:'R. Okafor',ref:'Ref: cheers!',amount:150,date:'Yesterday',status:'pending'},
+      {id:'p3',payer:'Brightside Co',ref:'Ref: project deposit',amount:300,date:'Mon',status:'pending'},
+    ],
+    clients:['Brightside','Lena Studio','Acme','Northwind','Maple & Co'],
+    clientEmails:{'Brightside':'hello@brightside.co','Lena Studio':'lena@lena.studio','Acme':'accounts@acme.com','Northwind':'hello@northwind.io','Maple & Co':'finance@mapleandco.com'},
+    logType:'manual', logClient:'', logDesc:'', logRate:70, logAmount:'',
+    dayRows:[], newClientMode:false, saveNewClientToggle:true,
+    calOpen:false, calStage:'loading', calSel:{},
+    calData:[
+      {id:'c1',date:'Mon 23 Jun',title:'Brightside · design review',hours:2,client:'Brightside'},
+      {id:'c2',date:'Mon 23 Jun',title:'Brightside · build session',hours:3.5,client:'Brightside'},
+      {id:'c3',date:'Tue 24 Jun',title:'Lena Studio · logo call',hours:1,client:'Lena Studio'},
+      {id:'c4',date:'Wed 25 Jun',title:'Brightside · build session',hours:4,client:'Brightside'},
+      {id:'c5',date:'Thu 26 Jun',title:'Northwind · kickoff',hours:1.5,client:'Northwind'},
+    ],
+    snapStage:'cam',
+    billClient:null, selBill:{},
+    sheetSend:false, sendEmail:'', sendFromBill:false, pendingLog:null, saveEmailToggle:true,
+    incomeTab:'review', payAction:null, matchOpen:false, autoMatchedCount:1,
+    syncedMatched:false, syncedNew:false,
+    peekInv:null, clientPreview:null,
+    gmailEnabled:true, settingsOpen:{you:true,money:false,invoice:false,clients:false,connections:false,tax:false,app:false},
+    settings:{
+      name:'Sam Taylor', tradingName:'Sam Taylor Studio', email:'sam@samtaylor.co',
+      phone:'', address:'', vatNumber:'', bankDetails:'',
+      defaultRate:70, taxPct:20, paymentTerms:30,
+      invPrefix:'INV', footerText:'Thank you for working with me!',
+    },
+  };
+  componentWillUnmount(){ clearTimeout(this._scan); clearTimeout(this._toastT); clearTimeout(this._cal); }
+
+  fmt(n){ return '£'+Math.max(0,Math.round(n||0)).toLocaleString('en-GB'); }
+  flash(msg){ clearTimeout(this._toastT); this.setState({toast:msg}); this._toastT=setTimeout(()=>this.setState({toast:null}),2600); }
+  seg(on){ return {flex:1,textAlign:'center',padding:'9px',borderRadius:10,fontFamily:"'Geist Mono',monospace",fontSize:11,letterSpacing:'.06em',cursor:'pointer',background:on?'#E0A92E':'transparent',color:on?'#16140F':'#8A8576',fontWeight:on?700:500}; }
+  chip(on){ return {padding:'8px 13px',borderRadius:999,fontSize:12.5,fontWeight:600,cursor:'pointer',border:'1px solid '+(on?'#E0A92E':'#322D23'),background:on?'#E0A92E':'transparent',color:on?'#16140F':'#C9C3B4'}; }
+  tabStyle(on){ return {flex:1,textAlign:'center',padding:'10px 4px',fontFamily:"'Space Grotesk'",fontSize:12.5,fontWeight:700,cursor:'pointer',color:on?'#F2EEE3':'#8A8576',borderBottom:'2px solid '+(on?'#E0A92E':'transparent')}; }
+  modeChip(on){ return {padding:'4px 9px',borderRadius:7,fontFamily:"'Geist Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:'.06em',cursor:'pointer',background:on?'#3F6FB0':'#16140F',color:on?'#fff':'#8A8576',border:'1px solid '+(on?'#3F6FB0':'#322D23')}; }
+  calcTimeHours(s,e){ if(!s||!e) return 0; const[sh,sm]=s.split(':').map(Number); const[eh,em]=e.split(':').map(Number); const h=(eh*60+em-sh*60-sm)/60; return h>0?Math.round(h*100)/100:0; }
+  toggle(track){ return {width:44,height:26,borderRadius:13,background:track?'#E0A92E':'#322D23',position:'relative',cursor:'pointer',transition:'background .2s'}; }
+  thumb(track){ return {position:'absolute',top:3,left:track?18:3,width:20,height:20,borderRadius:10,background:'#fff',transition:'left .2s'}; }
+
+  // ---- PULL TO CLOSE ----
+  sdDown(e){ this._sel=e.currentTarget.closest('[data-screen-label]')||e.currentTarget.parentElement; if(!this._sel) return; this._sy0=e.clientY; this._sdy=0; this._sel.style.transition='none'; try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){} }
+  sdMove(e){ if(!this._sel) return; const dy=Math.max(0,e.clientY-this._sy0); this._sdy=dy; this._sel.style.transform='translateY('+dy+'px)'; this._sel.style.opacity=Math.max(0.45,1-dy/280); }
+  sdUp(e){ if(!this._sel) return; const el=this._sel; this._sel=null; el.style.transition='transform .25s cubic-bezier(.3,.85,.25,1),opacity .25s'; if((this._sdy||0)>100){ el.style.transform='translateY(100%)'; el.style.opacity='0'; setTimeout(()=>this.setState({sheet:null,sheetSend:false,payAction:null,matchOpen:false,peekInv:null,calOpen:false,clientPreview:null}),260); } else { el.style.transform=''; el.style.opacity=''; } }
+
+  // ---- SWIPE ----
+  onDown(e){ const el=e.currentTarget; this._el=el; this._x0=e.clientX; this._dx=0; this._wasL=this.state.openLogId===el.dataset.id; this._wasR=this.state.deleteRevealId===el.dataset.id; el.style.transition='none'; try{ el.setPointerCapture(e.pointerId); }catch(_){} }
+  onMove(e){ if(!this._el) return; const base=this._wasL?-72:this._wasR?72:0; let dx=Math.max(-72,Math.min(72,e.clientX-this._x0+base)); if(this._el.dataset.billable!=='1') dx=Math.max(0,dx); this._dx=dx; this._el.style.transform='translateX('+dx+'px)'; }
+  onUp(e){ if(!this._el) return; const el=this._el; const id=el.dataset.id; el.style.transition='transform .22s cubic-bezier(.3,.85,.3,1)'; const d=this._dx||0; const moved=Math.abs(d); el.style.transform=''; this._el=null; if(moved<6){ this.setState({openLogId:null,deleteRevealId:null}); return; } this.setState({openLogId:d<-36&&el.dataset.billable==='1'?id:null,deleteRevealId:d>36?id:null}); }
+  deleteById(id){ if(id.startsWith('grp-')){ const num=id.replace('grp-',''); this.setState(s=>({entries:s.entries.filter(e=>e.invoiceNum!==num),deleteRevealId:null,openLogId:null})); } else { this.setState(s=>({entries:s.entries.filter(e=>e.id!==id),receipts:s.receipts.filter(r=>r.id!==id),events:s.events.filter(v=>v.id!==id),deleteRevealId:null,openLogId:null})); } this.flash('Removed from activity'); }
+
+  // ---- SETTINGS ----
+  openSettings(){ this.setState({sheet:'settings',openLogId:null,deleteRevealId:null}); }
+  updateSetting(key,val){ this.setState(s=>({settings:{...s.settings,[key]:val}})); }
+  removeClient(name){ this.setState(s=>{ const c=s.clients.filter(n=>n!==name); const em={...s.clientEmails}; delete em[name]; return {clients:c,clientEmails:em}; }); }
+  toggleGmail(){ this.setState(s=>({gmailEnabled:!s.gmailEnabled})); }
+  toggleSection(k){ this.setState(s=>({settingsOpen:{...s.settingsOpen,[k]:!s.settingsOpen[k]}})); }
+
+  // ---- SHEET NAV ----
+  openSheet(name,client){
+    if(name==='snap') this.setState({snapStage:'cam'});
+    if(name==='log'){ const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']; const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; const now=new Date(); const todayLabel=days[now.getDay()]+' '+now.getDate()+' '+months[now.getMonth()]; this.setState({logType:'manual',logClient:'',logDesc:'',logRate:this.state.settings.defaultRate||70,logAmount:'',dayRows:[{id:'d-today',date:todayLabel,hours:'',label:'Today',mode:'hours',startT:'',endT:''}],newClientMode:false,saveNewClientToggle:true,calOpen:false,calStage:'loading',calSel:{},sheetSend:false,pendingLog:null}); }
+    if(name==='bill'){ const sel={}; this.state.entries.forEach(e=>{ if(!e.billed&&(!client||e.client===client)) sel[e.id]=true; }); this.setState({billClient:client||null,selBill:sel}); }
+    if(name==='income') this.setState({incomeTab:'review',payAction:null,matchOpen:false});
+    this.setState({sheet:name,openLogId:null,deleteRevealId:null,peekInv:null,sheetSend:false,clientPreview:null});
+  }
+  close(){ this.setState({sheet:null,sheetSend:false,clientPreview:null}); }
+  closeSend(){ this.setState({sheetSend:false,pendingLog:null}); }
+
+  // ---- LOG ----
+  pickClient(n){ this.setState({logClient:n,newClientMode:false}); }
+  newClient(){ this.setState({newClientMode:true,logClient:'',saveNewClientToggle:true}); }
+  toggleSaveNewClient(){ this.setState(s=>({saveNewClientToggle:!s.saveNewClientToggle})); }
+  addDay(){ const pool=['Mon 23 Jun','Tue 24 Jun','Wed 25 Jun','Thu 26 Jun','Fri 27 Jun','Sat 28 Jun','Sun 29 Jun']; this.setState(s=>{ const date=pool[s.dayRows.filter(d=>d.id!=='d-today').length]||('Day '+(s.dayRows.length+1)); return {dayRows:[...s.dayRows,{id:'d'+Date.now().toString(36)+s.dayRows.length,date,hours:'',label:'Manual entry',mode:'hours',startT:'',endT:''}]}; }); }
+  setDayHours(id,v){ this.setState(s=>({dayRows:s.dayRows.map(d=>d.id===id?{...d,hours:v}:d)})); }
+  setDayStart(id,v){ this.setState(s=>({dayRows:s.dayRows.map(d=>{ if(d.id!==id) return d; const h=this.calcTimeHours(v,d.endT); return {...d,startT:v,hours:h||d.hours}; })})); }
+  setDayEnd(id,v){ this.setState(s=>({dayRows:s.dayRows.map(d=>{ if(d.id!==id) return d; const h=this.calcTimeHours(d.startT,v); return {...d,endT:v,hours:h||d.hours}; })})); }
+  toggleDayMode(id){ this.setState(s=>({dayRows:s.dayRows.map(d=>d.id===id?{...d,mode:d.mode==='hours'?'time':'hours'}:d)})); }
+  removeDay(id){ this.setState(s=>({dayRows:s.dayRows.filter(d=>d.id!==id)})); }
+  openCal(){ const s=this.state; const sel={}; if(s.logClient&&!s.newClientMode){ s.calData.forEach(ev=>{ if(ev.client===s.logClient) sel[ev.id]=true; }); } this.setState({calOpen:true,calStage:'loading',calSel:sel}); clearTimeout(this._cal); this._cal=setTimeout(()=>this.setState({calStage:'list'}),1300); }
+  toggleCal(id){ this.setState(s=>({calSel:{...s.calSel,[id]:!s.calSel[id]}})); }
+  closeCal(){ clearTimeout(this._cal); this.setState({calOpen:false}); }
+  addCalDays(){ const s=this.state; const chosen=s.calData.filter(ev=>s.calSel[ev.id]); if(!chosen.length){ this.setState({calOpen:false}); return; } const existing=new Set(s.dayRows.map(d=>d.id)); const rows=chosen.map(ev=>({id:'d'+ev.id,date:ev.date,hours:ev.hours,label:ev.title,mode:'hours',startT:'',endT:''})).filter(r=>!existing.has(r.id)); const patch={dayRows:[...s.dayRows,...rows],calOpen:false}; if(!s.logClient&&!s.newClientMode) patch.logClient=chosen[0].client; this.setState(patch); }
+  logGross(){ const s=this.state; if(s.logType==='lump') return parseFloat(s.logAmount)||0; return s.dayRows.reduce((a,d)=>{ let h=parseFloat(d.hours)||0; if(d.mode==='time'&&d.startT&&d.endT) h=this.calcTimeHours(d.startT,d.endT)||h; return a+h; },0)*(parseFloat(s.logRate)||0); }
+  buildLogData(){ const s=this.state; if(s.logType==='lump'){ return {amount:parseFloat(s.logAmount)||0,desc:s.logDesc||'Lump sum',client:s.logClient||'Client'}; } const th=s.dayRows.reduce((a,d)=>{ let h=parseFloat(d.hours)||0; if(d.mode==='time'&&d.startT&&d.endT) h=this.calcTimeHours(d.startT,d.endT)||h; return a+h; },0); const g=th*(parseFloat(s.logRate)||0); const days=new Set(s.dayRows.filter(d=>{ let h=parseFloat(d.hours)||0; if(d.mode==='time'&&d.startT&&d.endT) h=this.calcTimeHours(d.startT,d.endT)||h; return h>0; }).map(d=>d.date)).size||s.dayRows.length; return {amount:g,desc:days+' day'+(days!==1?'s':'')+' · '+(Math.round(th*100)/100)+'h',client:s.logClient||'Client'}; }
+  _maybeSaveClient(client){ const s=this.state; if(s.newClientMode&&s.saveNewClientToggle&&client&&!s.clients.includes(client)){ this.setState(st=>({clients:[...st.clients,client]})); } }
+  saveLog(){ const d=this.buildLogData(); if(d.amount<=0) return; this._maybeSaveClient(d.client); const id='e'+Date.now().toString(36); this.setState(st=>({entries:[{id,client:d.client,desc:d.desc,type:st.logType,amount:d.amount,ord:st.nextOrd,billed:false,invoiceNum:null},...st.entries],nextOrd:st.nextOrd+1,earned:st.earned+d.amount})); this.flash('Logged · '+this.fmt(d.amount)); this.close(); }
+  doInvoiceIt(){ const d=this.buildLogData(); if(d.amount<=0) return; this._maybeSaveClient(d.client); this.setState({pendingLog:d,sendEmail:this.state.clientEmails[d.client]||'',saveEmailToggle:true,sheetSend:true,sendFromBill:false}); }
+
+  // ---- SEND SHEET ----
+  setBillClient(name){ const sel={}; this.state.entries.forEach(e=>{ if(!e.billed&&e.client===name) sel[e.id]=true; }); this.setState({billClient:name,selBill:sel}); }
+  clearBillClient(){ this.setState({billClient:null,selBill:{}}); }
+  toggleSel(id){ this.setState(s=>({selBill:{...s.selBill,[id]:!s.selBill[id]}})); }
+  selectedTotal(){ return this.state.entries.filter(e=>!e.billed&&this.state.selBill[e.id]).reduce((a,e)=>a+e.amount,0); }
+  openSendFromBill(){ const s=this.state; const sel=s.entries.filter(e=>!e.billed&&s.selBill[e.id]); if(!sel.length) return; const total=this.selectedTotal(); const client=s.billClient||sel[0].client; const email=s.clientEmails[client]||''; const desc=sel.length===1?sel[0].desc:(sel.length+' items'); this.setState({pendingLog:{amount:total,desc,client,entries:sel.map(e=>e.id)},sendEmail:email,saveEmailToggle:true,sheetSend:true,sendFromBill:true}); }
+  setSendEmail(e){ this.setState({sendEmail:e.target.value}); }
+  toggleSaveEmail(){ this.setState(s=>({saveEmailToggle:!s.saveEmailToggle})); }
+  _commitSend(savePdfOnly){ const s=this.state; const d=s.pendingLog; if(!d) return; const num=(s.settings.invPrefix||'INV')+'-2026-0'+s.invCounter; const park=Math.round(d.amount*(s.settings.taxPct||20)/100); const newEntry={id:'e'+Date.now().toString(36),client:d.client,desc:d.desc,type:'lump',amount:d.amount,ord:s.nextOrd,billed:true,invoiceNum:num}; const fromBill=s.sendFromBill; const ids=new Set(d.entries||[]);
+    this.setState(st=>{ const p={}; if(fromBill){ p.entries=st.entries.map(e=>ids.has(e.id)?{...e,billed:true,invoiceNum:num}:e); } else { p.entries=[newEntry,...st.entries]; p.earned=st.earned+d.amount; } p.invoices=[{id:'iv'+Date.now().toString(36),num,client:d.client,amount:d.amount,status:'sent'},...st.invoices]; p.nextOrd=st.nextOrd+2; p.invCounter=st.invCounter+1; p.jarAmount=st.jarAmount+park; p.sheetSend=false; p.sheet=null; p.pendingLog=null; if(s.sendEmail&&s.saveEmailToggle){ p.clientEmails={...st.clientEmails,[d.client]:s.sendEmail}; } return p; });
+    this.flash(savePdfOnly?'PDF saved · '+this.fmt(d.amount):'Sent to '+(s.sendEmail||d.client)+' · '+this.fmt(d.amount)); }
+  doSend(){ this._commitSend(false); }
+  doSavePdf(){ this._commitSend(true); }
+
+  // ---- SNAP ----
+  shoot(){ this.setState({snapStage:'scanning'}); clearTimeout(this._scan); this._scan=setTimeout(()=>this.setState({snapStage:'result'}),1400); }
+  fromPhotos(){ this.setState({snapStage:'result'}); }
+  fromFiles(){ this.setState({snapStage:'result'}); }
+  resetSnap(){ this.setState({snapStage:'cam'}); }
+  saveReceipt(){ this.setState(st=>({receipts:[{id:'r'+Date.now().toString(36),vendor:'Ryman',desc:'Office supplies · today',amount:23.5,ord:st.nextOrd},...st.receipts],nextOrd:st.nextOrd+1})); this.flash('Receipt filed · £23 claimable'); this.close(); }
+
+  // ---- INCOME ----
+  syncBank(){ const s=this.state; const changes={}; let toast='No new payments — all caught up'; if(!s.syncedMatched){ changes.invoices=s.invoices.map(i=>i.id==='i17'?{...i,status:'paid'}:i); changes.events=[{id:'ev'+Date.now().toString(36),kind:'paid',client:'Maple & Co',desc:'INV-2026-017 · auto-matched',amount:540,ord:s.nextOrd},...s.events]; changes.nextOrd=s.nextOrd+1; changes.jarAmount=s.jarAmount+108; changes.autoMatchedCount=s.autoMatchedCount+1; changes.syncedMatched=true; toast='Auto-matched £540 → INV-2026-017'; } if(!s.syncedNew){ const base=changes.payments||s.payments; changes.payments=[...base,{id:'pn'+Date.now().toString(36),payer:'Tate & Co',ref:'Ref: retainer',amount:420,date:'Just now',status:'pending'}]; changes.syncedNew=true; } this.setState(changes); this.flash(toast); }
+  openPay(p){ this.setState({payAction:p,matchOpen:false}); }
+  closePay(){ this.setState({payAction:null,matchOpen:false}); }
+  openMatch(){ this.setState({matchOpen:true}); }
+  closeMatch(){ this.setState({matchOpen:false}); }
+  setTab(t){ this.setState({incomeTab:t}); }
+  _removePay(id,status){ this.setState(s=>({payments:s.payments.map(p=>p.id===id?{...p,status}:p)})); }
+  payLogLump(){ const p=this.state.payAction; if(!p) return; const park=Math.round(p.amount*(this.state.settings.taxPct||20)/100); this.setState(st=>({entries:[{id:'e'+Date.now().toString(36),client:p.payer,desc:'Income · '+p.ref.replace(/^Ref:\s*/,''),type:'lump',amount:p.amount,ord:st.nextOrd,billed:true,invoiceNum:null},...st.entries],events:[{id:'ev'+Date.now().toString(36),kind:'paid',client:p.payer,desc:'Logged from bank',amount:p.amount,ord:st.nextOrd+1},...st.events],payments:st.payments.map(x=>x.id===p.id?{...x,status:'handled'}:x),nextOrd:st.nextOrd+2,earned:st.earned+p.amount,jarAmount:st.jarAmount+park})); this.flash('Logged '+this.fmt(p.amount)+' · '+this.fmt(park)+' parked'); this.closePay(); }
+  payInvoice(){ const p=this.state.payAction; if(!p) return; const park=Math.round(p.amount*(this.state.settings.taxPct||20)/100); const num=(this.state.settings.invPrefix||'INV')+'-2026-0'+this.state.invCounter; this.setState(st=>({invoices:[{id:'iv'+Date.now().toString(36),num,client:p.payer,amount:p.amount,status:'paid'},...st.invoices],events:[{id:'ev'+Date.now().toString(36),kind:'paid',client:p.payer,desc:num+' · paid',amount:p.amount,ord:st.nextOrd},...st.events],payments:st.payments.map(x=>x.id===p.id?{...x,status:'handled'}:x),nextOrd:st.nextOrd+1,invCounter:st.invCounter+1,jarAmount:st.jarAmount+park})); this.flash('Invoice raised & paid · '+this.fmt(p.amount)); this.closePay(); }
+  doMatch(invId){ const p=this.state.payAction; if(!p) return; const inv=this.state.invoices.find(i=>i.id===invId); if(!inv) return; const park=Math.round(p.amount*(this.state.settings.taxPct||20)/100); this.setState(st=>({invoices:st.invoices.map(i=>i.id===invId?{...i,status:'paid'}:i),events:[{id:'ev'+Date.now().toString(36),kind:'paid',client:inv.client,desc:inv.num+' · matched',amount:inv.amount,ord:st.nextOrd},...st.events],payments:st.payments.map(x=>x.id===p.id?{...x,status:'handled'}:x),nextOrd:st.nextOrd+1,jarAmount:st.jarAmount+park})); this.flash('Matched · '+inv.num+' marked paid'); this.closePay(); }
+  dismissPay(){ const p=this.state.payAction; if(!p) return; this._removePay(p.id,'dismissed'); this.flash('Dismissed · find it in Dismissed tab'); this.closePay(); }
+  restorePay(id){ this._removePay(id,'pending'); this.flash('Restored to inbox'); }
+  exportTax(){ this.flash('Exported · ready for Self Assessment'); }
+
+  // ---- PEEK ----
+  openPeekByNum(num){ const inv=this.state.invoices.find(i=>i.num===num); if(inv) this.setState({peekInv:inv,clientPreview:null}); }
+  closePeek(){ this.setState({peekInv:null}); }
+  openClientPreview(){ const pk=this.state.peekInv; if(pk) this.setState({clientPreview:pk}); }
+  closeClientPreview(){ this.setState({clientPreview:null}); }
+  payAsClient(){ const cv=this.state.clientPreview; if(!cv) return; this.setState(st=>({invoices:st.invoices.map(i=>i.id===cv.id?{...i,status:'paid'}:i),payments:[{id:'psim'+Date.now().toString(36),payer:cv.client,ref:'Ref: '+cv.num,amount:cv.amount,date:'Just now',status:'pending'},...st.payments],clientPreview:null,peekInv:null,sheet:null})); this.flash('Client paid! Check your Income inbox 📬'); }
+
+  // ---- RESET ----
+  resetSim(){ this.setState({sheet:null,openLogId:null,deleteRevealId:null,toast:null,earned:4280,jarAmount:6840,estBill:9200,nextOrd:6,invCounter:19,entries:[{id:'e1',client:'Brightside',desc:'Homepage build · 3.5h',type:'timed',amount:245,ord:5,billed:false,invoiceNum:null},{id:'e2',client:'Lena Studio',desc:'Logo revisions · 2h',type:'manual',amount:140,ord:2,billed:false,invoiceNum:null},{id:'e-h1',client:'Northwind',desc:'Brand identity · 6h',type:'manual',amount:420,ord:-1,billed:true,invoiceNum:'INV-2026-015'},{id:'e-h2',client:'Maple & Co',desc:'Strategy session · 2h',type:'manual',amount:140,ord:-3,billed:true,invoiceNum:'INV-2026-014'}],receipts:[{id:'r1',vendor:'Pret',desc:'Lunch w/ client · today',amount:14,ord:4},{id:'r-h1',vendor:'Uber',desc:'Client travel · last week',amount:22,ord:-2}],events:[{id:'v1',kind:'paid',client:'Acme',desc:'INV-2026-018 · auto-matched',amount:1200,ord:3},{id:'v-h1',kind:'paid',client:'Northwind',desc:'INV-2026-015 · paid',amount:420,ord:-4}],invoices:[{id:'i18',num:'INV-2026-018',client:'Acme',amount:1200,status:'paid'},{id:'i17',num:'INV-2026-017',client:'Maple & Co',amount:540,status:'sent'},{id:'i16',num:'INV-2026-016',client:'Northwind',amount:880,status:'sent'},{id:'i15',num:'INV-2026-015',client:'Northwind',amount:420,status:'paid'},{id:'i14',num:'INV-2026-014',client:'Maple & Co',amount:140,status:'paid'}],payments:[{id:'p1',payer:'JKL Design Ltd',ref:'Ref: website build',amount:600,date:'Today',status:'pending'},{id:'p2',payer:'R. Okafor',ref:'Ref: cheers!',amount:150,date:'Yesterday',status:'pending'},{id:'p3',payer:'Brightside Co',ref:'Ref: project deposit',amount:300,date:'Mon',status:'pending'}],clients:['Brightside','Lena Studio','Acme','Northwind','Maple & Co'],clientEmails:{'Brightside':'hello@brightside.co','Lena Studio':'lena@lena.studio','Acme':'accounts@acme.com','Northwind':'hello@northwind.io','Maple & Co':'finance@mapleandco.com'},logType:'manual',logClient:'',logDesc:'',logRate:70,logAmount:'',dayRows:[],newClientMode:false,saveNewClientToggle:true,calOpen:false,calStage:'loading',calSel:{},snapStage:'cam',billClient:null,selBill:{},sheetSend:false,sendEmail:'',sendFromBill:false,pendingLog:null,saveEmailToggle:true,incomeTab:'review',payAction:null,matchOpen:false,autoMatchedCount:1,syncedMatched:false,syncedNew:false,peekInv:null,clientPreview:null}); this.flash('Simulation reset'); }
+
+  buildFeed(){ const s=this.state; const items=[];
+    const groups={};
+    s.entries.forEach(e=>{ if(e.invoiceNum){ if(!groups[e.invoiceNum]) groups[e.invoiceNum]=[]; groups[e.invoiceNum].push(e); } else { items.push({id:e.id,ord:e.ord,billable:true,client:e.client,title:'Logged · '+e.client,sub:e.desc,amount:this.fmt(e.amount),paid:false,invoiced:false,invoicedNum:''}); } });
+    Object.entries(groups).forEach(([num,ents])=>{ const inv=s.invoices.find(i=>i.num===num); const paid=!!(inv&&inv.status==='paid'); const total=ents.reduce((a,e)=>a+e.amount,0); const client=ents[0].client; const sub=ents.length>1?(ents.length+' items · '+ents.map(e=>e.desc.split('·')[0].trim()).join(', ')):ents[0].desc; const maxOrd=Math.max(...ents.map(e=>e.ord)); items.push({id:'grp-'+num,ord:maxOrd,billable:false,client,title:'Invoiced · '+client,sub,amount:this.fmt(total),paid,invoiced:true,invoicedNum:num}); });
+    s.receipts.forEach(r=>items.push({id:r.id,ord:r.ord,billable:false,title:'Snapped · '+r.vendor,sub:r.desc,amount:this.fmt(r.amount),paid:false,invoiced:false}));
+    s.events.forEach(v=>items.push({id:v.id,ord:v.ord,billable:false,title:v.kind==='paid'?(v.client+' paid you'):('Invoiced · '+v.client),sub:v.desc,amount:(v.kind==='paid'?'+':'')+this.fmt(v.amount),paid:v.kind==='paid',invoiced:false}));
+    items.sort((a,b)=>b.ord-a.ord); return items;
+  }
+
+  renderVals(){
+    const s=this.state; const f=n=>this.fmt(n); const st=s.settings;
+    const taxPct=(st.taxPct||20)/100;
+    const parked=Math.round(s.earned*taxPct); const take=s.earned-parked;
+    const pct=Math.min(100,Math.round((s.jarAmount/s.estBill)*100));
+    const jarFillStyle={position:'absolute',bottom:0,left:0,right:0,height:pct+'%',background:'linear-gradient(#E0A92E,#C98E1C)'};
+    const jarLineStyle={position:'absolute',left:0,right:0,bottom:pct+'%',height:'7px',background:'rgba(255,255,255,.18)'};
+
+    const feed=this.buildFeed().map(it=>{
+      const billOpen=s.openLogId===it.id; const delOpen=s.deleteRevealId===it.id;
+      const tx=billOpen?-72:delOpen?72:0;
+      const dot=it.receipt?'#7E62C0':'#E0A92E';
+      const slideStyle={position:'relative',zIndex:2,display:'flex',alignItems:'center',gap:13,padding:'13px 14px',borderRadius:14,background:it.paid?'#1B2A22':'#211E17',transform:'translateX('+tx+'px)',transition:'transform .22s cubic-bezier(.3,.85,.3,1)',touchAction:'pan-y',userSelect:'none',cursor:(it.billable||it.invoiced)?'pointer':'default'};
+      const titleColor=it.invoiced&&!it.paid?'#D9A23A':'#F2EEE3';
+      return {...it,dot,slideStyle,billableFlag:it.billable?'1':'0',showDot:!it.paid,amtColor:it.paid?'#5BBF8A':'#F2EEE3',titleColor,onBill:()=>this.openSheet('bill',it.client),onTap:()=>{ if(it.invoiced) this.openPeekByNum(it.invoicedNum); },onDelete:()=>this.deleteById(it.id)};
+    });
+
+    const candidates=s.entries.filter(e=>!e.billed&&(!s.billClient||e.client===s.billClient)).map(e=>({...e,amountStr:f(e.amount),checked:!!s.selBill[e.id],checkBg:s.selBill[e.id]?'#2E7D5B':'transparent',toggle:()=>this.toggleSel(e.id)}));
+    const billTotal=this.selectedTotal();
+    const logG=this.logGross();
+    const totalHours=s.dayRows.reduce((a,d)=>{ let h=parseFloat(d.hours)||0; if(d.mode==='time'&&d.startT&&d.endT) h=this.calcTimeHours(d.startT,d.endT)||h; return a+h; },0);
+
+    const pending=s.payments.filter(p=>p.status==='pending');
+    const dismissed=s.payments.filter(p=>p.status==='dismissed');
+    const unpaid=s.invoices.filter(i=>i.status==='sent');
+    const pa=s.payAction; const pk=s.peekInv; const cv=s.clientPreview;
+    const peekLines=pk?s.entries.filter(e=>e.invoiceNum===pk.num).map(e=>({desc:e.desc,client:e.client,amt:f(e.amount)})):[];
+    if(pk&&peekLines.length===0) peekLines.push({desc:'Work completed',client:pk?pk.client:'',amt:f(pk?pk.amount:0)});
+    const clientInvLines=cv?s.entries.filter(e=>e.invoiceNum===cv.num).map(e=>({desc:e.desc,amt:f(e.amount)})):[{desc:'Work completed',amt:f(cv?cv.amount:0)}];
+
+    const sd=s.pendingLog;
+    const existingEmail=sd?s.clientEmails[sd.client]:'';
+    const sendIsNewEmail=!!(sd&&s.sendEmail&&s.sendEmail!==existingEmail);
+
+    // settings clients list
+    const settingsClients=s.clients.map(name=>({name,email:s.clientEmails[name]||'No email saved',remove:()=>this.removeClient(name)}));
+
+    return {
+      takeHome:f(take), earnedLine:f(s.earned)+' earned · '+f(parked)+' in the pot',
+      jarFillStyle, jarLineStyle, jarPct:pct+'%', jarAmount:f(s.jarAmount), estBill:f(s.estBill), toGo:f(s.estBill-s.jarAmount),
+      feed,
+      openLog:()=>this.openSheet('log'), openSnap:()=>this.openSheet('snap'), openBill:()=>this.openSheet('bill',null), openTax:()=>this.openSheet('tax'), openIncome:()=>this.openSheet('income'), openSettings:()=>this.openSettings(), close:()=>this.close(),
+      onDown:e=>this.onDown(e), onMove:e=>this.onMove(e), onUp:e=>this.onUp(e),
+      sdDown:e=>this.sdDown(e), sdMove:e=>this.sdMove(e), sdUp:e=>this.sdUp(e),
+      sheetLog:s.sheet==='log', sheetSnap:s.sheet==='snap', sheetBill:s.sheet==='bill', sheetTax:s.sheet==='tax', sheetIncome:s.sheet==='income', sheetSettings:s.sheet==='settings',
+      sheetSend:s.sheetSend,
+      incomeBadge:pending.length, showBadge:pending.length>0,
+      // settings
+      setName:st.name, setSetName:e=>this.updateSetting('name',e.target.value),
+      setTradingName:st.tradingName, setSetTradingName:e=>this.updateSetting('tradingName',e.target.value),
+      setEmail:st.email, setSetEmail:e=>this.updateSetting('email',e.target.value),
+      setPhone:st.phone, setSetPhone:e=>this.updateSetting('phone',e.target.value),
+      setAddress:st.address, setSetAddress:e=>this.updateSetting('address',e.target.value),
+      setVat:st.vatNumber, setSetVat:e=>this.updateSetting('vatNumber',e.target.value),
+      setBankDetails:st.bankDetails, setSetBankDetails:e=>this.updateSetting('bankDetails',e.target.value),
+      setDefaultRate:st.defaultRate, setSetDefaultRate:e=>this.updateSetting('defaultRate',e.target.value),
+      setTaxPct:st.taxPct, setSetTaxPct:e=>this.updateSetting('taxPct',e.target.value),
+      setPayTerms:st.paymentTerms, setSetPayTerms:e=>this.updateSetting('paymentTerms',e.target.value),
+      setInvPrefix:st.invPrefix, setSetInvPrefix:e=>this.updateSetting('invPrefix',e.target.value),
+      setFooter:st.footerText, setSetFooter:e=>this.updateSetting('footerText',e.target.value),
+      settingsClients,
+      soYou:s.settingsOpen.you, soMoney:s.settingsOpen.money, soInvoice:s.settingsOpen.invoice, soClients:s.settingsOpen.clients, soConnections:s.settingsOpen.connections, soTax:s.settingsOpen.tax, soApp:s.settingsOpen.app,
+      togYou:()=>this.toggleSection('you'), togMoney:()=>this.toggleSection('money'), togInvoice:()=>this.toggleSection('invoice'), togClients:()=>this.toggleSection('clients'), togConnections:()=>this.toggleSection('connections'), togTax:()=>this.toggleSection('tax'), togApp:()=>this.toggleSection('app'),
+      chevYou:s.settingsOpen.you?'rotate(180deg)':'rotate(0deg)', chevMoney:s.settingsOpen.money?'rotate(180deg)':'rotate(0deg)', chevInvoice:s.settingsOpen.invoice?'rotate(180deg)':'rotate(0deg)', chevClients:s.settingsOpen.clients?'rotate(180deg)':'rotate(0deg)', chevConnections:s.settingsOpen.connections?'rotate(180deg)':'rotate(0deg)', chevTax:s.settingsOpen.tax?'rotate(180deg)':'rotate(0deg)', chevApp:s.settingsOpen.app?'rotate(180deg)':'rotate(0deg)',
+      gmailToggleStyle:this.toggle(s.gmailEnabled), gmailThumbStyle:this.thumb(s.gmailEnabled), toggleGmail:()=>this.toggleGmail(),
+      // log
+      segHours:this.seg(s.logType==='manual'), segLump:this.seg(s.logType==='lump'),
+      setManual:()=>this.setState({logType:'manual'}), setLump:()=>this.setState({logType:'lump'}),
+      isManual:s.logType==='manual', isLump:s.logType==='lump',
+      clientChips:s.clients.map(name=>({name,pick:()=>this.pickClient(name),style:this.chip(s.logClient===name&&!s.newClientMode)})),
+      newClient:()=>this.newClient(), newClientStyle:this.chip(s.newClientMode), isNewClient:s.newClientMode,
+      hasNewClientName:!!(s.newClientMode&&s.logClient&&s.logClient.trim()),
+      saveNewClientToggle:s.saveNewClientToggle, toggleSaveNewClient:()=>this.toggleSaveNewClient(),
+      saveNewClientBg:s.saveNewClientToggle?'#2E7D5B':'transparent',
+      logClient:s.logClient, setClient:e=>this.setState({logClient:e.target.value}),
+      logDesc:s.logDesc, setDesc:e=>this.setState({logDesc:e.target.value}),
+      logRate:s.logRate, setRate:e=>this.setState({logRate:e.target.value}),
+      logAmount:s.logAmount, setAmount:e=>this.setState({logAmount:e.target.value}),
+      dayRows:s.dayRows.map(d=>{ const isT=d.mode==='time'; const hc=isT&&d.startT&&d.endT?this.calcTimeHours(d.startT,d.endT):0; return {dateLabel:d.date,label:d.label,hours:d.hours,setHours:e=>this.setDayHours(d.id,e.target.value),remove:()=>this.removeDay(d.id),isHours:!isT,isTime:isT,modeLabel:isT?'TIME':'HRS',modeStyle:this.modeChip(isT),toggleMode:()=>this.toggleDayMode(d.id),startT:d.startT||'',endT:d.endT||'',setStart:e=>this.setDayStart(d.id,e.target.value),setEnd:e=>this.setDayEnd(d.id,e.target.value),hoursCalc:hc?hc+'h':''}; }),
+      hasDays:s.dayRows.length>0, totalHoursLabel:totalHours>0?((Math.round(totalHours*100)/100)+'h · '+f(totalHours*(parseFloat(s.logRate)||0))):'',
+      addDay:()=>this.addDay(), openCal:()=>this.openCal(),
+      calOpen:s.calOpen, calLoading:s.calStage==='loading', calList:s.calStage==='list', closeCal:()=>this.closeCal(),
+      calEvents:s.calData.map(ev=>({title:ev.title,date:ev.date,hoursLabel:ev.hours+'h',checked:!!s.calSel[ev.id],checkBg:s.calSel[ev.id]?'#2E7D5B':'transparent',toggle:()=>this.toggleCal(ev.id)})),
+      calSelCount:Object.values(s.calSel).filter(Boolean).length, calAddOpacity:Object.values(s.calSel).filter(Boolean).length>0?'1':'.4',
+      addCalDays:()=>this.addCalDays(),
+      saveLog:()=>this.saveLog(), doInvoiceIt:()=>this.doInvoiceIt(), saveOpacity:logG>0?'1':'.4',
+      logPreview:logG>0?(f(logG)+' · '+f(Math.round(logG*taxPct))+' parked for tax'):'Enter your work above',
+      isCam:s.snapStage==='cam', isScan:s.snapStage==='scanning', isResult:s.snapStage==='result',
+      shoot:()=>this.shoot(), fromPhotos:()=>this.fromPhotos(), fromFiles:()=>this.fromFiles(), resetSnap:()=>this.resetSnap(), saveReceipt:()=>this.saveReceipt(),
+      candidates, hasCandidates:candidates.length>0, noCandidates:candidates.length===0,
+      billTotal:f(billTotal), billClientName:s.billClient||'a client',
+      billClientSet:!!s.billClient, billClientUnset:!s.billClient,
+      billClientChips:[...new Set(s.entries.filter(e=>!e.billed).map(e=>e.client))].map(name=>({name,pick:()=>this.setBillClient(name),style:this.chip(false)})),
+      clearBillClient:()=>this.clearBillClient(),
+      billParked:f(Math.round(billTotal*taxPct)), openSendFromBill:()=>this.openSendFromBill(), sendOpacity:(billTotal>0&&!!s.billClient)?'1':'.4',
+      exportTax:()=>this.exportTax(),
+      sendClient:sd?sd.client:'', sendDesc:sd?sd.desc:'', sendAmt:sd?f(sd.amount):'',
+      sendEmail:s.sendEmail, setSendEmail:e=>this.setSendEmail(e),
+      sendEmailPlaceholder:existingEmail||'email@client.com',
+      sendHasEmail:!!existingEmail, sendIsNewEmail, saveEmailToggle:s.saveEmailToggle, toggleSaveEmail:()=>this.toggleSaveEmail(),
+      saveEmailBg:s.saveEmailToggle?'#2E7D5B':'transparent',
+      sendInvNum:(st.invPrefix||'INV')+'-2026-0'+s.invCounter,
+      sendParked:sd?f(Math.round(sd.amount*taxPct)):'£0',
+      doSend:()=>this.doSend(), doSavePdf:()=>this.doSavePdf(), closeSend:()=>this.closeSend(),
+      reviewTab:s.incomeTab==='review', dismissedTab:s.incomeTab==='dismissed',
+      setReview:()=>this.setTab('review'), setDismissed:()=>this.setTab('dismissed'),
+      tabReviewStyle:this.tabStyle(s.incomeTab==='review'), tabDismissedStyle:this.tabStyle(s.incomeTab==='dismissed'),
+      reviewCount:pending.length, dismissedCount:dismissed.length,
+      showAutoBanner:s.autoMatchedCount>0, autoMatchedCount:s.autoMatchedCount,
+      hasPending:pending.length>0, noPending:pending.length===0,
+      reviewSummary:pending.length+' to review · '+f(pending.reduce((a,p)=>a+p.amount,0))+' in',
+      pendingCards:pending.map(p=>({payer:p.payer,amount:'+'+f(p.amount),meta:p.ref+' · '+p.date,open:()=>this.openPay(p)})),
+      hasDismissed:dismissed.length>0, noDismissed:dismissed.length===0,
+      dismissedCards:dismissed.map(p=>({payer:p.payer,amount:f(p.amount)+' · '+p.ref.replace(/^Ref:\s*/,''),restore:()=>this.restorePay(p.id)})),
+      syncBank:()=>this.syncBank(),
+      payActionOpen:!!pa, payAmt:pa?'+'+f(pa.amount):'', payPayer:pa?pa.payer:'', payRef:pa?pa.ref+' · '+pa.date:'',
+      payLogLump:()=>this.payLogLump(), payInvoice:()=>this.payInvoice(), dismissPay:()=>this.dismissPay(),
+      openMatch:()=>this.openMatch(), closeMatch:()=>this.closeMatch(), matchOpen:s.matchOpen, closePay:()=>this.closePay(),
+      unpaidInvoices:unpaid.map(i=>({num:i.num,client:i.client,amt:f(i.amount),match:()=>this.doMatch(i.id)})),
+      hasUnpaid:unpaid.length>0, noUnpaid:unpaid.length===0,
+      peekOpen:!!pk, peekNum:pk?pk.num:'', peekClient:pk?pk.client:'', peekTotal:pk?f(pk.amount):'',
+      peekStatus:pk?(pk.status==='paid'?'PAID':'SENT'):'', peekStatusColor:pk&&pk.status==='paid'?'#5BBF8A':'#E0A92E',
+      peekLines, peekFooter:pk?(pk.status==='paid'?'RECONCILED · RECEIPT-BACKED':'AWAITING PAYMENT · WILL AUTO-MATCH'):'', closePeek:()=>this.closePeek(),
+      peekCanSimulate:pk&&pk.status==='sent',
+      openClientPreview:()=>this.openClientPreview(),
+      clientPreviewOpen:!!cv, clientInvNum:cv?cv.num:'', clientInvTotal:cv?f(cv.amount):'',
+      clientInvLines, closeClientPreview:()=>this.closeClientPreview(), payAsClient:()=>this.payAsClient(),
+      resetSim:()=>this.resetSim(),
+      toast:s.toast,
+    };
+  }
+}
+</script>
+</body>
+</html>
