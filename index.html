@@ -16,7 +16,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#E0A92E!import
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
-pre{white-space:pre-wrap;word-break:break-all;font-family:'Geist Mono',monospace}
+pre{white-space:pre-wrap;word-break:break-all;font-family:'Geist Mono,monospace'}
 #hn-sidebar{position:fixed;top:0;left:0;bottom:0;width:240px;background:#0C0A07;display:flex;flex-direction:column;padding:24px 16px;z-index:50;overflow-y:auto}
 #hn-main{margin-left:240px;min-height:100vh}
 #hn-bottom-dock{display:none}
@@ -190,7 +190,7 @@ const Page=({children})=><div style={{padding:'26px 18px 10px',animation:'fadeIn
 const PgTitle=({back,children})=>(<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:22}}>{back&&<button onClick={back} style={{background:'none',border:'none',padding:2}}><I n="chevL" sz={26} c={T.textMuted}/></button>}<div style={{fontFamily:'Bricolage Grotesque,serif',fontSize:22,fontWeight:800,letterSpacing:'-.01em'}}>{children}</div></div>);
 const Card=({children,style,onClick})=>(<div onClick={onClick} style={{background:T.surface,borderRadius:14,padding:'15px 17px',border:`1px solid ${T.border}`,cursor:onClick?'pointer':'default',...style}}>{children}</div>);
 const Btn=({children,onClick,color=T.accent,outline,full,disabled,style,small})=>(<button onClick={onClick} disabled={disabled} style={{background:outline?'transparent':color,color:outline?color:T.bg,border:outline?`1px solid ${color}`:'none',borderRadius:10,padding:small?'8px 13px':'12px 18px',fontSize:small?13:15,fontWeight:700,opacity:disabled?.4:1,width:full?'100%':'auto',display:'flex',alignItems:'center',justifyContent:'center',gap:7,...style}}>{children}</button>);
-const Lbl=({children})=><div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.3,marginBottom:6,fontFamily:"'Geist Mono',monospace"}}>{children}</div>;
+const Lbl=({children})=><div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.3,marginBottom:6,fontFamily:"'Geist Mono,monospace'"}}>{children}</div>;
 const Field=({label,children})=><div style={{marginBottom:13}}><Lbl>{label}</Lbl>{children}</div>;
 const iBase={background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,padding:'11px 13px',fontSize:15,width:'100%'};
 const Inp=({style,...p})=><input style={{...iBase,...style}} {...p}/>;
@@ -219,7 +219,7 @@ return(
       </div>
     </div>
     <div style={{textAlign:'right',flexShrink:0}}>
-      {!isVoid&&<><div style={{fontFamily:'Space Mono,monospace',fontWeight:700,fontSize:14}}>{fmt(e.subtotal)}</div><div style={{fontSize:11,color:T.lumpGreen}}>take home {fmt(e.net)}</div></>}
+      {!isVoid&&<><div style={{fontFamily:'Geist Mono,monospace',fontWeight:700,fontSize:14}}>{fmt(e.subtotal)}</div><div style={{fontSize:11,color:T.lumpGreen}}>take home {fmt(e.net)}</div></>}
       <div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:4}}>
         {onLogAgain&&!isVoid&&<button onClick={()=>onLogAgain(e)} style={{background:T.timed+'12',border:`1px solid ${T.timed}44`,borderRadius:6,color:T.timed,padding:'2px 8px',fontSize:11,fontWeight:700}}>↩</button>}
         {onToggleVoid&&<button onClick={()=>onToggleVoid(e.id)} style={{background:isVoid?T.lumpGreen+'18':T.textFaint+'20',border:`1px solid ${isVoid?T.lumpGreen+'44':T.textFaint}`,borderRadius:6,color:isVoid?T.lumpGreen:T.textMuted,padding:'2px 8px',fontSize:11,fontWeight:700}}>{isVoid?'Restore':'Void'}</button>}
@@ -256,7 +256,7 @@ return(<Page>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:20}}>
   <div>
     <div style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:2.5,textTransform:'uppercase',marginBottom:2}}>Money</div>
-    <div style={{fontFamily:'Space Mono,monospace',fontSize:24,fontWeight:700,letterSpacing:-.5}}>Honey</div>
+    <div style={{fontFamily:'Geist Mono,monospace',fontSize:24,fontWeight:700,letterSpacing:-.5}}>Honey</div>
   </div>
   <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative',marginTop:30}}>
     <div style={{position:'relative'}}>
@@ -282,14 +282,14 @@ return(<Page>
     <Btn full small onClick={()=>setView('settings')}>Transfer my data →</Btn>
   </Card>
 )}
-<Card style={{marginBottom:10,background:'linear-gradient(135deg,#f6efe0 0%,#f2f1ea 100%)',border:`1px solid ${T.border}`}}>
+<Card style={{marginBottom:10,background:`linear-gradient(135deg,${T.surface} 0%,${T.bg} 100%)`,border:`1px solid ${T.border}`}}>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Gross Earned</div><div style={{fontFamily:'Space Mono,monospace',fontSize:20,fontWeight:700,color:T.text}}>{fmt(allG)}</div><div style={{fontSize:11,color:T.lumpGreen,marginTop:3,fontWeight:600}}>{fmt(confirmedG)} confirmed</div></div>
-    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Business Costs</div><div style={{fontFamily:'Space Mono,monospace',fontSize:20,fontWeight:700,color:T.business}}>{fmt(bizCosts)}</div></div>
+    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Gross Earned</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.text}}>{fmt(allG)}</div><div style={{fontSize:11,color:T.lumpGreen,marginTop:3,fontWeight:600}}>{fmt(confirmedG)} confirmed</div></div>
+    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Business Costs</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.business}}>{fmt(bizCosts)}</div></div>
   </div>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Tax Stash</div><div style={{fontFamily:'Space Mono,monospace',fontSize:20,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div><div style={{fontSize:9,color:T.textMuted}}>20% of profit</div></div>
-    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Take Home</div><div style={{fontFamily:'Space Mono,monospace',fontSize:20,fontWeight:700,color:T.accentBright}}>{fmt(trueNet)}</div></div>
+    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Tax Stash</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div><div style={{fontSize:9,color:T.textMuted}}>20% of profit</div></div>
+    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Take Home</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.accentBright}}>{fmt(trueNet)}</div></div>
   </div>
   <Hr/>
   <div style={{display:'flex',gap:18,fontSize:12,color:T.textMuted}}>
@@ -301,7 +301,7 @@ return(<Page>
     <I n="bulb" sz={11} c={T.accent}/> {showTaxGuide?'Hide':'What is the Tax Stash?'}
   </button>
   {showTaxGuide&&(
-    <div style={{marginTop:10,padding:'12px 14px',background:'#f2f1ea',borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,lineHeight:1.6}}>
+    <div style={{marginTop:10,padding:'12px 14px',background:T.bg,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,lineHeight:1.6}}>
       <div style={{fontWeight:700,color:T.text,marginBottom:6}}>Money set aside for self-assessment</div>
       <div style={{marginBottom:8}}>UK self-employed pay Income Tax plus Class 4 NI on profit (gross minus allowable expenses), after the £12,570 personal allowance.</div>
       <div style={{fontWeight:700,color:T.accent,marginBottom:4}}>Rough guide for stashing:</div>
@@ -314,7 +314,7 @@ return(<Page>
   )}
 </Card>
 {totalActions>0&&(
-  <Card style={{marginBottom:10,background:'#f2f1ea',border:`1px solid ${T.accent}33`}}>
+  <Card style={{marginBottom:10,background:T.bg,border:`1px solid ${T.accent}33`}}>
     <div style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:1.5,textTransform:'uppercase',marginBottom:10}}>⚡ {totalActions} action{totalActions!==1?'s':''} need attention</div>
     {needPotCount>0&&(<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
       <I n="money" sz={16} c={T.danger}/>
@@ -331,17 +331,17 @@ return(<Page>
 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:20}}>
   <Card style={{border:`1px solid ${T.border}`}}>
     <Lbl>This month</Lbl>
-    <div style={{fontFamily:'Space Mono,monospace',fontSize:16,color:T.lumpGreen}}>{fmt(monN)}</div>
+    <div style={{fontFamily:'Geist Mono,monospace',fontSize:16,color:T.lumpGreen}}>{fmt(monN)}</div>
     <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{fmt(monG)} gross</div>
   </Card>
   <Card style={{border:`1px solid ${T.border}`,cursor:'pointer'}} onClick={()=>setView('receipts')}>
     <Lbl>Reimbursable</Lbl>
-    <div style={{fontFamily:'Space Mono,monospace',fontSize:16,color:pendAmt>0?T.reimb:T.textMuted}}>{fmt(pendAmt)}</div>
+    <div style={{fontFamily:'Geist Mono,monospace',fontSize:16,color:pendAmt>0?T.reimb:T.textMuted}}>{fmt(pendAmt)}</div>
     <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>owed to you</div>
   </Card>
   <Card style={{border:`1px solid ${T.border}`,cursor:'pointer'}} onClick={()=>setView('receipts')}>
     <Lbl>Biz Costs</Lbl>
-    <div style={{fontFamily:'Space Mono,monospace',fontSize:16,color:bizCosts>0?T.business:T.textMuted}}>{fmt(bizCosts)}</div>
+    <div style={{fontFamily:'Geist Mono,monospace',fontSize:16,color:bizCosts>0?T.business:T.textMuted}}>{fmt(bizCosts)}</div>
     <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>deductible</div>
   </Card>
 </div>
@@ -359,10 +359,10 @@ return(<Page>
 </Page>);}
 
 // ── ADD ──────────────────────────────────────────────────────────────────────
-function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[createInv,setCreateInv]=useState(true);const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*TAX,net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null;if(form.status==='Paid'&&createInv&&onAddInvoice){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');const invNum='INV-'+yr+'-'+num;const inv={invoiceNum:invNum,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};onAddInvoice(inv);invId=invNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div><Field label="Date"><Inp type="date" value={form.date} onChange={e=>set('date',e.target.value)}/></Field><Field label="Client"><Inp placeholder="Client name" value={form.client} onChange={e=>set('client',e.target.value)}/></Field><Field label="Description"><Inp placeholder="What did you do?" value={form.description} onChange={e=>set('description',e.target.value)}/></Field>{type==='timed'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}><Field label="Start"><Inp type="time" value={form.startTime} onChange={e=>set('startTime',e.target.value)}/></Field><Field label="End"><Inp type="time" value={form.endTime} onChange={e=>set('endTime',e.target.value)}/></Field></div>}{type==='manual'&&<Field label="Hours"><Inp type="number" step="0.5" min="0" placeholder="2.5" value={form.hours} onChange={e=>set('hours',e.target.value)}/></Field>}{type!=='lump'&&<Field label="Hourly Rate (£)"><Inp type="number" step="1" min="0" value={form.rate} onChange={e=>set('rate',e.target.value)}/></Field>}{type==='lump'&&<Field label="Amount (£)"><Inp type="number" step="0.01" min="0" placeholder="500.00" value={form.amount} onChange={e=>set('amount',e.target.value)}/></Field>}<Field label="Status"><Sel value={form.status} onChange={e=>set('status',e.target.value)}><option value="Pending">Pending</option><option value="Paid">Paid</option></Sel></Field>{form.status==='Paid'&&onAddInvoice&&(<label style={{display:'flex',alignItems:'center',gap:10,fontSize:13,color:T.textMuted,padding:'10px 14px',background:T.lumpGreen+'10',borderRadius:12,border:'1px solid '+T.lumpGreen+'33',marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={createInv} onChange={e=>setCreateInv(e.target.checked)} style={{accentColor:T.lumpGreen,width:17,height:17}}/><span><strong style={{color:T.lumpGreen}}>Create invoice now</strong><span style={{display:'block',fontSize:11,marginTop:2}}>Auto-generates a paid invoice for HMRC records</span></span></label>)}{gross>0&&(<Card style={{marginTop:6,marginBottom:16,border:`1px solid ${tc}44`}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.textMuted}}>{type==='timed'?`${timedH().toFixed(2)}h @ £${form.rate}/hr`:type==='manual'?`${form.hours}h @ £${form.rate}/hr`:'Lump sum'}</span><span style={{fontFamily:'Space Mono,monospace',fontSize:14}}>{fmt(gross)}</span></div><div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}><span style={{fontSize:13,color:T.textMuted}}>Tax Stash (20%)</span><span style={{fontFamily:'Space Mono,monospace',fontSize:14,color:T.danger}}>{fmt(tax)}</span></div><Hr/><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700}}>Take home</span><span style={{fontFamily:'Space Mono,monospace',fontSize:20,fontWeight:700,color:tc}}>{fmt(net)}</span></div></Card>)}<Btn full onClick={handleAdd} disabled={gross<=0} color={flash?T.lumpGreen:tc}>{flash?<><I n="check" sz={17} c="#08060c"/> Saved!</>:'Add Entry'}</Btn></Page>);}
+function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[createInv,setCreateInv]=useState(true);const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*TAX,net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null;if(form.status==='Paid'&&createInv&&onAddInvoice){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');const invNum='INV-'+yr+'-'+num;const inv={invoiceNum:invNum,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};onAddInvoice(inv);invId=invNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div><Field label="Date"><Inp type="date" value={form.date} onChange={e=>set('date',e.target.value)}/></Field><Field label="Client"><Inp placeholder="Client name" value={form.client} onChange={e=>set('client',e.target.value)}/></Field><Field label="Description"><Inp placeholder="What did you do?" value={form.description} onChange={e=>set('description',e.target.value)}/></Field>{type==='timed'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}><Field label="Start"><Inp type="time" value={form.startTime} onChange={e=>set('startTime',e.target.value)}/></Field><Field label="End"><Inp type="time" value={form.endTime} onChange={e=>set('endTime',e.target.value)}/></Field></div>}{type==='manual'&&<Field label="Hours"><Inp type="number" step="0.5" min="0" placeholder="2.5" value={form.hours} onChange={e=>set('hours',e.target.value)}/></Field>}{type!=='lump'&&<Field label="Hourly Rate (£)"><Inp type="number" step="1" min="0" value={form.rate} onChange={e=>set('rate',e.target.value)}/></Field>}{type==='lump'&&<Field label="Amount (£)"><Inp type="number" step="0.01" min="0" placeholder="500.00" value={form.amount} onChange={e=>set('amount',e.target.value)}/></Field>}<Field label="Status"><Sel value={form.status} onChange={e=>set('status',e.target.value)}><option value="Pending">Pending</option><option value="Paid">Paid</option></Sel></Field>{form.status==='Paid'&&onAddInvoice&&(<label style={{display:'flex',alignItems:'center',gap:10,fontSize:13,color:T.textMuted,padding:'10px 14px',background:T.lumpGreen+'10',borderRadius:12,border:'1px solid '+T.lumpGreen+'33',marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={createInv} onChange={e=>setCreateInv(e.target.checked)} style={{accentColor:T.lumpGreen,width:17,height:17}}/><span><strong style={{color:T.lumpGreen}}>Create invoice now</strong><span style={{display:'block',fontSize:11,marginTop:2}}>Auto-generates a paid invoice for HMRC records</span></span></label>)}{gross>0&&(<Card style={{marginTop:6,marginBottom:16,border:`1px solid ${tc}44`}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.textMuted}}>{type==='timed'?`${timedH().toFixed(2)}h @ £${form.rate}/hr`:type==='manual'?`${form.hours}h @ £${form.rate}/hr`:'Lump sum'}</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(gross)}</span></div><div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}><span style={{fontSize:13,color:T.textMuted}}>Tax Stash (20%)</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.danger}}>{fmt(tax)}</span></div><Hr/><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700}}>Take home</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:tc}}>{fmt(net)}</span></div></Card>)}<Btn full onClick={handleAdd} disabled={gross<=0} color={flash?T.lumpGreen:tc}>{flash?<><I n="check" sz={17} c={T.bg}/> Saved!</>:'Add Entry'}</Btn></Page>);}
 
 // ── LOG ──────────────────────────────────────────────────────────────────────
-function LogView({entries,invoices=[],onDelete,onToggleStatus,onToggleVoid,onAdd}){const[confId,setConfId]=useState(null);const[filter,setFilter]=useState('all');const invoicedMap={};invoices.forEach(inv=>(inv.entryIds||[]).forEach(eid=>{if(!invoicedMap[eid])invoicedMap[eid]=inv.invoiceNum||'INV';}));const getInvNum=eid=>invoicedMap[eid]||null;const[logAgainFlash,setLogAgainFlash]=useState(null);useEffect(()=>{if(confId){const t=setTimeout(()=>setConfId(null),3000);return()=>clearTimeout(t);}},[confId]);const filtered=filter==='all'?entries:filter==='uninvoiced'?entries.filter(e=>!e.invoiceId&&!invoicedMap[e.id]):entries.filter(e=>(e.status||'Pending')===filter);const tot=filtered.reduce((a,e)=>({g:a.g+(e.subtotal||0),n:a.n+(e.net||0)}),{g:0,n:0});const handleLogAgain=onAdd?e=>{onAdd({type:e.type==='timed'?'lump':e.type,date:today(),client:e.client||'',description:e.description||'',rate:e.rate,hours:e.type==='timed'?null:e.hours,startTime:null,endTime:null,subtotal:e.subtotal,tax:e.tax,net:e.net,status:'Pending'});setLogAgainFlash(e.id);setTimeout(()=>setLogAgainFlash(null),1600);}:null;return(<Page><div style={{fontFamily:'Space Mono,monospace',fontSize:18,fontWeight:700,marginBottom:4}}>Entry Log</div><div style={{fontSize:13,color:T.textMuted,marginBottom:14}}>{filtered.length} entries · {fmt(tot.g)} gross · {fmt(tot.n)} take home</div>{logAgainFlash&&<div style={{background:T.lumpGreen+'18',border:`1px solid ${T.lumpGreen}44`,borderRadius:10,padding:'9px 14px',marginBottom:10,fontSize:12,color:T.lumpGreen,fontWeight:700,display:'flex',alignItems:'center',gap:6}}><I n="check" sz={14} c={T.lumpGreen}/>Logged again — dated today, status Pending</div>}<div style={{display:'flex',gap:8,marginBottom:16}}>{[['all','All'],['uninvoiced','Uninvoiced'],['Pending','Pending'],['Paid','Paid']].map(([v,l])=>(<button key={v} onClick={()=>setFilter(v)} style={{background:filter===v?T.accent+'22':T.surface,border:`1.5px solid ${filter===v?T.accent:T.border}`,borderRadius:10,padding:'6px 14px',fontSize:12,fontWeight:700,color:filter===v?T.accent:T.textMuted}}>{l}</button>))}</div>{filtered.length===0?<div style={{textAlign:'center',padding:'60px 20px',color:T.textMuted}}>No entries</div>:filtered.map(e=><EntryRow key={e.id} e={e} onDelete={onDelete} onToggleStatus={onToggleStatus} onToggleVoid={onToggleVoid} confId={confId} setConfId={setConfId} onLogAgain={handleLogAgain} invoiceNum={getInvNum(e.id)}/>)}</Page>);}
+function LogView({entries,invoices=[],onDelete,onToggleStatus,onToggleVoid,onAdd}){const[confId,setConfId]=useState(null);const[filter,setFilter]=useState('all');const invoicedMap={};invoices.forEach(inv=>(inv.entryIds||[]).forEach(eid=>{if(!invoicedMap[eid])invoicedMap[eid]=inv.invoiceNum||'INV';}));const getInvNum=eid=>invoicedMap[eid]||null;const[logAgainFlash,setLogAgainFlash]=useState(null);useEffect(()=>{if(confId){const t=setTimeout(()=>setConfId(null),3000);return()=>clearTimeout(t);}},[confId]);const filtered=filter==='all'?entries:filter==='uninvoiced'?entries.filter(e=>!e.invoiceId&&!invoicedMap[e.id]):entries.filter(e=>(e.status||'Pending')===filter);const tot=filtered.reduce((a,e)=>({g:a.g+(e.subtotal||0),n:a.n+(e.net||0)}),{g:0,n:0});const handleLogAgain=onAdd?e=>{onAdd({type:e.type==='timed'?'lump':e.type,date:today(),client:e.client||'',description:e.description||'',rate:e.rate,hours:e.type==='timed'?null:e.hours,startTime:null,endTime:null,subtotal:e.subtotal,tax:e.tax,net:e.net,status:'Pending'});setLogAgainFlash(e.id);setTimeout(()=>setLogAgainFlash(null),1600);}:null;return(<Page><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,marginBottom:4}}>Entry Log</div><div style={{fontSize:13,color:T.textMuted,marginBottom:14}}>{filtered.length} entries · {fmt(tot.g)} gross · {fmt(tot.n)} take home</div>{logAgainFlash&&<div style={{background:T.lumpGreen+'18',border:`1px solid ${T.lumpGreen}44`,borderRadius:10,padding:'9px 14px',marginBottom:10,fontSize:12,color:T.lumpGreen,fontWeight:700,display:'flex',alignItems:'center',gap:6}}><I n="check" sz={14} c={T.lumpGreen}/>Logged again — dated today, status Pending</div>}<div style={{display:'flex',gap:8,marginBottom:16}}>{[['all','All'],['uninvoiced','Uninvoiced'],['Pending','Pending'],['Paid','Paid']].map(([v,l])=>(<button key={v} onClick={()=>setFilter(v)} style={{background:filter===v?T.accent+'22':T.surface,border:`1.5px solid ${filter===v?T.accent:T.border}`,borderRadius:10,padding:'6px 14px',fontSize:12,fontWeight:700,color:filter===v?T.accent:T.textMuted}}>{l}</button>))}</div>{filtered.length===0?<div style={{textAlign:'center',padding:'60px 20px',color:T.textMuted}}>No entries</div>:filtered.map(e=><EntryRow key={e.id} e={e} onDelete={onDelete} onToggleStatus={onToggleStatus} onToggleVoid={onToggleVoid} confId={confId} setConfId={setConfId} onLogAgain={handleLogAgain} invoiceNum={getInvNum(e.id)}/>)}</Page>);}
 
 // ── RECEIPTS ─────────────────────────────────────────────────────────────────
 function ReceiptsView({receipts,onAdd,onUpdate,onDelete,settings,sheetsUrl,onSync,pendingFile,onConsumePending}){
@@ -620,7 +620,7 @@ Expense: ${r.description||r.notes||'Receipt'}`}]})});
   ].filter(Boolean);
   return(<Page><PgTitle back={()=>{setMode('list');setViewing(null);setEditing(false);}}>Receipt Detail</PgTitle>
     {r.imageData&&<img src={r.imageData} alt="receipt" style={{width:'100%',borderRadius:16,marginBottom:16,maxHeight:280,objectFit:'contain',background:T.surface}}/>}
-    {r.imageData&&sheetsUrl&&!r.driveUrl&&(<Btn full color={T.drive} onClick={()=>handleDriveUpload(r)} disabled={uploading} style={{marginBottom:8}}>{uploading?<><Spinner/> Uploading...</>:<><I n="drive" sz={16} c="#08060c"/> Save Image to Drive</>}</Btn>)}
+    {r.imageData&&sheetsUrl&&!r.driveUrl&&(<Btn full color={T.drive} onClick={()=>handleDriveUpload(r)} disabled={uploading} style={{marginBottom:8}}>{uploading?<><Spinner/> Uploading...</>:<><I n="drive" sz={16} c={T.bg}/> Save Image to Drive</>}</Btn>)}
     <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
       {r.driveUrl&&(<a href={r.driveUrl} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:6,background:T.drive+'18',border:`1.5px solid ${T.drive}44`,borderRadius:10,padding:'7px 12px',color:T.drive,fontWeight:700,fontSize:12,textDecoration:'none',flex:1,justifyContent:'center'}}><I n="drive" sz={14} c={T.drive}/> Open PDF</a>)}
       {r.gmailUrl&&(<a href={r.gmailUrl} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:6,background:T.timed+'18',border:`1.5px solid ${T.timed}44`,borderRadius:10,padding:'7px 12px',color:T.timed,fontWeight:700,fontSize:12,textDecoration:'none',flex:1,justifyContent:'center'}}>✉ Open Email</a>)}
@@ -648,7 +648,7 @@ Expense: ${r.description||r.notes||'Receipt'}`}]})});
       {r.notes&&<div style={{fontSize:13,color:T.textMuted,marginTop:8}}>{r.notes}</div>}
     </Card>
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
-      {r.category==='reimbursable'&&r.status==='pending'&&(<Btn full color={T.lumpGreen} onClick={()=>{onUpdate(r.id,{status:'reimbursed'});setMode('list');}}><I n="paid" sz={16} c="#08060c"/> Mark Reimbursed</Btn>)}
+      {r.category==='reimbursable'&&r.status==='pending'&&(<Btn full color={T.lumpGreen} onClick={()=>{onUpdate(r.id,{status:'reimbursed'});setMode('list');}}><I n="paid" sz={16} c={T.bg}/> Mark Reimbursed</Btn>)}
       <div style={{display:'flex',gap:10}}>
         <Btn full color={r.status==='void'?T.lumpGreen:T.textMuted} outline onClick={()=>{onUpdate(r.id,{status:r.status==='void'?(r.category==='business'?'logged':'pending'):'void'});setMode('list');}}>
           {r.status==='void'?'Restore Receipt':'Void (keep record)'}
@@ -704,7 +704,7 @@ if(mode==='add')return(<Page><PgTitle back={()=>setMode('list')}>Add Receipt</Pg
   <Field label="Notes"><TA placeholder="Optional" value={form.notes} onChange={e=>sf('notes',e.target.value)}/></Field>
   {img?.dataUrl&&sheetsUrl&&<div style={{fontSize:12,color:T.drive,marginBottom:10,display:'flex',alignItems:'center',gap:6}}><I n="drive" sz={14} c={T.drive}/> {img.isPdf?'PDF':'Image'} will auto-upload to Drive on save</div>}
   {!img?.dataUrl&&<div style={{fontSize:12,color:T.textMuted,marginBottom:10,display:'flex',alignItems:'center',gap:6}}><I n="camera" sz={14} c={T.textMuted}/> Photo or upload required to save and sync</div>}
-  <Btn full onClick={handleSave} disabled={!form.description||!form.amount||!img?.dataUrl||uploading} color={flash?T.lumpGreen:uploading?T.timed:T.accent}>{uploading?<><Spinner/> Uploading to Drive...</>:flash?<><I n="check" sz={16} c="#08060c"/> Saved!</>:'Save Receipt'}</Btn>
+  <Btn full onClick={handleSave} disabled={!form.description||!form.amount||!img?.dataUrl||uploading} color={flash?T.lumpGreen:uploading?T.timed:T.accent}>{uploading?<><Spinner/> Uploading to Drive...</>:flash?<><I n="check" sz={16} c={T.bg}/> Saved!</>:'Save Receipt'}</Btn>
 </Page>);
 
 if(mode==='gmail')return(<Page>
@@ -720,7 +720,7 @@ if(mode==='gmail')return(<Page>
     return(<div key={r.id} style={{background:T.surface,borderRadius:14,padding:'13px 14px',marginBottom:10,border:`1.5px solid ${sel?T.timed+'60':T.border}`,opacity:sel?1:0.55}}>
       <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:sel?10:0}}>
         <button onClick={()=>setGmailSel(p=>({...p,[r.id]:!p[r.id]}))} style={{width:22,height:22,borderRadius:6,border:`2px solid ${sel?T.timed:T.border}`,background:sel?T.timed:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}>
-          {sel&&<I n="check" sz={13} c="#08060c"/>}
+          {sel&&<I n="check" sz={13} c={T.bg}/>}
         </button>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.subject||r.vendor}</div>
@@ -769,11 +769,11 @@ const ReceiptItem=({r})=>(<div onClick={()=>{setViewing(r.id);setMode('view');}}
       {r.driveUrl&&<span style={{fontSize:11,color:T.drive,fontWeight:700}}>☁ Drive</span>}
     </div>
   </div>
-  <div style={{fontFamily:'Space Mono,monospace',fontWeight:700,fontSize:14,flexShrink:0,color:r.status==='void'?T.textMuted:T.text}}>{fmt(r.amount)}</div>
+  <div style={{fontFamily:'Geist Mono,monospace',fontWeight:700,fontSize:14,flexShrink:0,color:r.status==='void'?T.textMuted:T.text}}>{fmt(r.amount)}</div>
 </div>);
 return(<Page>
-<div style={{fontFamily:'Space Mono,monospace',fontSize:18,fontWeight:700,marginBottom:4}}>Receipts</div>
-<Btn full onClick={()=>setMode('add')} style={{marginBottom:sheetsUrl?8:16}}><I n="plus" sz={16} c="#08060c"/> Add Receipt</Btn>
+<div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,marginBottom:4}}>Receipts</div>
+<Btn full onClick={()=>setMode('add')} style={{marginBottom:sheetsUrl?8:16}}><I n="plus" sz={16} c={T.bg}/> Add Receipt</Btn>
 {sheetsUrl&&<button onClick={handleGmailScan} style={{width:'100%',background:T.timed+'12',border:`1.5px solid ${T.timed}40`,borderRadius:14,padding:'11px 14px',color:T.timed,fontWeight:700,fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:16}}><I n="mail" sz={16} c={T.timed}/> Import from Gmail (Tracker/Receipts)</button>}
 <Lbl>Reimbursable Expenses</Lbl>
 <div style={{fontSize:11,color:T.textMuted,marginBottom:10}}>Money you paid on a client's behalf, owed back to you. {fmt(rmbPending)} pending.</div>
@@ -870,7 +870,7 @@ const printInvoiceRecord=(inv)=>{
   const w=window.open('','_blank');w.document.write(html);w.document.close();
 };
 
-if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});setSelR({});setDocUrl(null);setSelectedClientId(null);}}>Build Invoice</PgTitle><Lbl>Income entries</Lbl>{entries.length===0?(<div style={{background:T.surface,borderRadius:14,padding:14,marginBottom:14,color:T.textMuted,fontSize:13,textAlign:'center'}}>No income entries yet</div>):(<div style={{marginBottom:16}}>{(entries.filter(e=>!e.invoiceId)).map(e=>(<button key={e.id} onClick={()=>setSelE(s=>({...s,[e.id]:!s[e.id]}))} style={{width:'100%',textAlign:'left',background:selE[e.id]?T.accent+'12':T.surface,border:`1.5px solid ${selE[e.id]?T.accent:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.client||'No client'} · {fmtD(e.date)}</div>{e.description&&<div style={{fontSize:12,color:T.textMuted}}>{e.description}</div>}<StatusTag status={e.status}/></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Space Mono,monospace',fontSize:14}}>{fmt(e.subtotal)}</span><div style={{width:22,height:22,borderRadius:7,background:selE[e.id]?T.accent:'transparent',border:`2px solid ${selE[e.id]?T.accent:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selE[e.id]&&<I n="check" sz={13} c="#08060c"/>}</div></div></button>))}</div>)}{pendingReimbs.length>0&&<><Lbl>Reimbursable expenses</Lbl><div style={{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.5}}>Tick to include on invoice.</div><div style={{marginBottom:16}}>{pendingReimbs.map(r=>(<button key={r.id} onClick={()=>setSelR(s=>({...s,[r.id]:!s[r.id]}))} style={{width:'100%',textAlign:'left',background:selR[r.id]?T.reimb+'15':T.surface,border:`1.5px solid ${selR[r.id]?T.reimb:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.description}</div><div style={{fontSize:12,color:T.textMuted}}>{fmtD(r.date)}{r.owedBy?` · ${r.owedBy}`:''}{r.driveUrl&&<span style={{color:T.drive}}> · ☁</span>}</div></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Space Mono,monospace',fontSize:14,color:T.reimb}}>{fmt(r.amount)}</span><div style={{width:22,height:22,borderRadius:7,background:selR[r.id]?T.reimb:'transparent',border:`2px solid ${selR[r.id]?T.reimb:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selR[r.id]&&<I n="check" sz={13} c="#08060c"/>}</div></div></button>))}</div></>}{!hasItems&&<div style={{textAlign:'center',padding:'20px 20px 30px',color:T.textMuted,fontSize:13}}>Select entries or expenses above</div>}{hasItems&&<><Card style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>{selEntries.length>0&&selReimbs.length>0&&<><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:5,color:T.textMuted}}><span>Services ({selEntries.length})</span><span style={{fontFamily:'Space Mono,monospace'}}>{fmt(incomeTotal)}</span></div><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.textMuted}}><span>Expenses ({selReimbs.length})</span><span style={{fontFamily:'Space Mono,monospace',color:T.reimb}}>{fmt(reimbTotal)}</span></div></>}{deductions.map(d=>(<div key={d.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}><Inp placeholder="Deduction (e.g. materials)" value={d.description} onChange={e=>updateDeduction(d.id,'description',e.target.value)} style={{flex:2,fontSize:12}}/><Inp type="number" placeholder="0.00" value={d.amount} onChange={e=>updateDeduction(d.id,'amount',e.target.value)} style={{flex:1,fontSize:12}}/><button onClick={()=>removeDeduction(d.id)} style={{background:'transparent',border:'none',color:T.danger,fontSize:18,padding:'0 4px',flexShrink:0}}>×</button></div>))}<button onClick={addDeduction} style={{background:T.danger+'15',border:`1.5px dashed ${T.danger}44`,borderRadius:10,padding:'7px 14px',color:T.danger,fontSize:12,fontWeight:700,width:'100%',marginBottom:deductTotal>0?10:0}}>+ Add deduction</button>{deductTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.danger}}><span>Deductions</span><span style={{fontFamily:'Space Mono,monospace'}}>− {fmt(deductTotal)}</span></div>}<Hr/><div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}}><span>Invoice total</span><span style={{fontFamily:'Space Mono,monospace',color:T.accentBright}}>{fmt(grandTotal)}</span></div><div style={{fontSize:12,color:T.textMuted,marginTop:6}}>Period: {invoicePeriod} · Ref: {invNum}</div></Card>
+if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});setSelR({});setDocUrl(null);setSelectedClientId(null);}}>Build Invoice</PgTitle><Lbl>Income entries</Lbl>{entries.length===0?(<div style={{background:T.surface,borderRadius:14,padding:14,marginBottom:14,color:T.textMuted,fontSize:13,textAlign:'center'}}>No income entries yet</div>):(<div style={{marginBottom:16}}>{(entries.filter(e=>!e.invoiceId)).map(e=>(<button key={e.id} onClick={()=>setSelE(s=>({...s,[e.id]:!s[e.id]}))} style={{width:'100%',textAlign:'left',background:selE[e.id]?T.accent+'12':T.surface,border:`1.5px solid ${selE[e.id]?T.accent:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.client||'No client'} · {fmtD(e.date)}</div>{e.description&&<div style={{fontSize:12,color:T.textMuted}}>{e.description}</div>}<StatusTag status={e.status}/></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(e.subtotal)}</span><div style={{width:22,height:22,borderRadius:7,background:selE[e.id]?T.accent:'transparent',border:`2px solid ${selE[e.id]?T.accent:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selE[e.id]&&<I n="check" sz={13} c={T.bg}/>}</div></div></button>))}</div>)}{pendingReimbs.length>0&&<><Lbl>Reimbursable expenses</Lbl><div style={{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.5}}>Tick to include on invoice.</div><div style={{marginBottom:16}}>{pendingReimbs.map(r=>(<button key={r.id} onClick={()=>setSelR(s=>({...s,[r.id]:!s[r.id]}))} style={{width:'100%',textAlign:'left',background:selR[r.id]?T.reimb+'15':T.surface,border:`1.5px solid ${selR[r.id]?T.reimb:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.description}</div><div style={{fontSize:12,color:T.textMuted}}>{fmtD(r.date)}{r.owedBy?` · ${r.owedBy}`:''}{r.driveUrl&&<span style={{color:T.drive}}> · ☁</span>}</div></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.reimb}}>{fmt(r.amount)}</span><div style={{width:22,height:22,borderRadius:7,background:selR[r.id]?T.reimb:'transparent',border:`2px solid ${selR[r.id]?T.reimb:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selR[r.id]&&<I n="check" sz={13} c={T.bg}/>}</div></div></button>))}</div></>}{!hasItems&&<div style={{textAlign:'center',padding:'20px 20px 30px',color:T.textMuted,fontSize:13}}>Select entries or expenses above</div>}{hasItems&&<><Card style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>{selEntries.length>0&&selReimbs.length>0&&<><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:5,color:T.textMuted}}><span>Services ({selEntries.length})</span><span style={{fontFamily:'Geist Mono,monospace'}}>{fmt(incomeTotal)}</span></div><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.textMuted}}><span>Expenses ({selReimbs.length})</span><span style={{fontFamily:'Geist Mono,monospace',color:T.reimb}}>{fmt(reimbTotal)}</span></div></>}{deductions.map(d=>(<div key={d.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}><Inp placeholder="Deduction (e.g. materials)" value={d.description} onChange={e=>updateDeduction(d.id,'description',e.target.value)} style={{flex:2,fontSize:12}}/><Inp type="number" placeholder="0.00" value={d.amount} onChange={e=>updateDeduction(d.id,'amount',e.target.value)} style={{flex:1,fontSize:12}}/><button onClick={()=>removeDeduction(d.id)} style={{background:'transparent',border:'none',color:T.danger,fontSize:18,padding:'0 4px',flexShrink:0}}>×</button></div>))}<button onClick={addDeduction} style={{background:T.danger+'15',border:`1.5px dashed ${T.danger}44`,borderRadius:10,padding:'7px 14px',color:T.danger,fontSize:12,fontWeight:700,width:'100%',marginBottom:deductTotal>0?10:0}}>+ Add deduction</button>{deductTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.danger}}><span>Deductions</span><span style={{fontFamily:'Geist Mono,monospace'}}>− {fmt(deductTotal)}</span></div>}<Hr/><div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}}><span>Invoice total</span><span style={{fontFamily:'Geist Mono,monospace',color:T.accentBright}}>{fmt(grandTotal)}</span></div><div style={{fontSize:12,color:T.textMuted,marginTop:6}}>Period: {invoicePeriod} · Ref: {invNum}</div></Card>
 {clients.length>0&&(<div style={{marginBottom:14}}><Lbl>Saved clients</Lbl><div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{clients.map(c=>(<button key={c.id} onClick={()=>pickClient(c)} style={{background:selectedClientId===c.id?T.accent+'22':T.surface,border:`1.5px solid ${selectedClientId===c.id?T.accent:T.border}`,borderRadius:20,padding:'6px 14px',color:selectedClientId===c.id?T.accent:T.text,fontSize:13,fontWeight:700,cursor:'pointer'}}>{c.name}</button>))}</div></div>)}
 <Lbl>Client details</Lbl>
 <Field label="Client name"><Inp placeholder="Person or company" value={client.name} onChange={e=>sc('name',e.target.value)}/></Field>
@@ -890,7 +890,7 @@ if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});s
 
 <div style={{display:'flex',gap:10,marginTop:4}}>
   <Btn color={T.timed} onClick={printInvoice} style={{flex:'0 0 auto',padding:'13px 14px'}}>
-    <I n="print" sz={16} c="#08060c"/>
+    <I n="print" sz={16} c={T.bg}/>
   </Btn>
   {sheetsUrl?(
     // Sheets connected: one button creates Doc AND saves record together
@@ -901,18 +901,18 @@ if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});s
       style={{flex:1,fontSize:14}}
     >
       {flash
-        ?<><I n="check" sz={16} c="#08060c"/> Saved!</>
+        ?<><I n="check" sz={16} c={T.bg}/> Saved!</>
         :creatingDoc
           ?<><Spinner/> {docStatus||'Creating Doc…'}</>
           :docUrl
-            ?<><I n="check" sz={15} c="#08060c"/> Save Record</>
-            :<><I n="invoice" sz={16} c="#08060c"/> Create Doc &amp; Save</>
+            ?<><I n="check" sz={15} c={T.bg}/> Save Record</>
+            :<><I n="invoice" sz={16} c={T.bg}/> Create Doc &amp; Save</>
       }
     </Btn>
   ):(
     // No Sheets: simple save
     <Btn color={flash?T.lumpGreen:T.accent} onClick={handleSaveOnly} disabled={flash} style={{flex:1,fontSize:14}}>
-      {flash?<><I n="check" sz={16} c="#08060c"/> Saved!</>:'Save Record'}
+      {flash?<><I n="check" sz={16} c={T.bg}/> Saved!</>:'Save Record'}
     </Btn>
   )}
 </div>
@@ -924,7 +924,7 @@ if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});s
 </>}</Page>);
 
 return(<Page>
-<div style={{fontFamily:'Space Mono,monospace',fontSize:18,fontWeight:700,marginBottom:4}}>Invoices</div>
+<div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,marginBottom:4}}>Invoices</div>
 <div style={{fontSize:13,color:T.textMuted,marginBottom:18}}>{invoices.length} raised, next: {invNum}</div>
 <Btn full onClick={()=>{setMode('build');setSelE({});setSelR({});setDocUrl(null);}} style={{marginBottom:10}}>New Invoice</Btn>
 {invoices.length===0?(<div style={{textAlign:'center',padding:'40px 20px',color:T.textMuted}}><div style={{fontSize:40,marginBottom:10}}>📄</div><div style={{fontWeight:700,marginBottom:4}}>No invoices yet</div></div>):(()=>{
@@ -954,7 +954,7 @@ ${settings.name||''}`;
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3,flexWrap:'wrap'}}>
-            <div style={{fontFamily:'Space Mono,monospace',fontSize:12,color:T.accent}}>{inv.invoiceNum}</div>
+            <div style={{fontFamily:'Geist Mono,monospace',fontSize:12,color:T.accent}}>{inv.invoiceNum}</div>
             {paid&&<span style={{background:T.lumpGreen+'22',color:T.lumpGreen,border:`1px solid ${T.lumpGreen}44`,borderRadius:6,padding:'1px 7px',fontSize:10,fontWeight:700}}>PAID</span>}
             {overdue&&<span style={{background:T.danger+'22',color:T.danger,border:`1px solid ${T.danger}66`,borderRadius:6,padding:'1px 7px',fontSize:10,fontWeight:700,animation:'pulse 2s ease-in-out infinite'}}>OVERDUE {days}D</span>}
             {!paid&&!overdue&&inv.dueDate&&<span style={{background:T.pending+'22',color:T.pending,border:`1px solid ${T.pending}44`,borderRadius:6,padding:'1px 7px',fontSize:10,fontWeight:700}}>DUE {fmtD(inv.dueDate)}</span>}
@@ -963,7 +963,7 @@ ${settings.name||''}`;
           <div style={{fontSize:12,color:T.textMuted}}>{fmtD((inv.date||'').split('T')[0])}</div>
         </div>
         <div style={{textAlign:'right',flexShrink:0}}>
-          <div style={{fontFamily:'Space Mono,monospace',fontSize:16,fontWeight:700}}>{fmt(inv.subtotal)}</div>
+          <div style={{fontFamily:'Geist Mono,monospace',fontSize:16,fontWeight:700}}>{fmt(inv.subtotal)}</div>
           {(inv.reimbTotal||0)>0&&<div style={{fontSize:11,color:T.reimb}}>incl. {fmt(inv.reimbTotal)} expenses</div>}
           <button onClick={()=>confInvId===inv.id?onDeleteInvoice(inv.id):setConfInvId(inv.id)} style={{background:confInvId===inv.id?T.dangerBg:'none',border:confInvId===inv.id?`1px solid ${T.danger}44`:'none',borderRadius:6,color:confInvId===inv.id?T.danger:T.textFaint,padding:'2px 7px',fontSize:11,marginTop:4,cursor:'pointer'}}>{confInvId===inv.id?'Sure? Delete':'del'}</button>
         </div>
@@ -979,7 +979,7 @@ ${settings.name||''}`;
         const mailSubj=`Reminder: Invoice ${inv.invoiceNum} payment${days>0?` (${days} day${days>1?'s':''} overdue)`:''}`;
         const mailBody=`Hi ${(inv.client||'').split(' ')[0]||'there'},\n\nHope you are well. Just a gentle reminder that invoice ${inv.invoiceNum} for ${fmt(inv.subtotal)} is now ${days>0?`${days} day${days>1?'s':''} overdue`:'due'}${inv.dueDate?` (was due ${fmtD(inv.dueDate)})`:''}.${inv.docUrl?`\n\nYou can view the invoice here: ${inv.docUrl}`:''}\n\nIf you have already arranged payment, please ignore this. Otherwise, please let me know when I can expect it.\n\nThanks,\n${settings.name||''}`;
         const mailTo=`mailto:${inv.clientEmail}?subject=${encodeURIComponent(mailSubj)}&body=${encodeURIComponent(mailBody)}`;
-        return(<div style={{marginTop:10,padding:'12px',background:'#ece9dd',borderRadius:12,border:`1px solid ${T.accent}33`}}>
+        return(<div style={{marginTop:10,padding:'12px',background:T.bg,borderRadius:12,border:`1px solid ${T.accent}33`}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
             <div style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:1.5,textTransform:'uppercase'}}>✉ Send chase-up</div>
             <button onClick={()=>setChaseOpen(null)} style={{background:'none',border:'none',color:T.textFaint,fontSize:18,lineHeight:1,cursor:'pointer',padding:'0 4px'}}>×</button>
@@ -1124,7 +1124,7 @@ const exportYearWorkbook=async()=>{
 };
 
 return(<Page>
-<div style={{fontFamily:'Space Mono,monospace',fontSize:18,fontWeight:700,marginBottom:14}}>Reports</div>
+<div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,marginBottom:14}}>Reports</div>
 
 <Lbl>Time period</Lbl>
 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
@@ -1143,17 +1143,17 @@ return(<Page>
 <Lbl>Profit & Loss</Lbl>
 <Card style={{marginBottom:16,border:`1px solid ${T.border}`}}>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-    {[['Gross Income',fmt(totG),T.text],['Business Costs',fmt(totBiz),T.business],['Taxable Profit',fmt(taxableP),T.accent],['Tax Stash (20%)',fmt(totTax),T.danger]].map(([l,v,c])=>(<div key={l} style={{background:'#fbfaf5',borderRadius:10,padding:'10px 8px',textAlign:'center'}}><div style={{fontSize:9,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>{l}</div><div style={{fontFamily:'Space Mono,monospace',fontSize:14,fontWeight:700,color:c}}>{v}</div></div>))}
+    {[['Gross Income',fmt(totG),T.text],['Business Costs',fmt(totBiz),T.business],['Taxable Profit',fmt(taxableP),T.accent],['Tax Stash (20%)',fmt(totTax),T.danger]].map(([l,v,c])=>(<div key={l} style={{background:'#fbfaf5',borderRadius:10,padding:'10px 8px',textAlign:'center'}}><div style={{fontSize:9,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>{l}</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:14,fontWeight:700,color:c}}>{v}</div></div>))}
   </div>
   <div style={{background:T.lumpGreen+'12',borderRadius:10,padding:'12px 14px',border:`1px solid ${T.lumpGreen}33`}}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
       <div style={{fontSize:11,color:T.textMuted,textTransform:'uppercase',letterSpacing:1}}>Take Home (after stash)</div>
-      <div style={{fontFamily:'Space Mono,monospace',fontSize:20,fontWeight:700,color:T.lumpGreen}}>{fmt(totN)}</div>
+      <div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.lumpGreen}}>{fmt(totN)}</div>
     </div>
   </div>
   <Hr/>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-    {[['Reimb pending',fmt(totPend),T.reimb],['Reimbursed',fmt(totPaid),T.lumpGreen],['Entries',activeE.length,T.text]].map(([l,v,c])=>(<div key={l}><div style={{fontSize:10,color:T.textMuted,marginBottom:2}}>{l}</div><div style={{fontFamily:'Space Mono,monospace',fontSize:13,fontWeight:700,color:c}}>{v}</div></div>))}
+    {[['Reimb pending',fmt(totPend),T.reimb],['Reimbursed',fmt(totPaid),T.lumpGreen],['Entries',activeE.length,T.text]].map(([l,v,c])=>(<div key={l}><div style={{fontSize:10,color:T.textMuted,marginBottom:2}}>{l}</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:13,fontWeight:700,color:c}}>{v}</div></div>))}
   </div>
 </Card>
 
@@ -1167,12 +1167,12 @@ return(<Page>
       return(<div key={r.month} style={{marginBottom:10}}>
         <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
           <span style={{fontSize:11,fontWeight:700,color:T.textMuted}}>{mName}</span>
-          <span style={{fontSize:11,fontFamily:'Space Mono,monospace',color:r.profit>=0?T.lumpGreen:T.danger}}>{fmt(r.profit)}</span>
+          <span style={{fontSize:11,fontFamily:'Geist Mono,monospace',color:r.profit>=0?T.lumpGreen:T.danger}}>{fmt(r.profit)}</span>
         </div>
-        <div style={{height:6,background:'#f2f1ea',borderRadius:3,marginBottom:3,overflow:'hidden'}}>
+        <div style={{height:6,background:T.border,borderRadius:3,marginBottom:3,overflow:'hidden'}}>
           <div style={{width:`${incPct}%`,height:'100%',background:T.lumpGreen,borderRadius:3}}/>
         </div>
-        <div style={{height:6,background:'#f2f1ea',borderRadius:3,overflow:'hidden'}}>
+        <div style={{height:6,background:T.border,borderRadius:3,overflow:'hidden'}}>
           <div style={{width:`${expPct}%`,height:'100%',background:T.business,borderRadius:3}}/>
         </div>
       </div>);
@@ -1189,7 +1189,7 @@ return(<Page>
   <Card style={{marginBottom:16,border:`1px solid ${T.border}`}}>
     {clientRows.map(([name,amt],i)=>(<div key={name} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:i<clientRows.length-1?`1px solid ${T.border}`:'none'}}>
       <span style={{fontSize:13,fontWeight:600}}>{name}</span>
-      <span style={{fontFamily:'Space Mono,monospace',fontWeight:700,fontSize:13,color:T.lumpGreen}}>{fmt(amt)}</span>
+      <span style={{fontFamily:'Geist Mono,monospace',fontWeight:700,fontSize:13,color:T.lumpGreen}}>{fmt(amt)}</span>
     </div>))}
   </Card>
 </>)}
@@ -1200,9 +1200,9 @@ return(<Page>
     {catRows.map(([k,v])=>{const pct=(v/maxCat)*100;return(<div key={k} style={{marginBottom:10}}>
       <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
         <span style={{fontSize:12,fontWeight:600}}>{catLabel(k)}</span>
-        <span style={{fontSize:12,fontFamily:'Space Mono,monospace',fontWeight:700,color:T.business}}>{fmt(v)}</span>
+        <span style={{fontSize:12,fontFamily:'Geist Mono,monospace',fontWeight:700,color:T.business}}>{fmt(v)}</span>
       </div>
-      <div style={{height:5,background:'#f2f1ea',borderRadius:3,overflow:'hidden'}}>
+      <div style={{height:5,background:T.border,borderRadius:3,overflow:'hidden'}}>
         <div style={{width:`${pct}%`,height:'100%',background:T.business,borderRadius:3}}/>
       </div>
     </div>);})}
@@ -1211,10 +1211,10 @@ return(<Page>
 
 <Lbl>Download</Lbl>
 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-  <Btn color={T.timed} onClick={exportIncome} style={{fontSize:12,padding:'12px 8px'}}><I n="export" sz={14} c="#08060c"/> Income</Btn>
-  <Btn color={T.business} onClick={exportExpenses} style={{fontSize:12,padding:'12px 8px'}}><I n="export" sz={14} c="#08060c"/> Expenses</Btn>
+  <Btn color={T.timed} onClick={exportIncome} style={{fontSize:12,padding:'12px 8px'}}><I n="export" sz={14} c={T.bg}/> Income</Btn>
+  <Btn color={T.business} onClick={exportExpenses} style={{fontSize:12,padding:'12px 8px'}}><I n="export" sz={14} c={T.bg}/> Expenses</Btn>
 </div>
-<button onClick={exportYearWorkbook} disabled={xlsxBusy} style={{width:'100%',marginBottom:6,border:`1px solid ${T.accent}66`,borderRadius:14,padding:'14px 16px',cursor:xlsxBusy?'default':'pointer',background:'linear-gradient(135deg,#f6efe0 0%,#f0eee4 70%,#f2f1ea 100%)',display:'flex',alignItems:'center',gap:12,textAlign:'left',opacity:xlsxBusy?.85:1}}>
+<button onClick={exportYearWorkbook} disabled={xlsxBusy} style={{width:'100%',marginBottom:6,border:`1px solid ${T.accent}66`,borderRadius:14,padding:'14px 16px',cursor:xlsxBusy?'default':'pointer',background:`linear-gradient(135deg,${T.surface} 0%,${T.surface} 70%,${T.bg} 100%)`,display:'flex',alignItems:'center',gap:12,textAlign:'left',opacity:xlsxBusy?.85:1}}>
   <div style={{width:38,height:38,borderRadius:11,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:T.accent+'1a',border:`1px solid ${T.accent}33`}}>
     {xlsxBusy?<div style={{width:16,height:16,border:`2px solid ${T.accent}44`,borderTopColor:T.accentBright,borderRadius:'50%',animation:'spin .8s linear infinite'}}/>:<I n="sheets" sz={19} c={T.accentBright}/>}
   </div>
@@ -1876,7 +1876,7 @@ const Tip=({head,children})=>(<div style={{marginBottom:14}}>
   <div>{children}</div>
 </div>);
 return(<Page>
-<div style={{fontFamily:'Space Mono,monospace',fontSize:18,fontWeight:700,marginBottom:6}}>Tips</div>
+<div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,marginBottom:6}}>Tips</div>
 <div style={{fontSize:12,color:T.textMuted,marginBottom:18,lineHeight:1.5}}>Getting the most out of being a freelancer in the UK. Always verify with HMRC or a qualified accountant for your specific situation.</div>
 
 <Section id="expenses" icon="money" color={T.business} title="Save on tax: allowable expenses">
@@ -2046,7 +2046,7 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
     <button onClick={()=>setPasteOpen(s=>!s)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginTop:10}}>{pasteOpen?'▲ Hide':'▼ Or paste data from your old spreadsheet'}</button>
     {pasteOpen&&(<div style={{marginTop:10}}>
       <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6,marginBottom:8}}>In your old Google Sheet: right-click any sheet tab → unhide <strong style={{color:T.text}}>_app_data</strong> → copy the contents of cell A1 → paste here.</div>
-      <TA placeholder='{"entries":[…],"receipts":[…],"invoices":[…]}' value={pasteVal} onChange={e=>setPasteVal(e.target.value)} style={{...iBase,resize:'vertical',minHeight:70,fontFamily:"'Geist Mono',monospace",fontSize:11}}/>
+      <TA placeholder='{"entries":[…],"receipts":[…],"invoices":[…]}' value={pasteVal} onChange={e=>setPasteVal(e.target.value)} style={{...iBase,resize:'vertical',minHeight:70,fontFamily:"'Geist Mono,monospace'",fontSize:11}}/>
       {pasteErr&&<div style={{fontSize:11,color:T.danger,marginTop:6,lineHeight:1.5}}>{pasteErr}</div>}
       <Btn full small onClick={handlePaste} disabled={!pasteVal.trim()} style={{marginTop:8}}>Import pasted data</Btn>
     </div>)}
@@ -2086,10 +2086,10 @@ return(<Page>
 </SettingsSection>
 
 <SettingsSection title="Invoicing">
-  <SettingsRow label="Default rate"><div style={{display:'flex',alignItems:'center',gap:10}}><input style={{...iBase,width:88,fontFamily:"'Geist Mono',monospace"}} type="text" inputMode="decimal" value={settings.defaultRate??''} onChange={e=>{const v=e.target.value.replace(/[^\d.]/g,'');set('defaultRate',v);}} onBlur={()=>{const n=parseFloat(settings.defaultRate);set('defaultRate',isNaN(n)?35:n);}}/><span style={{fontSize:13,color:T.textMuted}}>£/hr</span></div></SettingsRow>
-  <SettingsRow label="Tax set-aside"><div style={{display:'flex',alignItems:'center',gap:10}}><input style={{...iBase,width:88,fontFamily:"'Geist Mono',monospace"}} type="number" min="0" max="100" step="1" value={settings.taxPercent??20} onChange={e=>{const v=e.target.value.replace(/[^\d.]/g,'');set('taxPercent',v===''?'':parseFloat(v)||0);}}/><span style={{fontSize:13,color:T.textMuted}}>%</span></div></SettingsRow>
-  <SettingsRow label="Payment terms"><div style={{display:'flex',alignItems:'center',gap:10}}><input style={{...iBase,width:88,fontFamily:"'Geist Mono',monospace"}} type="number" min="0" step="1" value={settings.paymentTermsDays??30} onChange={e=>{const v=e.target.value.replace(/[^\d]/g,'');set('paymentTermsDays',v===''?'':parseInt(v)||0);}}/><span style={{fontSize:13,color:T.textMuted}}>days</span></div></SettingsRow>
-  <SettingsRow label="Invoice prefix"><Inp style={{fontFamily:"'Geist Mono',monospace"}} placeholder="INV-" value={settings.invoicePrefix??''} onChange={e=>set('invoicePrefix',e.target.value)}/></SettingsRow>
+  <SettingsRow label="Default rate"><div style={{display:'flex',alignItems:'center',gap:10}}><input style={{...iBase,width:88,fontFamily:"'Geist Mono,monospace'"}} type="text" inputMode="decimal" value={settings.defaultRate??''} onChange={e=>{const v=e.target.value.replace(/[^\d.]/g,'');set('defaultRate',v);}} onBlur={()=>{const n=parseFloat(settings.defaultRate);set('defaultRate',isNaN(n)?35:n);}}/><span style={{fontSize:13,color:T.textMuted}}>£/hr</span></div></SettingsRow>
+  <SettingsRow label="Tax set-aside"><div style={{display:'flex',alignItems:'center',gap:10}}><input style={{...iBase,width:88,fontFamily:"'Geist Mono,monospace'"}} type="number" min="0" max="100" step="1" value={settings.taxPercent??20} onChange={e=>{const v=e.target.value.replace(/[^\d.]/g,'');set('taxPercent',v===''?'':parseFloat(v)||0);}}/><span style={{fontSize:13,color:T.textMuted}}>%</span></div></SettingsRow>
+  <SettingsRow label="Payment terms"><div style={{display:'flex',alignItems:'center',gap:10}}><input style={{...iBase,width:88,fontFamily:"'Geist Mono,monospace'"}} type="number" min="0" step="1" value={settings.paymentTermsDays??30} onChange={e=>{const v=e.target.value.replace(/[^\d]/g,'');set('paymentTermsDays',v===''?'':parseInt(v)||0);}}/><span style={{fontSize:13,color:T.textMuted}}>days</span></div></SettingsRow>
+  <SettingsRow label="Invoice prefix"><Inp style={{fontFamily:"'Geist Mono,monospace'"}} placeholder="INV-" value={settings.invoicePrefix??''} onChange={e=>set('invoicePrefix',e.target.value)}/></SettingsRow>
   <SettingsRow label="Invoice footer"><TA rows={3} placeholder="Thank you for your business." value={settings.invoiceFooter??''} onChange={e=>set('invoiceFooter',e.target.value)}/></SettingsRow>
 </SettingsSection>
 
@@ -2097,7 +2097,7 @@ return(<Page>
   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
     <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:99,background:T.bg,border:`1px solid ${T.border}`}}>
       <div style={{width:6,height:6,borderRadius:'50%',background:syncStatus==='synced'?T.lumpGreen:T.textFaint}}/>
-      <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10,letterSpacing:'.06em',color:T.textMuted}}>{syncStatus==='synced'?'CONNECTED':'LOCAL ONLY'}</span>
+      <span style={{fontFamily:"'Geist Mono,monospace'",fontSize:10,letterSpacing:'.06em',color:T.textMuted}}>{syncStatus==='synced'?'CONNECTED':'LOCAL ONLY'}</span>
     </div>
   </div>
   <div style={{fontSize:13,color:T.textFaint,marginBottom:22}}>Connect to sync data across devices</div>
@@ -2122,7 +2122,7 @@ return(<Page>
     <div style={{fontWeight:600,color:'#C9C3B4',marginBottom:10}}>Setting up Google Apps Script</div>
     {[['1','Go to sheets.new and create a new Google Sheet'],['2','Extensions → Apps Script'],['3','Delete all existing code, paste the code below, Save (Ctrl+S)'],['4','Click Deploy → New deployment → Web app'],['5','Execute as: Me — Who has access: Anyone  (NOT \'Anyone with Google account\' — this is the most common mistake)'],['6','Click Deploy — authorise all permissions (Drive, Docs, Sheets, Gmail)'],['7','Copy the /exec URL and paste it above'],['8','Test the connection'],['9','Open the sheet and run Honey → Install auto-sync trigger (once)'],['10','To import Gmail receipts: label emails "Tracker/Receipts" in Gmail, then tap Import from Gmail in the Receipts tab.']].map(([n,t])=>(<div key={n} style={{display:'flex',gap:10,marginBottom:9,alignItems:'flex-start'}}><div style={{width:20,height:20,borderRadius:'50%',background:T.accent+'20',border:`1px solid ${T.accent}40`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.accent,flexShrink:0,marginTop:1}}>{n}</div><div>{t}</div></div>))}
     <div style={{marginTop:14,padding:'10px 14px',borderRadius:8,background:T.surface,border:`1px solid ${T.border}`}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontFamily:"'Geist Mono',monospace",fontSize:10,color:T.textMuted,letterSpacing:1}}>APPS SCRIPT CODE</span><button onClick={copyCode} style={{background:copied?T.lumpGreen+'20':'transparent',border:`1px solid ${copied?T.lumpGreen:T.border}`,borderRadius:7,padding:'4px 10px',fontSize:11,fontWeight:700,color:copied?T.lumpGreen:T.textMuted,cursor:'pointer'}}>{copied?'✓ Copied':'Copy'}</button></div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontFamily:"'Geist Mono,monospace'",fontSize:10,color:T.textMuted,letterSpacing:1}}>APPS SCRIPT CODE</span><button onClick={copyCode} style={{background:copied?T.lumpGreen+'20':'transparent',border:`1px solid ${copied?T.lumpGreen:T.border}`,borderRadius:7,padding:'4px 10px',fontSize:11,fontWeight:700,color:copied?T.lumpGreen:T.textMuted,cursor:'pointer'}}>{copied?'✓ Copied':'Copy'}</button></div>
       <pre style={{fontSize:9,color:T.textFaint,lineHeight:1.6,maxHeight:220,overflowY:'auto'}}>{GAS}</pre>
     </div>
   </div>}
@@ -2451,7 +2451,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
           <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.ok&&c.amount?(c.vendor||c.description||c.name):c.name}</div>
           <div style={{fontSize:11,color:T.textMuted}}>{c.folder==='invoice'?'Invoice':c.folder==='reimbursable'?'Reimbursable':'Business'}{c.date?' · '+c.date:''}{isDup?' · already logged':!isNew?' · couldn’t read — add manually':''}</div>
         </div>
-        <div style={{fontFamily:"'Geist Mono',monospace",fontSize:14,fontWeight:700,flexShrink:0,color:isNew?T.text:isDup?T.lumpGreen:T.danger}}>{c.ok&&c.amount?(isDup?'✓ ':'')+fmt(c.amount):'—'}</div>
+        <div style={{fontFamily:"'Geist Mono,monospace'",fontSize:14,fontWeight:700,flexShrink:0,color:isNew?T.text:isDup?T.lumpGreen:T.danger}}>{c.ok&&c.amount?(isDup?'✓ ':'')+fmt(c.amount):'—'}</div>
       </div>);})}
       <div style={{display:'flex',gap:10,marginTop:10}}>
         <button onClick={()=>setIngestFound(null)} style={{flex:1,background:'none',border:`1px solid ${T.border}`,borderRadius:12,padding:'12px',fontWeight:700,color:T.textMuted,fontSize:14}}>Cancel</button>
