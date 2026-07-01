@@ -2162,7 +2162,44 @@ return(<Page>
 </Page>);}
 
 // ── NAV ──────────────────────────────────────────────────────────────────────
-function SheetsView(){return(<Page><PgTitle>Sheets</PgTitle><div style={{color:T.textMuted,fontSize:13,lineHeight:1.6}}>A live spreadsheet view of your entries and invoices is coming soon here.</div></Page>);}
+function SheetsView({entries=[],invoices=[],sheetsUrl,onSync}){
+const[syncing,setSyncing]=useState(false);
+const invoicedMap={};invoices.forEach(inv=>(inv.entryIds||[]).forEach(eid=>{if(!invoicedMap[eid])invoicedMap[eid]=inv.invoiceNum||'INV';}));
+const rows=entries.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+const handleSync=async()=>{if(!onSync)return;setSyncing(true);await onSync();setSyncing(false);};
+const th={textAlign:'left',padding:'0 0 12px',fontFamily:"'Geist Mono',monospace",fontSize:10,letterSpacing:'.08em',textTransform:'uppercase',color:T.textFaint,fontWeight:600,borderBottom:`1px solid ${T.border}`};
+const td={padding:'12px 0',borderBottom:`1px solid ${T.border}`,fontSize:13,color:T.text};
+return(<Page><div style={{maxWidth:900}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:22}}>
+  <div style={{fontFamily:'Bricolage Grotesque,serif',fontSize:28,fontWeight:800,color:T.text}}>Spreadsheet</div>
+  <div style={{display:'flex',alignItems:'center',gap:10}}>
+    <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:99,background:T.surface,border:`1px solid ${T.border}`}}>
+      <div style={{width:6,height:6,borderRadius:'50%',background:sheetsUrl?T.lumpGreen:T.textFaint}}/>
+      <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10,letterSpacing:'.06em',color:T.textMuted}}>{sheetsUrl?'CONNECTED':'LOCAL ONLY'}</span>
+    </div>
+    {sheetsUrl&&<button onClick={handleSync} disabled={syncing} style={{height:36,padding:'0 16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,fontWeight:500,fontSize:13,opacity:syncing?.6:1,display:'flex',alignItems:'center',gap:8}}>{syncing?<Spinner/>:null}{syncing?'Pulling…':'Pull from Sheets'}</button>}
+  </div>
+</div>
+{rows.length===0?(
+  <div style={{textAlign:'center',padding:'60px 20px',color:T.textMuted}}>No entries logged yet</div>
+):(
+  <div style={{overflowX:'auto'}}>
+  <table style={{width:'100%',borderCollapse:'collapse'}}>
+    <thead><tr><th style={th}>Date</th><th style={th}>Client</th><th style={th}>Description</th><th style={{...th,textAlign:'right'}}>Amount</th><th style={{...th,textAlign:'right'}}>Tax</th><th style={th}>Status</th></tr></thead>
+    <tbody>
+      {rows.map(e=>(<tr key={e.id}>
+        <td style={{...td,color:T.textMuted,whiteSpace:'nowrap'}}>{fmtD(e.date)}</td>
+        <td style={td}>{e.client||'—'}{invoicedMap[e.id]&&<span style={{marginLeft:8,fontSize:11,color:T.lumpGreen}}>📄 {invoicedMap[e.id]}</span>}</td>
+        <td style={{...td,color:T.textMuted,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.description||'—'}</td>
+        <td style={{...td,textAlign:'right',fontFamily:"'Geist Mono',monospace"}}>{fmt(e.subtotal)}</td>
+        <td style={{...td,textAlign:'right',fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{fmt(e.tax)}</td>
+        <td style={td}><StatusTag status={e.status}/></td>
+      </tr>))}
+    </tbody>
+  </table>
+  </div>
+)}
+</div></Page>);}
 
 const NAV_ITEMS=[['home','home','Home'],['log','list','Log'],['invoice','invoice','Invoice'],['snap','camera','Snap'],['sheets','sheets','Sheets'],['receipts','receipt','Files'],['settings','settings','Settings']];
 function NavButton({id,icon,label,active,onClick,vertical}){
@@ -2436,7 +2473,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
-  {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} onSync={syncFromSheets}/>}
+  {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup}/>}
   </div>
   </div>
