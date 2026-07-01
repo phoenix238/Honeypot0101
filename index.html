@@ -193,9 +193,9 @@ const Btn=({children,onClick,color=T.accent,outline,full,disabled,style,small})=
 const Lbl=({children})=><div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.3,marginBottom:6,fontFamily:"'Geist Mono',monospace"}}>{children}</div>;
 const Field=({label,children})=><div style={{marginBottom:13}}><Lbl>{label}</Lbl>{children}</div>;
 const iBase={background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,padding:'11px 13px',fontSize:15,width:'100%'};
-const Inp=p=><input style={iBase} {...p}/>;
-const TA=p=><textarea style={{...iBase,resize:'vertical',minHeight:70}} {...p}/>;
-const Sel=({children,...p})=><select style={{...iBase,appearance:'none'}} {...p}>{children}</select>;
+const Inp=({style,...p})=><input style={{...iBase,...style}} {...p}/>;
+const TA=({style,...p})=><textarea style={{...iBase,resize:'vertical',minHeight:70,...style}} {...p}/>;
+const Sel=({children,style,...p})=><select style={{...iBase,appearance:'none',...style}} {...p}>{children}</select>;
 const Hr=()=><div style={{height:1,background:T.border,margin:'13px 0'}}/>;
 const Spinner=()=><div style={{width:14,height:14,border:`2px solid ${T.bg}40`,borderTopColor:T.bg,borderRadius:'50%',animation:'spin .8s linear infinite'}}/>;
 const EntryTag=({type})=>{const m={timed:[T.timed,'Timed'],manual:[T.manual,'Hours'],lump:[T.lumpGreen,'Lump Sum']};const[c,l]=m[type]||[T.textMuted,type];return <span style={{background:c+'22',color:c,border:`1px solid ${c}44`,borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700}}>{l}</span>;};
@@ -1982,18 +1982,6 @@ return(<Page>
 </Page>);}
 
 // ── SET-ASIDE RATES CARD ──
-function TaxSavingsCard({settings,set}){
-const taxPct=parseFloat(settings.taxPercent??20);
-const holPct=parseFloat(settings.holidayPayPercent??12.07);
-const ex=500;
-return(<Card style={{marginBottom:16,border:`1px solid ${T.lumpGreen}30`}}>
-  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><I n="money" sz={18} c={T.lumpGreen}/><div style={{fontWeight:700,fontSize:14,flex:1}}>Set-aside rates</div></div>
-  <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,marginBottom:12}}>How much to put aside each time you're paid. On a £{ex} payment: <strong style={{color:T.lumpGreen}}>£{(ex*taxPct/100).toFixed(2)}</strong> tax + <strong style={{color:T.timed}}>£{(ex*holPct/100).toFixed(2)}</strong> holiday.</div>
-  <Field label="Tax percentage (%)"><Inp type="number" min="0" max="100" step="1" value={settings.taxPercent??20} onChange={e=>{const v=e.target.value.replace(/[^\d.]/g,'');set('taxPercent',v===''?'':parseFloat(v)||0);}}/></Field>
-  <Field label="Holiday pay percentage (%)"><Inp type="number" min="0" max="100" step="0.01" value={settings.holidayPayPercent??12.07} onChange={e=>{const v=e.target.value.replace(/[^\d.]/g,'');set('holidayPayPercent',v===''?'':parseFloat(v)||0);}}/></Field>
-  <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5,marginTop:4}}>Freelancers don't get paid holiday — putting aside 12.07% (the statutory rate) means you can take time off without the income gap.</div>
-</Card>);}
-
 // ── TRANSFER FROM OLD APP ────────────────────────────────────────────────────
 // Reads the old Freelance Tracker's data (ft-* localStorage keys) READ-ONLY.
 // Never writes to the old app's storage — it stays intact as your archive.
@@ -2038,7 +2026,7 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
   ):(<>
     <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,marginBottom:12}}>One-tap copy of your old app's data into Honey. <strong style={{color:T.text}}>Read-only</strong> — nothing in the old app or its spreadsheet is changed, so it stays as your archive.</div>
     {old?(<>
-      <div style={{background:'#f2f1ea',borderRadius:10,padding:'10px 12px',marginBottom:10,border:`1px solid ${T.border}`}}>
+      <div style={{background:T.bg,borderRadius:10,padding:'10px 12px',marginBottom:10,border:`1px solid ${T.border}`}}>
         <div style={{fontSize:11,fontWeight:700,color:T.accent,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{allTime?'Everything found':'This tax year (from '+fmtD(TAX_YEAR_START)+')'}</div>
         <div style={{fontSize:12,color:T.textMuted,lineHeight:1.7}}>{c.i} invoices · {c.e} income entries · {c.r} receipts · {c.c} clients{old.settings?' · settings':''}</div>
       </div>
@@ -2058,7 +2046,7 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
     <button onClick={()=>setPasteOpen(s=>!s)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginTop:10}}>{pasteOpen?'▲ Hide':'▼ Or paste data from your old spreadsheet'}</button>
     {pasteOpen&&(<div style={{marginTop:10}}>
       <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6,marginBottom:8}}>In your old Google Sheet: right-click any sheet tab → unhide <strong style={{color:T.text}}>_app_data</strong> → copy the contents of cell A1 → paste here.</div>
-      <TA placeholder='{"entries":[…],"receipts":[…],"invoices":[…]}' value={pasteVal} onChange={e=>setPasteVal(e.target.value)} style={{...iBase,resize:'vertical',minHeight:70,fontFamily:'Space Mono,monospace',fontSize:11}}/>
+      <TA placeholder='{"entries":[…],"receipts":[…],"invoices":[…]}' value={pasteVal} onChange={e=>setPasteVal(e.target.value)} style={{...iBase,resize:'vertical',minHeight:70,fontFamily:"'Geist Mono',monospace",fontSize:11}}/>
       {pasteErr&&<div style={{fontSize:11,color:T.danger,marginTop:6,lineHeight:1.5}}>{pasteErr}</div>}
       <Btn full small onClick={handlePaste} disabled={!pasteVal.trim()} style={{marginTop:8}}>Import pasted data</Btn>
     </div>)}
@@ -2066,123 +2054,110 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
 </Card>);}
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
-function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onImportOld,trash=[],onRestoreTrash,onPurgeTrashItem,onEmptyTrash}){
+function SettingsRow({label,children}){return(<div style={{display:'grid',gridTemplateColumns:'176px 1fr',gap:16,alignItems:'flex-start',marginBottom:14}}><div style={{fontSize:13,color:T.textMuted,paddingTop:11}}>{label}</div>{children}</div>);}
+function SettingsSection({title,children}){return(<div style={{marginBottom:36}}><Lbl>{title}</Lbl><Hr/><div>{children}</div></div>);}
+function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onImportOld,onExportBackup,onImportBackup}){
 const set=(k,v)=>setSettings(s=>({...s,[k]:v}));
-const[flash,setFlash]=useState(false);
 const[showSetup,setShowSetup]=useState(!settings.sheetsUrl);
 const[copied,setCopied]=useState(false);
 const[testing,setTesting]=useState(false);
 const[testMsg,setTestMsg]=useState(null);
 const[syncing,setSyncing]=useState(false);
 const[syncResult,setSyncResult]=useState(null);
-const[clientForm,setClientForm]=useState({name:'',email:'',address:''});
-const[clientFlash,setClientFlash]=useState(false);
+const[clientForm,setClientForm]=useState({name:'',email:''});
 const[confClientId,setConfClientId]=useState(null);
+const importFileRef=useRef();
 const setCF=(k,v)=>setClientForm(f=>({...f,[k]:v}));
-const handleAddClient=()=>{if(!clientForm.name)return;onAddClient({name:clientForm.name,email:clientForm.email||'',address:clientForm.address||''});setClientFlash(true);setClientForm({name:'',email:'',address:''});setTimeout(()=>setClientFlash(false),1600);};
+const handleAddClient=()=>{if(!clientForm.name)return;onAddClient({name:clientForm.name,email:clientForm.email||''});setClientForm({name:'',email:''});};
 const copyCode=()=>{navigator.clipboard.writeText(GAS).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2200);});};
 const runTest=async()=>{setTesting(true);setTestMsg(null);const res=await onTest();setTestMsg(res);setTesting(false);};
 const handleSync=async()=>{setSyncing(true);setSyncResult(null);const ok=await onSyncFromSheets();setSyncing(false);setSyncResult(ok?'ok':'err');setTimeout(()=>setSyncResult(null),3000);};
 return(<Page>
-<div style={{fontFamily:'Space Mono,monospace',fontSize:18,fontWeight:700,marginBottom:22}}>Settings</div>
-<ImportCard onImportOld={onImportOld}/>
-<Card style={{marginBottom:20,border:`1px solid ${T.lumpGreen}40`}}>
-  <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:10}}><I n="sheets" sz={19} c={T.lumpGreen}/><div style={{fontWeight:700,fontSize:15,flex:1}}>Google Integration</div><SyncPill status={syncStatus}/></div>
-  <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,marginBottom:14}}>One Apps Script handles everything: Sheets sync, invoices, and Drive uploads. Photos route to separate <strong style={{color:T.text}}>Business</strong> and <strong style={{color:T.text}}>Reimbursable</strong> folders. Deleting a row in the spreadsheet will remove it from the app too.</div>
-  <Field label="Apps Script URL">
-    <div style={{display:'flex',gap:8}}>
-      <input style={{...iBase,flex:1,fontSize:12}} placeholder="https://script.google.com/macros/s/…/exec" value={settings.sheetsUrl||''} onChange={e=>set('sheetsUrl',e.target.value)}/>
-      <button onClick={runTest} disabled={!settings.sheetsUrl||testing} style={{background:T.lumpGreen+'18',border:`1.5px solid ${T.lumpGreen}44`,borderRadius:12,padding:'0 14px',color:T.lumpGreen,fontWeight:700,fontSize:13,flexShrink:0,opacity:!settings.sheetsUrl||testing?.4:1}}>{testing?'…':'Test'}</button>
+<div style={{fontFamily:'Bricolage Grotesque,serif',fontSize:28,fontWeight:800,color:T.text,marginBottom:44,maxWidth:700}}>Settings</div>
+<div style={{maxWidth:700}}>
+
+<SettingsSection title="Your Profile">
+  <SettingsRow label="Your name"><Inp placeholder="Name on invoices" value={settings.name||''} onChange={e=>set('name',e.target.value)}/></SettingsRow>
+  <SettingsRow label="Trading name"><Inp placeholder="Optional" value={settings.business||''} onChange={e=>set('business',e.target.value)}/></SettingsRow>
+  <SettingsRow label="Email"><Inp type="email" placeholder="your@email.com" value={settings.email||''} onChange={e=>set('email',e.target.value)}/></SettingsRow>
+  <SettingsRow label="Phone"><Inp type="tel" placeholder="Optional" value={settings.phone||''} onChange={e=>set('phone',e.target.value)}/></SettingsRow>
+  <SettingsRow label="VAT number"><Inp placeholder="Not registered" value={settings.vatNumber||''} onChange={e=>set('vatNumber',e.target.value)}/></SettingsRow>
+  <SettingsRow label="Bank details"><Inp placeholder="Sort: 00-00-00 · Acc: 00000000" value={settings.bankDetails||''} onChange={e=>set('bankDetails',e.target.value)}/></SettingsRow>
+</SettingsSection>
+
+<SettingsSection title="Invoicing">
+  <SettingsRow label="Default rate"><div style={{display:'flex',alignItems:'center',gap:10}}><input style={{...iBase,width:88,fontFamily:"'Geist Mono',monospace"}} type="text" inputMode="decimal" value={settings.defaultRate??''} onChange={e=>{const v=e.target.value.replace(/[^\d.]/g,'');set('defaultRate',v);}} onBlur={()=>{const n=parseFloat(settings.defaultRate);set('defaultRate',isNaN(n)?35:n);}}/><span style={{fontSize:13,color:T.textMuted}}>£/hr</span></div></SettingsRow>
+  <SettingsRow label="Tax set-aside"><div style={{display:'flex',alignItems:'center',gap:10}}><input style={{...iBase,width:88,fontFamily:"'Geist Mono',monospace"}} type="number" min="0" max="100" step="1" value={settings.taxPercent??20} onChange={e=>{const v=e.target.value.replace(/[^\d.]/g,'');set('taxPercent',v===''?'':parseFloat(v)||0);}}/><span style={{fontSize:13,color:T.textMuted}}>%</span></div></SettingsRow>
+  <SettingsRow label="Payment terms"><div style={{display:'flex',alignItems:'center',gap:10}}><input style={{...iBase,width:88,fontFamily:"'Geist Mono',monospace"}} type="number" min="0" step="1" value={settings.paymentTermsDays??30} onChange={e=>{const v=e.target.value.replace(/[^\d]/g,'');set('paymentTermsDays',v===''?'':parseInt(v)||0);}}/><span style={{fontSize:13,color:T.textMuted}}>days</span></div></SettingsRow>
+  <SettingsRow label="Invoice prefix"><Inp style={{fontFamily:"'Geist Mono',monospace"}} placeholder="INV-" value={settings.invoicePrefix??''} onChange={e=>set('invoicePrefix',e.target.value)}/></SettingsRow>
+  <SettingsRow label="Invoice footer"><TA rows={3} placeholder="Thank you for your business." value={settings.invoiceFooter??''} onChange={e=>set('invoiceFooter',e.target.value)}/></SettingsRow>
+</SettingsSection>
+
+<SettingsSection title="Google Sheets">
+  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+    <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:99,background:T.bg,border:`1px solid ${T.border}`}}>
+      <div style={{width:6,height:6,borderRadius:'50%',background:syncStatus==='synced'?T.lumpGreen:T.textFaint}}/>
+      <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10,letterSpacing:'.06em',color:T.textMuted}}>{syncStatus==='synced'?'CONNECTED':'LOCAL ONLY'}</span>
     </div>
-  </Field>
-  {testMsg&&<div style={{fontSize:12,fontWeight:700,color:testMsg.ok?T.lumpGreen:T.danger,marginBottom:10,lineHeight:1.5,background:testMsg.ok?T.lumpGreen+'10':T.danger+'10',borderRadius:8,padding:'8px 10px'}}>
-  {testMsg.ok
-    ?'✓ Connected! Sheets, Drive, and Docs are ready.'
-    :<>
-      <div>✗ {testMsg.reason||'Connection failed'}</div>
-      {testMsg.hint==='access'&&<div style={{fontWeight:400,marginTop:6,fontSize:11,lineHeight:1.6}}>Most common fix: in Apps Script go to <strong>Deploy → Manage Deployments → Edit (pencil)</strong>, set <strong>Who has access = Anyone</strong> (not "Anyone with Google account"), click <strong>Deploy</strong>, then <strong>authorise all permissions</strong> again.</div>}
-      {testMsg.hint==='url'&&<div style={{fontWeight:400,marginTop:6,fontSize:11}}>Copy the URL from <strong>Deploy → Manage Deployments</strong>. It must end in <strong>/exec</strong>.</div>}
-      {testMsg.hint==='timeout'&&<div style={{fontWeight:400,marginTop:6,fontSize:11}}>Check your internet connection, then try again.</div>}
-    </>
-  }
-</div>}
-  {settings.sheetsUrl&&(
-    <Btn full color={syncResult==='ok'?T.lumpGreen:syncResult==='err'?T.danger:T.timed} onClick={handleSync} disabled={syncing} style={{marginBottom:10}}>
-      {syncing?<><Spinner/> Pulling from Sheets...</>:syncResult==='ok'?<><I n="check" sz={16} c="#08060c"/> App updated!</>:syncResult==='err'?'Sync failed — check URL':<><I n="sync" sz={16} c="#08060c"/> Pull Latest from Sheets</>}
-    </Btn>
-  )}
-  <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5,marginBottom:10}}>After deleting rows in the spreadsheet, use the sheet menu <strong style={{color:T.text}}>Honey → Pull deletions</strong> first, then tap Pull above to sync to this app.</div>
-  <button onClick={()=>setShowSetup(s=>!s)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0}}>{showSetup?'▲ Hide':'▼ Show'} setup instructions</button>
-  {showSetup&&<div style={{marginTop:16}}>
-    {[['1','Go to sheets.new and create a new Google Sheet'],['2','Extensions → Apps Script'],['3','Delete all existing code, paste the code below, Save (Ctrl+S)'],['4','Click Deploy → New deployment → Web app'],['5','Execute as: Me — Who has access: Anyone  (NOT \'Anyone with Google account\' — this is the most common mistake)'],['6','Click Deploy — authorise all permissions (Drive, Docs, Sheets, Gmail)'],['7','Copy the /exec URL and paste it above'],['8','Test the connection'],['9','Open the sheet and run Honey → Install auto-sync trigger (once)'],['10','To import Gmail receipts: label emails "Tracker/Receipts" in Gmail, then tap Import from Gmail in the Receipts tab. Processed emails get labelled Tracker/Processed automatically.']].map(([n,t])=>(<div key={n} style={{display:'flex',gap:10,marginBottom:9,alignItems:'flex-start'}}><div style={{width:20,height:20,borderRadius:'50%',background:T.accent+'20',border:`1px solid ${T.accent}40`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.accent,flexShrink:0,marginTop:1}}>{n}</div><div style={{fontSize:12,color:T.textMuted,lineHeight:1.55}}>{t}</div></div>))}
-    <div style={{background:'#ece9dd',borderRadius:12,padding:'12px 14px',marginTop:12,border:`1px solid ${T.border}`}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:1}}>APPS SCRIPT CODE (v5 — Gmail + PDF support)</span><button onClick={copyCode} style={{background:copied?T.lumpGreen+'20':'transparent',border:`1px solid ${copied?T.lumpGreen:T.border}`,borderRadius:7,padding:'4px 10px',fontSize:11,fontWeight:700,color:copied?T.lumpGreen:T.textMuted,cursor:'pointer'}}>{copied?'✓ Copied':'Copy'}</button></div>
-      <pre style={{fontSize:9,color:'#6a6080',lineHeight:1.6,maxHeight:220,overflowY:'auto'}}>{GAS}</pre>
+  </div>
+  <div style={{fontSize:13,color:T.textFaint,marginBottom:22}}>Connect to sync data across devices</div>
+  <SettingsRow label="Apps Script URL">
+    <div style={{display:'flex',gap:8}}>
+      <input style={{...iBase,flex:1,fontSize:13}} placeholder="https://script.google.com/…" value={settings.sheetsUrl||''} onChange={e=>set('sheetsUrl',e.target.value)}/>
+      <button onClick={runTest} disabled={!settings.sheetsUrl||testing} style={{height:40,padding:'0 16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.textMuted,fontWeight:600,fontSize:13,flexShrink:0,opacity:!settings.sheetsUrl||testing?.5:1}}>{testing?'…':'Test'}</button>
+    </div>
+  </SettingsRow>
+  {testMsg&&<SettingsRow label=""><div style={{fontSize:12,fontWeight:600,color:testMsg.ok?T.lumpGreen:T.danger,lineHeight:1.5,background:testMsg.ok?T.lumpGreen+'10':T.danger+'10',borderRadius:8,padding:'8px 10px'}}>{testMsg.ok?'✓ Connected! Sheets, Drive, and Docs are ready.':(testMsg.reason||'Connection failed')}</div></SettingsRow>}
+  <SettingsRow label="">
+    <div style={{display:'flex',alignItems:'center',gap:12}}>
+      <button onClick={handleSync} disabled={!settings.sheetsUrl||syncing} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,fontWeight:500,fontSize:13,opacity:!settings.sheetsUrl||syncing?.5:1,display:'flex',alignItems:'center',gap:8}}>{syncing?<Spinner/>:null}{syncing?'Pulling…':syncResult==='ok'?'✓ Updated':syncResult==='err'?'Sync failed':'Pull latest from Sheets'}</button>
+      <span style={{fontSize:12,color:T.textFaint}}>Never synced</span>
+    </div>
+  </SettingsRow>
+  <button onClick={()=>setShowSetup(s=>!s)} style={{display:'flex',alignItems:'center',gap:8,background:'none',border:'none',padding:'10px 0',cursor:'pointer'}}>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMuted} strokeWidth="2.2" strokeLinecap="round" style={{transform:showSetup?'rotate(180deg)':'rotate(0deg)'}}><path d="M6 9l6 6 6-6"/></svg>
+    <span style={{fontSize:13,color:T.textMuted}}>Setup instructions</span>
+  </button>
+  {showSetup&&<div style={{padding:'18px 20px',borderRadius:12,background:T.bg,border:`1px solid ${T.border}`,fontSize:13,lineHeight:1.65,color:T.textMuted}}>
+    <div style={{fontWeight:600,color:'#C9C3B4',marginBottom:10}}>Setting up Google Apps Script</div>
+    {[['1','Go to sheets.new and create a new Google Sheet'],['2','Extensions → Apps Script'],['3','Delete all existing code, paste the code below, Save (Ctrl+S)'],['4','Click Deploy → New deployment → Web app'],['5','Execute as: Me — Who has access: Anyone  (NOT \'Anyone with Google account\' — this is the most common mistake)'],['6','Click Deploy — authorise all permissions (Drive, Docs, Sheets, Gmail)'],['7','Copy the /exec URL and paste it above'],['8','Test the connection'],['9','Open the sheet and run Honey → Install auto-sync trigger (once)'],['10','To import Gmail receipts: label emails "Tracker/Receipts" in Gmail, then tap Import from Gmail in the Receipts tab.']].map(([n,t])=>(<div key={n} style={{display:'flex',gap:10,marginBottom:9,alignItems:'flex-start'}}><div style={{width:20,height:20,borderRadius:'50%',background:T.accent+'20',border:`1px solid ${T.accent}40`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.accent,flexShrink:0,marginTop:1}}>{n}</div><div>{t}</div></div>))}
+    <div style={{marginTop:14,padding:'10px 14px',borderRadius:8,background:T.surface,border:`1px solid ${T.border}`}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontFamily:"'Geist Mono',monospace",fontSize:10,color:T.textMuted,letterSpacing:1}}>APPS SCRIPT CODE</span><button onClick={copyCode} style={{background:copied?T.lumpGreen+'20':'transparent',border:`1px solid ${copied?T.lumpGreen:T.border}`,borderRadius:7,padding:'4px 10px',fontSize:11,fontWeight:700,color:copied?T.lumpGreen:T.textMuted,cursor:'pointer'}}>{copied?'✓ Copied':'Copy'}</button></div>
+      <pre style={{fontSize:9,color:T.textFaint,lineHeight:1.6,maxHeight:220,overflowY:'auto'}}>{GAS}</pre>
     </div>
   </div>}
-</Card>
-<Lbl>Your details (appear on invoices)</Lbl><div style={{height:8}}/>
-<Field label="Your name"><Inp placeholder="Name on invoices" value={settings.name||''} onChange={e=>set('name',e.target.value)}/></Field>
-<Field label="Business / trading name"><Inp placeholder="Optional" value={settings.business||''} onChange={e=>set('business',e.target.value)}/></Field>
-<Field label="Email"><Inp type="email" placeholder="your@email.com" value={settings.email||''} onChange={e=>set('email',e.target.value)}/></Field>
-<Hr/>
-<Card style={{marginBottom:16,border:`1px solid ${T.accentBright}30`}}>
-  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><I n="scan" sz={17} c={T.accentBright}/><div style={{fontWeight:700,fontSize:14,flex:1}}>AI Scan</div></div>
-  <div style={{fontSize:12,color:T.lumpGreen,display:'flex',alignItems:'center',gap:5}}><I n="check" sz={12} c={T.lumpGreen}/> AI Scan enabled — look for the ✦ button when adding receipts</div>
-</Card>
-<TaxSavingsCard settings={settings} set={set}/>
-<Hr/>
-<Field label="Bank details (auto-fills invoice payment notes)"><TA placeholder={'Sort code: 00-00-00\nAccount no: 00000000\nBank: Your Bank'} value={settings.bankDetails||''} onChange={e=>set('bankDetails',e.target.value)}/></Field>
-<Hr/>
-<Field label="Payment reference (shown on Google Doc & print invoice)"><Inp placeholder="e.g. PAYMENT REF: PTF" value={settings.payRef||''} onChange={e=>set('payRef',e.target.value)}/></Field>
-<Field label="Default hourly rate (£)"><Inp type="text" inputMode="decimal" value={settings.defaultRate??''} onChange={e=>{const v=e.target.value.replace(/[^\d.]/g,'');set('defaultRate',v);}} onBlur={()=>{const n=parseFloat(settings.defaultRate);set('defaultRate',isNaN(n)?35:n);}}/></Field>
-<Hr/>
-<Btn full color={flash?T.lumpGreen:T.accent} onClick={()=>{setFlash(true);setTimeout(()=>setFlash(false),1800);}}>{flash?<><I n="check" sz={16} c="#08060c"/> Saved!</>:'Save Settings'}</Btn>
-<Hr/>
-<Lbl>Client book</Lbl>
-<div style={{fontSize:12,color:T.textMuted,marginBottom:14,lineHeight:1.5}}>Saved clients appear as quick-pick chips when building an invoice.</div>
-{clients.length>0&&(<div style={{marginBottom:16}}>{clients.map(c=>(<div key={c.id} style={{background:T.surface,borderRadius:12,padding:'10px 14px',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,border:`1px solid ${T.border}`}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:14}}>{c.name}</div>{c.email&&<div style={{fontSize:12,color:T.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.email}</div>}{c.address&&<div style={{fontSize:12,color:T.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.address}</div>}</div><button onClick={()=>confClientId===c.id?onDelClient(c.id):setConfClientId(c.id)} style={{background:confClientId===c.id?T.dangerBg:'none',border:confClientId===c.id?`1px solid ${T.danger}44`:'none',borderRadius:6,color:confClientId===c.id?T.danger:T.textFaint,padding:'3px 8px',fontSize:11,fontWeight:700,flexShrink:0,cursor:'pointer'}}>{confClientId===c.id?'Sure?':'del'}</button></div>))}</div>)}
-<Card style={{marginBottom:16,border:`1px solid ${T.border}`}}>
-  <Lbl>Add new client</Lbl>
-  <Field label="Name"><Inp placeholder="Client name" value={clientForm.name} onChange={e=>setCF('name',e.target.value)}/></Field>
-  <Field label="Email"><Inp type="email" placeholder="client@example.com" value={clientForm.email} onChange={e=>setCF('email',e.target.value)}/></Field>
-  <Field label="Address"><Inp placeholder="Optional" value={clientForm.address} onChange={e=>setCF('address',e.target.value)}/></Field>
-  <Btn full color={clientFlash?T.lumpGreen:T.accent} onClick={handleAddClient} disabled={!clientForm.name}>{clientFlash?<><I n="check" sz={16} c="#08060c"/> Saved!</>:'Save Client'}</Btn>
-</Card>
-<Hr/>
-<Lbl>Trash</Lbl>
-<div style={{fontSize:12,color:T.textMuted,marginBottom:12,lineHeight:1.5}}>Anything you delete waits here for <strong style={{color:T.text}}>30 days</strong> before it's gone for good. Deleted by mistake? Restore it.</div>
-{trash.length===0?(
-  <div style={{fontSize:12,color:T.textFaint,fontStyle:'italic',marginBottom:8,padding:'14px 0',textAlign:'center'}}>Trash is empty — nothing deleted recently.</div>
-):(<>
-  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-    <div style={{fontSize:11,color:T.textMuted,fontWeight:700}}>{trash.length} item{trash.length!==1?'s':''} recoverable</div>
-    <button onClick={onEmptyTrash} style={{fontSize:11,fontWeight:700,color:T.danger,background:'none',border:`1px solid ${T.danger}44`,borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Empty trash</button>
+</SettingsSection>
+
+<SettingsSection title="Clients">
+  {clients.length>0&&(<div style={{marginBottom:18}}>{clients.map(c=>(<div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',marginBottom:8,borderRadius:12,background:T.surface,border:`1px solid ${T.border}`}}>
+    <div style={{width:32,height:32,borderRadius:'50%',background:T.border,border:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:T.accent,flexShrink:0}}>{(c.name||'?').charAt(0).toUpperCase()}</div>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{c.name}</div>{c.email&&<div style={{fontSize:12,color:T.textMuted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.email}</div>}</div>
+    <button onClick={()=>confClientId===c.id?onDelClient(c.id):setConfClientId(c.id)} style={{background:'none',border:'none',color:T.textFaint,cursor:'pointer',fontSize:13,padding:'4px 8px',borderRadius:6}}>{confClientId===c.id?'Sure?':'Remove'}</button>
+  </div>))}</div>)}
+  <div style={{display:'flex',gap:10}}>
+    <Inp placeholder="Client name" value={clientForm.name} onChange={e=>setCF('name',e.target.value)}/>
+    <Inp type="email" placeholder="email@client.com" value={clientForm.email} onChange={e=>setCF('email',e.target.value)}/>
+    <button onClick={handleAddClient} disabled={!clientForm.name} style={{height:40,padding:'0 20px',borderRadius:10,background:T.accent,border:'none',fontSize:13,fontWeight:700,color:T.bg,cursor:'pointer',whiteSpace:'nowrap',opacity:clientForm.name?1:.5,flexShrink:0}}>+ Add</button>
   </div>
-  <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:6}}>
-    {trash.slice().sort((a,b)=>new Date(b.deletedAt)-new Date(a.deletedAt)).map(x=>{
-      const days=Math.max(0,30-Math.floor((Date.now()-new Date(x.deletedAt).getTime())/86400000));
-      const it=x.item||{};
-      const label=x.kind==='entry'?((it.client||it.description||'Income entry')):x.kind==='receipt'?((it.description||'Receipt')):((it.invoiceNum?'Invoice '+it.invoiceNum:'')||it.client||'Invoice');
-      const amt=x.kind==='invoice'?(it.subtotal||0):(it.subtotal!==undefined?it.subtotal:(it.amount||0));
-      return(<div key={x.tid} style={{display:'flex',alignItems:'center',gap:10,background:'#f2f1ea',border:`1px solid ${T.border}`,borderRadius:10,padding:'9px 11px'}}>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{label}{amt?<span style={{color:T.textMuted,fontWeight:400}}> · {fmt(amt)}</span>:null}</div>
-          <div style={{fontSize:10,color:T.textFaint,marginTop:2,textTransform:'capitalize'}}>{x.kind} · {days} day{days!==1?'s':''} left</div>
-        </div>
-        <button onClick={()=>onRestoreTrash(x.tid)} style={{fontSize:11,fontWeight:700,color:T.lumpGreen,background:'none',border:`1px solid ${T.lumpGreen}44`,borderRadius:6,padding:'4px 10px',cursor:'pointer',flexShrink:0}}>Restore</button>
-        <button onClick={()=>onPurgeTrashItem(x.tid)} style={{fontSize:11,fontWeight:700,color:T.textFaint,background:'none',border:`1px solid ${T.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',flexShrink:0}}>✕</button>
-      </div>);
-    })}
+</SettingsSection>
+
+<SettingsSection title="Data">
+  <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:12}}>
+    <button onClick={onExportBackup} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,fontSize:13,fontWeight:500,color:T.text,cursor:'pointer'}}>Export backup</button>
+    <button onClick={()=>importFileRef.current&&importFileRef.current.click()} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,fontSize:13,fontWeight:500,color:T.text,cursor:'pointer'}}>Import / restore</button>
+    <input ref={importFileRef} type="file" accept="application/json" style={{display:'none'}} onChange={e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)onImportBackup(f);}}/>
   </div>
-</>)}
-<Hr/>
-<Lbl>Clear data</Lbl>
-<div style={{fontSize:12,color:T.textMuted,marginBottom:12,lineHeight:1.5}}>Each button asks first, then moves everything to <strong style={{color:T.text}}>Trash</strong> — recoverable for 30 days.</div>
-<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-  <Btn small outline color={T.danger} onClick={onClearEntries}>Clear Entries</Btn>
-  <Btn small outline color={T.danger} onClick={onClearReceipts}>Clear Receipts</Btn>
-  <Btn small outline color={T.danger} onClick={onClearInvoices}>Clear Invoices</Btn>
+  <ImportCard onImportOld={onImportOld}/>
+  <div style={{marginTop:8}}>
+    <Lbl>Danger Zone</Lbl>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      <button onClick={onClearEntries} style={{height:36,padding:'0 16px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,cursor:'pointer'}}>Clear entries</button>
+      <button onClick={onClearReceipts} style={{height:36,padding:'0 16px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,cursor:'pointer'}}>Clear receipts</button>
+      <button onClick={onClearInvoices} style={{height:36,padding:'0 16px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,cursor:'pointer'}}>Clear invoices</button>
+    </div>
+  </div>
+</SettingsSection>
+
 </div>
 </Page>);}
 
@@ -2226,7 +2201,7 @@ const[clients,setClients]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
-const[settings,setSettings]=useState({name:'',business:'',email:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07});
+const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.'});
 const[syncStatus,setSyncStatus]=useState('loading');
 const[loaded,setLoaded]=useState(false);
 const[booted,setBooted]=useState(false);
@@ -2440,6 +2415,8 @@ const importOld=(data,allTime)=>{
   }
   return{entries:ne.length,receipts:nr.length,invoices:ni.length,clients:nc.length,settings:gotSettings};
 };
+const exportBackup=()=>{const payload={entries,receipts,invoices,clients,settings,exportedAt:new Date().toISOString()};const a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(payload,null,2));a.download='honey-backup-'+today()+'.json';a.click();};
+const importBackup=file=>{const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);if(!d||typeof d!=='object')throw new Error('bad file');if(!window.confirm('Restore from this backup? This replaces all current entries, receipts, invoices and clients in the app.'))return;if(Array.isArray(d.entries))setEntries(d.entries);if(Array.isArray(d.receipts))setReceipts(d.receipts);if(Array.isArray(d.invoices))setInvoices(d.invoices);if(Array.isArray(d.clients))setClients(d.clients);if(d.settings)setSettings(s=>({...s,...d.settings}));}catch(e){window.alert('Could not read that backup file.');}};reader.readAsText(file);};
 const clearEntries=()=>{if(window.confirm('Move ALL income entries to Trash? You can restore them for 30 days.')){toTrash('entry',entries);setEntries([]);}};
 const clearReceipts=()=>{if(window.confirm('Move ALL receipts to Trash? You can restore them for 30 days.')){toTrash('receipt',receipts);setReceipts([]);}};
 const clearInvoices=()=>{if(window.confirm('Move ALL invoice records to Trash? You can restore them for 30 days.')){toTrash('invoice',invoices);setInvoices([]);}};
@@ -2460,7 +2437,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} onSync={syncFromSheets}/>}
-  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} trash={trash} onRestoreTrash={restoreTrash} onPurgeTrashItem={purgeTrashItem} onEmptyTrash={emptyTrash}/>}
+  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup}/>}
   </div>
   </div>
   {ingestMsg&&<div style={{position:'fixed',bottom:84,left:'50%',transform:'translateX(-50%)',background:T.text,color:T.bg,padding:'10px 16px',borderRadius:12,fontSize:13,fontWeight:700,zIndex:300,maxWidth:'88%',textAlign:'center',boxShadow:'0 6px 20px rgba(0,0,0,.22)'}}>{ingestMsg}</div>}
