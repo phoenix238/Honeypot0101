@@ -1,7 +1,9 @@
-# Honeypot0101 — Honey (Flow redesign)
+# Honeypot0101 — Honey
 
 A freelance finance tracker: log work, watch your take-home + tax pot, raise invoices,
-snap receipts, and optionally sync to Google Sheets. Single-file React app.
+snap receipts, browse a live spreadsheet view, and optionally sync to Google Sheets.
+Single-file React app, dark theme, responsive from phone to desktop (sidebar nav on
+wide screens, bottom dock on mobile).
 
 **Live:** https://phoenix238.github.io/Honeypot0101/
 
