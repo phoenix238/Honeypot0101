@@ -122,7 +122,6 @@ const Sheets={
   async createInvoice(inv,settings){if(!this._url)return null;try{const slim={invoiceNum:inv.invoiceNum,client:inv.client,clientEmail:inv.clientEmail||'',clientAddress:inv.clientAddress||'',dueDate:inv.dueDate||'',notes:inv.notes||'',grandTotal:inv.grandTotal,incomeTotal:inv.incomeTotal||0,reimbTotal:inv.reimbTotal||0,payRef:settings.payRef||'',invoicePeriod:inv.invoicePeriod||'',entries:(inv.selEntries||[]).map(e=>({date:e.date,client:e.client||'',description:e.description||'',subtotal:e.subtotal,hours:e.hours||0,rate:e.rate||0,type:e.type})),reimbs:(inv.selReimbs||[]).map(r=>({date:r.date,description:r.description||'',amount:r.amount,driveUrl:r.driveUrl||''}))};const payload={invoice:slim,settings:{name:settings.name||'',business:settings.business||'',email:settings.email||'',payRef:settings.payRef||''}};const encoded=encodeURIComponent(JSON.stringify(payload));if(encoded.length>7000)return{err:'Invoice data too large for URL.'};const d=await this._jsonp(this._url+'?action=createInvoice&data='+encoded,30000);if(d?.url)return{url:d.url};return{err:d?.error||'No URL returned'};}catch(e){return{err:e.message||'Failed'};}},
   async uploadReceipt(receipt){if(!this._url||!receipt.imageData)return null;try{const r=await fetch(this._url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'uploadReceipt',receipt:{id:receipt.id,description:receipt.description||'Receipt',date:receipt.date||'',imageData:receipt.imageData,imageName:receipt.imageName||'receipt.jpg',category:receipt.category||'business'}})});const d=await r.json();return d.driveUrl||null;}catch{return null;}},
   async scanGmailReceipts(){if(!this._url)return null;try{return await this._jsonp(this._url+'?action=scanReceipts',35000);}catch{return null;}},
-  async scanFolders(seen){if(!this._url)return null;try{return await this._jsonp(this._url+'?action=scanFolders'+(seen?'&seen='+encodeURIComponent(seen):''),60000);}catch(e){return{error:e.message||'failed'};}},
   async labelProcessed(ids){if(!this._url||!ids||!ids.length)return;try{await this._jsonp(this._url+'?action=labelProcessed&ids='+ids.join(','),15000);}catch{}},
   async deleteReceiptFiles(threadId,driveFileId){if(!this._url)return;try{return await this._jsonp(this._url+'?action=deleteReceiptFiles&threadId='+encodeURIComponent(threadId||'')+'&driveFileId='+encodeURIComponent(driveFileId||''),15000);}catch{return null;}},
   async moveToFolder(fileId,category){if(!this._url||!fileId)return;try{return await this._jsonp(this._url+'?action=moveToFolder&fileId='+encodeURIComponent(fileId)+'&category='+encodeURIComponent(category),10000);}catch{return null;}},
@@ -230,7 +229,7 @@ return(
 </div>);}
 
 // ── HOME ─────────────────────────────────────────────────────────────────────
-function HomeView({entries,receipts,invoices=[],setView,syncStatus,lastSynced,onSync,onAlign,aligning,alignResult,sheetsUrl,settings={},oldDataAvailable}){
+function HomeView({entries,receipts,invoices=[],setView,syncStatus,lastSynced,onSync,sheetsUrl,settings={},oldDataAvailable}){
 const[showTaxGuide,setShowTaxGuide]=useState(false);
 const[homeMenu,setHomeMenu]=useState(false);
 const now=new Date();
@@ -2056,7 +2055,7 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 function SettingsRow({label,children}){return(<div style={{display:'grid',gridTemplateColumns:'176px 1fr',gap:16,alignItems:'flex-start',marginBottom:14}}><div style={{fontSize:13,color:T.textMuted,paddingTop:11}}>{label}</div>{children}</div>);}
 function SettingsSection({title,children}){return(<div style={{marginBottom:36}}><Lbl>{title}</Lbl><Hr/><div>{children}</div></div>);}
-function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onImportOld,onExportBackup,onImportBackup,onAlign,aligning=false,onImportBank}){
+function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onImportOld,onExportBackup,onImportBackup,onOpenSetup,onImportBank}){
 const set=(k,v)=>setSettings(s=>({...s,[k]:v}));
 const[showSetup,setShowSetup]=useState(!settings.sheetsUrl);
 const[copied,setCopied]=useState(false);
@@ -2161,15 +2160,11 @@ return(<Page>
   </div>
   {showCatchup&&(
     <div style={{marginBottom:28,padding:'16px 18px',borderRadius:14,background:T.bg,border:`1px solid ${T.border}`}}>
-      {settings.sheetsUrl&&settings.anthropicKey?(
-        <button onClick={onAlign} disabled={aligning} style={{width:'100%',height:44,borderRadius:12,background:aligning?T.border:T.drive+'18',border:`1px solid ${T.drive}44`,color:T.drive,fontWeight:700,fontSize:14,cursor:aligning?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:10,opacity:aligning?.7:1}}>
-          {aligning?<><Spinner/> Scanning Drive…</>:<><I n="drive" sz={16} c={T.drive}/> Align everything (Drive)</>}
-        </button>
-      ):(
-        <div style={{fontSize:11,color:T.textFaint,marginBottom:10,lineHeight:1.5}}>Connect Google Sheets + add an AI key to enable Drive scan.</div>
-      )}
+      <button onClick={onOpenSetup} style={{width:'100%',height:44,borderRadius:12,background:T.accent+'16',border:`1px solid ${T.accent}44`,color:T.accent,fontWeight:700,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:10}}>
+        <I n="upload" sz={16} c={T.accent}/> Guided setup — CSV, invoices &amp; receipts
+      </button>
       <button onClick={()=>bankFileRef.current&&bankFileRef.current.click()} style={{width:'100%',height:44,borderRadius:12,background:T.lumpGreen+'12',border:`1px solid ${T.lumpGreen}44`,color:T.lumpGreen,fontWeight:700,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-        <I n="sheets" sz={16} c={T.lumpGreen}/> Import bank statement (CSV)
+        <I n="sheets" sz={16} c={T.lumpGreen}/> Import bank statement (CSV) only
       </button>
       <input ref={bankFileRef} type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f&&onImportBank)onImportBank(f);}}/>
       <div style={{fontSize:11,color:T.textFaint,marginTop:10,lineHeight:1.5}}>Download a CSV from your bank's website. Credits are matched to unpaid invoices by amount — you approve each one before it saves.</div>
@@ -2256,9 +2251,7 @@ const[addType,setAddType]=useState('timed');
 const camGlobalRef=useRef();
 const[pendingFile,setPendingFile]=useState(null);
 const snapPhoto=()=>{if(camGlobalRef.current)camGlobalRef.current.click();};
-const[ingesting,setIngesting]=useState(false);
 const[ingestMsg,setIngestMsg]=useState('');
-const[ingestFound,setIngestFound]=useState(null);
 const[bankPending,setBankPending]=useState(null);
 const[entries,setEntries]=useState([]);
 const[receipts,setReceipts]=useState([]);
@@ -2276,8 +2269,6 @@ const pollTimer=useRef(null);
 const[lastSynced,setLastSynced]=useState(null);
 const isSaving=useRef(false);
 const sheetHydrated=useRef(false); // true once we've successfully READ the sheet — guards against empty-state overwrite
-const[aligning,setAligning]=useState(false);
-const[alignResult,setAlignResult]=useState(null); // {matched,uninvoiced,untagged,restored,balance,err,at}
 
 useEffect(()=>{
   (async()=>{
@@ -2379,57 +2370,16 @@ useEffect(()=>{
 },[booted]);
 const testConn=async()=>{Sheets.init(settings.sheetsUrl||'');return await Sheets.testDiag();};
 
-// ── Align everything: scan the Honey folders, AI-read new files, review, then write ──
-const runFolderAlign=async()=>{
-  if(ingesting)return;
-  if(!settings.sheetsUrl){setIngestMsg('Connect your Honey sheet in Settings first.');setTimeout(()=>setIngestMsg(''),4000);return;}
-  if(!settings.anthropicKey){setIngestMsg('Add your Anthropic key in Settings → AI Scan Key first.');setTimeout(()=>setIngestMsg(''),4500);return;}
-  setIngesting(true);setIngestFound(null);setIngestMsg('Scanning your Honey folders…');
-  Sheets.init(settings.sheetsUrl);
-  const seen=[];const files=[];
-  while(true){
-    let res=null;try{res=await Sheets.scanFolders(seen.join(','));}catch(e){}
-    if(!res||res.error){
-      if(files.length===0){setIngesting(false);setIngestMsg('Could not reach the script'+(res&&res.error?': '+res.error:'')+'.');setTimeout(()=>setIngestMsg(''),5000);return;}
-      break;
-    }
-    const batch=res.files||[];
-    if(!batch.length)break;
-    batch.forEach(b=>{files.push(b);seen.push(b.fileId);});
-    setIngestMsg('Found '+files.length+' file'+(files.length===1?'':'s')+'…');
-    if(batch.length<12||files.length>=200)break;
-  }
-  if(!files.length){setIngesting(false);setIngestMsg('No new files found — everything in your folders is already logged.');setTimeout(()=>setIngestMsg(''),5000);return;}
-  const cands=[];
-  for(let i=0;i<files.length;i++){
-    setIngestMsg('Reading '+(i+1)+' of '+files.length+'…');
-    const fl=files[i];const isPdf=fl.mimeType==='application/pdf';
-    let p=null;try{p=await aiScanImage(fl.imageData,isPdf,settings.anthropicKey);}catch(e){}
-    cands.push(p&&p.amount?{...fl,date:p.date,amount:p.amount,vendor:p.vendor,description:p.description||p.vendor,subcategory:p.subcategory,ok:true}:{...fl,ok:false});
-  }
-  const acceptedInBatch=[];
-  cands.forEach(c=>{
-    if(!(c.ok&&c.amount)){c.dup=false;return;}
-    let dup;
-    if(c.folder==='invoice')dup=invoices.some(iv=>Math.abs((iv.subtotal||0)-c.amount)<0.02&&datesClose(iv.date,c.date));
-    else dup=receipts.some(r=>r.category===c.folder&&Math.abs((r.amount||0)-c.amount)<0.02&&datesClose(r.date,c.date));
-    // Also dedup against other candidates already accepted in THIS scan — so duplicate image
-    // files of the same receipt collapse to a single row instead of one row per copy.
-    if(!dup)dup=acceptedInBatch.some(a=>a.folder===c.folder&&Math.abs((a.amount||0)-c.amount)<0.02&&datesClose(a.date,c.date)&&(a.description||a.vendor||'').toLowerCase().trim()===(c.description||c.vendor||'').toLowerCase().trim());
-    c.dup=dup;
-    if(!dup)acceptedInBatch.push(c);
-  });
-  setIngesting(false);setIngestMsg('');setIngestFound(cands);
-};
-const confirmIngest=()=>{
-  (ingestFound||[]).filter(c=>c.ok&&c.amount&&!c.dup).forEach(c=>{
-    if(c.folder==='invoice'){
-      addI({id:mkId(),invoiceNum:'IMP-'+mkId().slice(-5).toUpperCase(),date:(c.date?new Date(c.date+'T12:00:00').toISOString():new Date().toISOString()),client:c.vendor||'Client',clientEmail:'',subtotal:c.amount,incomeTotal:c.amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[],reimbIds:[],docUrl:c.driveUrl,status:'unpaid'});
-    }else{
-      addR({date:c.date||today(),description:c.description||c.vendor||'Receipt',amount:c.amount,category:c.folder,subcategory:c.folder==='business'?(c.subcategory||'other'):null,paidBy:'',owedBy:'',notes:'Imported by Align everything',status:'logged',driveUrl:c.driveUrl,imageName:c.name});
-    }
-  });
-  setIngestFound(null);
+// Duplicate check for a scanned document candidate ({folder:'invoice'|'business'|'reimbursable', amount, date, vendor/description}).
+// Checks stored invoices/receipts, plus candidates already accepted in the same batch so duplicate
+// image files of the same document collapse to a single row instead of one row per copy.
+const isDupDoc=(c,batch=[])=>{
+  if(!c.amount)return false;
+  let dup;
+  if(c.folder==='invoice')dup=invoices.some(iv=>Math.abs((iv.subtotal||0)-c.amount)<0.02&&datesClose(iv.date,c.date));
+  else dup=receipts.some(r=>r.category===c.folder&&Math.abs((r.amount||0)-c.amount)<0.02&&datesClose(r.date,c.date));
+  if(!dup)dup=batch.some(a=>a.folder===c.folder&&Math.abs((a.amount||0)-c.amount)<0.02&&datesClose(a.date,c.date)&&(a.description||a.vendor||'').toLowerCase().trim()===(c.description||c.vendor||'').toLowerCase().trim());
+  return dup;
 };
 
 // ── Bank statement CSV import ─────────────────────────────────────────────────
@@ -2574,36 +2524,18 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   <Sidebar view={view} setView={go} onSnap={snapPhoto} userName={settings.name}/>
   <div id="hn-main">
   <div style={{maxWidth:900,margin:'0 auto'}}>
-  {view==='home'&&<HomeView entries={entries} receipts={receipts} invoices={invoices} setView={go} syncStatus={syncStatus} lastSynced={lastSynced} onSync={syncFromSheets} onAlign={runFolderAlign} aligning={ingesting} alignResult={alignResult} sheetsUrl={settings.sheetsUrl} settings={settings} oldDataAvailable={oldDataAvailable}/>}
+  {view==='home'&&<HomeView entries={entries} receipts={receipts} invoices={invoices} setView={go} syncStatus={syncStatus} lastSynced={lastSynced} onSync={syncFromSheets} sheetsUrl={settings.sheetsUrl} settings={settings} oldDataAvailable={oldDataAvailable}/>}
   {view==='add'&&<AddView onAdd={addE} settings={settings} initialType={addType} back={()=>setView('home')} onAddInvoice={addI} invoiceCounter={settings.invoiceCounter||1}/>}
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
-  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onAlign={runFolderAlign} aligning={ingesting} onImportBank={handleBankCSV}/>}
+  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
   </div>
   </div>
   {ingestMsg&&<div style={{position:'fixed',bottom:84,left:'50%',transform:'translateX(-50%)',background:T.text,color:T.bg,padding:'10px 16px',borderRadius:12,fontSize:13,fontWeight:700,zIndex:300,maxWidth:'88%',textAlign:'center',boxShadow:'0 6px 20px rgba(0,0,0,.22)'}}>{ingestMsg}</div>}
-  {ingestFound&&(()=>{const neu=ingestFound.filter(c=>c.ok&&c.amount&&!c.dup);const dups=ingestFound.filter(c=>c.ok&&c.amount&&c.dup);const bad=ingestFound.filter(c=>!(c.ok&&c.amount));const tot=neu.reduce((a,c)=>a+(c.amount||0),0);return(
-  <div onClick={()=>setIngestFound(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:250,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderTopLeftRadius:18,borderTopRightRadius:18,width:'100%',maxWidth:480,maxHeight:'82vh',overflowY:'auto',padding:'18px 18px 26px',border:`1px solid ${T.border}`,borderBottom:'none'}}>
-      <div style={{fontFamily:'Bricolage Grotesque,serif',fontSize:18,fontWeight:800,marginBottom:3}}>Found in your folders</div>
-      <div style={{fontSize:13,color:T.textMuted,marginBottom:14}}>{neu.length} new · {fmt(tot)}{dups.length?' · '+dups.length+' already in Honey':''}{bad.length?' · '+bad.length+" couldn't read":''}</div>
-      {ingestFound.map((c,i)=>{const isNew=c.ok&&c.amount&&!c.dup;const isDup=c.ok&&c.amount&&c.dup;const bg=isNew?T.bg:isDup?T.lumpGreen+'12':T.danger+'10';const bd=isNew?T.border:isDup?T.lumpGreen+'44':T.danger+'44';return(<div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 11px',marginBottom:7,borderRadius:10,background:bg,border:`1px solid ${bd}`,opacity:isDup?.7:1}}>
-        <div style={{minWidth:0}}>
-          <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.ok&&c.amount?(c.vendor||c.description||c.name):c.name}</div>
-          <div style={{fontSize:11,color:T.textMuted}}>{c.folder==='invoice'?'Invoice':c.folder==='reimbursable'?'Reimbursable':'Business'}{c.date?' · '+c.date:''}{isDup?' · already logged':!isNew?' · couldn’t read — add manually':''}</div>
-        </div>
-        <div style={{fontFamily:"'Geist Mono',monospace",fontSize:14,fontWeight:700,flexShrink:0,color:isNew?T.text:isDup?T.lumpGreen:T.danger}}>{c.ok&&c.amount?(isDup?'✓ ':'')+fmt(c.amount):'—'}</div>
-      </div>);})}
-      <div style={{display:'flex',gap:10,marginTop:10}}>
-        <button onClick={()=>setIngestFound(null)} style={{flex:1,background:'none',border:`1px solid ${T.border}`,borderRadius:12,padding:'12px',fontWeight:700,color:T.textMuted,fontSize:14}}>Cancel</button>
-        <button onClick={confirmIngest} disabled={neu.length===0} style={{flex:2,background:neu.length?T.accent:T.border,color:neu.length?T.bg:T.textMuted,border:'none',borderRadius:12,padding:'12px',fontWeight:700,fontSize:14,opacity:neu.length?1:.6}}>{neu.length?'Add '+neu.length+' to Honey':'Nothing new to add'}</button>
-      </div>
-    </div>
-  </div>);})()}
-  {bankPending&&(()=>{
+  {bankPending&&view!=='setup'&&(()=>{
     const toggle=i=>setBankPending(p=>p.map((r,j)=>j===i?{...r,accept:!r.accept}:r));
     const toAdd=bankPending.filter(r=>!r.dup&&r.accept);
     const tot=toAdd.reduce((a,r)=>a+r.amount,0);
