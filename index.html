@@ -76,20 +76,23 @@ const datesClose=(a,b)=>{if(!a||!b)return false;const da=new Date(String(a).slic
 const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
 const mkId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 const PROXY_URL='https://honey-proxy.phoenix-2bc.workers.dev';
-const aiScanImage=async(dataUrl,isPdf)=>{
+const aiScanImage=async(dataUrl,isPdf,{model='claude-haiku-4-5-20251001',kind='receipt'}={})=>{
   const base64=dataUrl.split(',')[1];
   const mediaType=isPdf?'application/pdf':(dataUrl.match(/data:([^;]+);/)?.[1]||'image/jpeg');
   const catList=EXPENSE_CATS.map(c=>c[0]).join('|');
-  const prompt='You are a receipt and invoice scanner. Extract these fields and respond with ONLY a valid JSON object, no other text, no markdown fences:\n{"vendor":"shop or client name","amount":number,"date":"YYYY-MM-DD","subcategory":"one of: '+catList+'","description":"short summary"}\n\nIf any field is unclear, use null. Date must be YYYY-MM-DD. Amount is the total in pounds as a number only.';
+  const prompt=kind==='invoice'
+    ?'You are an invoice scanner. Extract these fields and respond with ONLY a valid JSON object, no other text, no markdown fences:\n{"client":"the client billed (or, if this invoice was issued TO the reader, who issued it)","amount":number,"date":"YYYY-MM-DD","invoiceNum":"invoice number or null","description":"short summary of what was invoiced"}\n\nIf any field is unclear, use null. Date must be YYYY-MM-DD (the invoice date, not the due date). Amount is the grand total in pounds as a number only.'
+    :'You are a receipt and invoice scanner. Extract these fields and respond with ONLY a valid JSON object, no other text, no markdown fences:\n{"vendor":"shop or client name","amount":number,"date":"YYYY-MM-DD","subcategory":"one of: '+catList+'","description":"short summary"}\n\nIf any field is unclear, use null. Date must be YYYY-MM-DD. Amount is the total in pounds as a number only.';
   const content=isPdf
     ?[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:prompt}]
     :[{type:"image",source:{type:"base64",media_type:mediaType,data:base64}},{type:"text",text:prompt}];
-  const res=await fetch(PROXY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content}]})});
+  const res=await fetch(PROXY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model,max_tokens:500,messages:[{role:"user",content}]})});
   const data=await res.json();
   if(data.error)throw new Error(data.error.message||'API error');
   const txt=(data.content||[]).map(b=>b.text||'').join('').trim().replace(/```json|```/g,'').trim();
   return JSON.parse(txt);
 };
+const SCAN_MODEL='claude-sonnet-5'; // used by the guided setup importer for higher-accuracy document reads
 const LS={get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
 
 const Sheets={
