@@ -201,6 +201,24 @@ const Sel=({children,style,...p})=><select style={{...iBase,appearance:'none',..
 const Hr=()=><div style={{height:1,background:T.border,margin:'13px 0'}}/>;
 const Spinner=()=><div style={{width:14,height:14,border:`2px solid ${T.bg}40`,borderTopColor:T.bg,borderRadius:'50%',animation:'spin .8s linear infinite'}}/>;
 const EntryTag=({type})=>{const m={timed:[T.timed,'Timed'],manual:[T.manual,'Hours'],lump:[T.lumpGreen,'Lump Sum']};const[c,l]=m[type]||[T.textMuted,type];return <span style={{background:c+'22',color:c,border:`1px solid ${c}44`,borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700}}>{l}</span>;};
+// One row of a bank-statement review list — shared by the Settings import sheet and the guided setup
+function BankRow({row,onToggle}){
+  const isNew=!row.dup&&row.accept,isDup=row.dup,isSkipped=!row.dup&&!row.accept;
+  const bg=isDup?T.lumpGreen+'12':isSkipped?T.surface:T.bg;
+  const bd=isDup?T.lumpGreen+'44':T.border;
+  return(
+  <div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',marginBottom:7,borderRadius:10,background:bg,border:`1px solid ${bd}`,opacity:isDup?.7:1}}>
+    {!isDup&&<div onClick={onToggle} style={{width:22,height:22,borderRadius:7,background:row.accept?T.lumpGreen:'transparent',border:`2px solid ${row.accept?T.lumpGreen:T.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer'}}>
+      {row.accept&&<I n="check" sz={13} c={T.bg}/>}
+    </div>}
+    {isDup&&<div style={{width:22,height:22,borderRadius:7,background:T.lumpGreen+'30',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><I n="check" sz={13} c={T.lumpGreen}/></div>}
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:T.text}}>{row.description||'Payment'}</div>
+      <div style={{fontSize:11,color:T.textMuted}}>{row.date}{row.inv?' · matches invoice '+row.inv.invoiceNum:isDup?' · already logged':' · new income entry'}</div>
+    </div>
+    <div style={{fontFamily:"'Geist Mono',monospace",fontSize:14,fontWeight:700,flexShrink:0,color:isDup?T.lumpGreen:isNew?T.text:T.textFaint}}>{isDup?'✓ ':''}{fmt(row.amount)}</div>
+  </div>);
+}
 const CatTag=({cat})=>{const[c,l]=cat==='business'?[T.business,'Business']:[T.reimb,'Reimbursable'];return <span style={{background:c+'20',color:c,border:`1px solid ${c}44`,borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700}}>{l}</span>;};
 const StatusTag=({status})=>{const c=status==='Paid'?T.paid:T.pending;return <span style={{background:c+'22',color:c,border:`1px solid ${c}44`,borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700}}>{status||'Pending'}</span>;};
 function SyncPill({status}){const map={loading:{c:T.textMuted,label:'Loading…'},synced:{c:T.lumpGreen,label:'Synced'},saving:{c:T.accent,label:'Syncing…'},local:{c:T.manual,label:'Local only'},error:{c:T.danger,label:'Sync error'}};const{c,label}=map[status]||{c:T.textMuted,label:''};return(<div style={{display:'flex',alignItems:'center',gap:5,fontSize:10,color:c,fontWeight:700,letterSpacing:.8}}><div style={{width:6,height:6,borderRadius:'50%',background:c,flexShrink:0,...(status==='saving'?{animation:'spin 1s linear infinite'}:{})}}/>{label}</div>);}
@@ -282,6 +300,23 @@ return(<Page>
     <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>📦 Moving from Freelance Tracker?</div>
     <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,marginBottom:10}}>Your old app's data was found in this browser. Bring this tax year's invoices, income, receipts and settings across — the old app is never touched.</div>
     <Btn full small onClick={()=>setView('settings')}>Transfer my data →</Btn>
+  </Card>
+)}
+{!settings.setupDone&&(settings.setupStep||0)>0&&(
+  <Card onClick={()=>setView('setup')} style={{marginBottom:10,background:T.accent+'0d',border:`1.5px solid ${T.accent}55`,cursor:'pointer'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div>
+        <div style={{fontWeight:700,fontSize:14}}>Resume guided setup</div>
+        <div style={{fontSize:12,color:T.textMuted}}>Step {(settings.setupStep||0)+1} of 5 — pick up where you left off</div>
+      </div>
+      <span style={{color:T.accent,fontWeight:700}}>→</span>
+    </div>
+  </Card>
+)}
+{settings.setupDone&&entries.length===0&&invoices.length===0&&receipts.length===0&&!oldDataAvailable&&(
+  <Card onClick={()=>setView('setup')} style={{marginBottom:10,border:`1px solid ${T.border}`,cursor:'pointer'}}>
+    <div style={{fontWeight:700,fontSize:14,marginBottom:3}}>Set up Honey →</div>
+    <div style={{fontSize:12,color:T.textMuted,lineHeight:1.5}}>Bring in a bank CSV, your invoices and receipts — guided, one step at a time.</div>
   </Card>
 )}
 <Card style={{marginBottom:10,background:`linear-gradient(135deg,${T.surface} 0%,${T.bg} 100%)`,border:`1px solid ${T.border}`}}>
@@ -2187,6 +2222,299 @@ return(<Page>
 </div>
 </Page>);}
 
+// ── GUIDED SETUP ─────────────────────────────────────────────────────────────
+// One clean way in for a new (or re-syncing) user: bank CSV → invoices → receipts → check it over.
+const SETUP_STEPS=['Welcome','Bank statement','Invoices','Receipts','Check it over'];
+const isoDate=d=>d?new Date(d+'T12:00:00').toISOString():new Date().toISOString();
+function SetupView({entries,receipts,invoices,settings,setSettings,onImportBank,bankPending,setBankPending,onConfirmBank,isDupDoc,addE,updE,onToggleStatus,onToggleVoid,addR,updR,delR,addI,updI,go}){
+const step=Math.min(Math.max(settings.setupStep||0,0),4);
+const setStep=n=>setSettings(s=>({...s,setupStep:n}));
+const finish=()=>{setSettings(s=>({...s,setupDone:true,setupStep:0}));go('home');};
+const csvRef=useRef();const invRef=useRef();const rcRef=useRef();
+const[bankSummary,setBankSummary]=useState(null);
+const[scanProg,setScanProg]=useState(null); // {done,total,name} while files are being read
+const[invRows,setInvRows]=useState([]);
+const[rcRows,setRcRows]=useState([]);
+const[invMsg,setInvMsg]=useState('');const[rcMsg,setRcMsg]=useState('');
+const[openGrp,setOpenGrp]=useState('income');
+const updInvRow=(id,patch)=>setInvRows(p=>p.map(r=>r.id===id?{...r,...patch}:r));
+const updRcRow=(id,patch)=>setRcRows(p=>p.map(r=>r.id===id?{...r,...patch}:r));
+
+const readFile=async file=>{
+  const isPdf=file.type==='application/pdf';
+  let d=isPdf?await readAsDataUrl(file):await compressImg(file);
+  if(!d)d=await readAsDataUrl(file);
+  return{d,isPdf};
+};
+const scanFiles=async(files,kind)=>{
+  const list=[...files];if(!list.length)return;
+  const setter=kind==='invoice'?setInvRows:setRcRows;
+  let failed=0;
+  for(let i=0;i<list.length;i++){
+    const file=list[i];
+    setScanProg({done:i,total:list.length,name:file.name});
+    const{d,isPdf}=await readFile(file);
+    let p=null;
+    if(d&&settings.anthropicKey){try{p=await aiScanImage(d,isPdf,{model:SCAN_MODEL,kind});}catch(e){}}
+    if(!p)failed++;
+    setter(prev=>[...prev,kind==='invoice'
+      ?{id:mkId(),client:p?.client||'',amount:p?.amount!=null?String(p.amount):'',date:p?.date||today(),invoiceNum:p?.invoiceNum||'',description:p?.description||file.name,accept:true,scanned:!!p,imageName:file.name}
+      :{id:mkId(),description:p?.description||p?.vendor||file.name,amount:p?.amount!=null?String(p.amount):'',date:p?.date||today(),category:'business',subcategory:p?.subcategory||'other',accept:true,scanned:!!p,imageData:isPdf?null:d,imageName:file.name}]);
+  }
+  setScanProg(null);
+  const msg=failed?(settings.anthropicKey?failed+" couldn't be read — fill those rows in by hand.":'No AI key set (Settings → AI Scan Key) — fill the rows in by hand.'):'';
+  (kind==='invoice'?setInvMsg:setRcMsg)(msg);
+};
+const addBlankRow=kind=>{
+  if(kind==='invoice')setInvRows(p=>[...p,{id:mkId(),client:'',amount:'',date:today(),invoiceNum:'',description:'',accept:true,scanned:false,imageName:''}]);
+  else setRcRows(p=>[...p,{id:mkId(),description:'',amount:'',date:today(),category:'business',subcategory:'other',accept:true,scanned:false,imageData:null,imageName:''}]);
+};
+
+// Step 2 — bank
+const bankToggle=i=>setBankPending(p=>p.map((r,j)=>j===i?{...r,accept:!r.accept}:r));
+const bankConfirm=()=>{
+  const toAdd=(bankPending||[]).filter(r=>!r.dup&&r.accept);
+  setBankSummary({added:toAdd.filter(r=>!r.inv).length,matched:toAdd.filter(r=>r.inv).length,total:toAdd.reduce((a,r)=>a+r.amount,0)});
+  onConfirmBank(toAdd);
+};
+
+// Step 3 — invoices: a scanned invoice whose amount matches a Paid entry not yet on an invoice
+// (usually a payment just imported from the bank CSV) is treated as paid and linked to that entry.
+const payMatchFor=(amount,used)=>entries.find(e=>!e.invoiceId&&e.status==='Paid'&&!used.has(e.id)&&Math.abs((e.subtotal||0)-amount)<0.02);
+const confirmInvoices=()=>{
+  const batch=[];const used=new Set();
+  invRows.forEach(r=>{
+    const amount=parseFloat(r.amount)||0;
+    if(!r.accept||amount<=0)return;
+    const cand={folder:'invoice',amount,date:r.date,description:r.description,vendor:r.client};
+    if(isDupDoc(cand,batch))return;
+    batch.push(cand);
+    const iid=mkId();
+    const num=r.invoiceNum||('IMP-'+mkId().slice(-5).toUpperCase());
+    const match=payMatchFor(amount,used);
+    if(match){
+      used.add(match.id);
+      updE(match.id,{invoiceId:iid,client:r.client||match.client});
+      addI({id:iid,invoiceNum:num,date:isoDate(r.date),client:r.client||match.client||'Client',clientEmail:'',subtotal:amount,incomeTotal:amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[match.id],reimbIds:[],status:'paid',paidDate:match.date});
+    }else{
+      const eid=mkId();
+      addE({id:eid,type:'lump',date:r.date||today(),client:r.client||'Client',description:r.description||('Invoice '+num),rate:null,hours:null,subtotal:amount,tax:amount*TAX,net:amount*(1-TAX),status:'Pending',invoiceId:iid});
+      addI({id:iid,invoiceNum:num,date:isoDate(r.date),client:r.client||'Client',clientEmail:'',subtotal:amount,incomeTotal:amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[eid],reimbIds:[],status:'unpaid'});
+    }
+  });
+  setInvRows([]);setInvMsg('');setStep(3);
+};
+
+// Step 4 — receipts
+const confirmReceipts=()=>{
+  const batch=[];
+  rcRows.forEach(r=>{
+    const amount=parseFloat(r.amount)||0;
+    if(!r.accept||amount<=0)return;
+    const cand={folder:r.category,amount,date:r.date,description:r.description};
+    if(isDupDoc(cand,batch))return;
+    batch.push(cand);
+    addR({date:r.date||today(),description:r.description||'Receipt',amount,category:r.category,subcategory:r.category==='business'?(r.subcategory||'other'):null,paidBy:'',owedBy:'',notes:'Imported by Guided setup',status:r.category==='reimbursable'?'pending':'logged',imageData:r.imageData||null,imageName:r.imageName||''});
+  });
+  setRcRows([]);setRcMsg('');setStep(4);
+};
+
+// Step 5 — the same figures Home shows, so what's confirmed here is what Home will say
+const activeE=entries.filter(e=>e.status!=='Void');
+const allG=activeE.reduce((a,e)=>a+(e.subtotal||0),0);
+const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void').reduce((a,r)=>a+(r.amount||0),0);
+const taxableProfit=Math.max(0,allG-bizCosts);
+const taxReserve=taxableProfit*TAX;
+const trueNet=taxableProfit-taxReserve;
+const dupEntryIds=new Set();
+activeE.forEach((e,i)=>{for(let j=i+1;j<activeE.length;j++){const f=activeE[j];if(Math.abs((e.subtotal||0)-(f.subtotal||0))<0.02&&datesClose(e.date,f.date)&&(e.client||'').toLowerCase().trim()===(f.client||'').toLowerCase().trim()){dupEntryIds.add(e.id);dupEntryIds.add(f.id);}}});
+const liveR=receipts.filter(r=>r.status!=='void');
+const dupReceiptIds=new Set();
+liveR.forEach((e,i)=>{for(let j=i+1;j<liveR.length;j++){const f=liveR[j];if(Math.abs((e.amount||0)-(f.amount||0))<0.02&&datesClose(e.date,f.date)&&(e.description||'').toLowerCase().trim()===(f.description||'').toLowerCase().trim()){dupReceiptIds.add(e.id);dupReceiptIds.add(f.id);}}});
+
+const stepTitle=['Welcome to Honey','Your bank statement','Your invoices','Receipts & reimbursements','Check it over'][step];
+const rowStyle={display:'flex',alignItems:'center',gap:8,padding:'9px 11px',marginBottom:7,borderRadius:10,background:T.bg,border:`1px solid ${T.border}`,flexWrap:'wrap'};
+const miniInp={...iBase,padding:'7px 9px',fontSize:13,width:'auto'};
+const flag=(txt,c)=><span style={{background:c+'18',color:c,border:`1px solid ${c}44`,borderRadius:6,padding:'2px 7px',fontSize:10,fontWeight:700,whiteSpace:'nowrap'}}>{txt}</span>;
+const secBtn={background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'5px 10px',fontSize:11,fontWeight:700,color:T.textMuted,cursor:'pointer'};
+
+return(<Page>
+<div style={{maxWidth:560,margin:'0 auto'}}>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+    <div style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:2.5,textTransform:'uppercase'}}>Guided setup</div>
+    <button onClick={finish} style={{background:'none',border:'none',color:T.textFaint,fontSize:11,fontWeight:700,cursor:'pointer'}}>Exit</button>
+  </div>
+  <div style={{fontFamily:'Bricolage Grotesque,serif',fontSize:24,fontWeight:800,marginBottom:8}}>{stepTitle}</div>
+  <div style={{display:'flex',gap:6,marginBottom:18}}>
+    {SETUP_STEPS.map((s,i)=><div key={i} title={s} style={{flex:1,height:4,borderRadius:2,background:i<=step?T.accent:T.border,transition:'background .2s'}}/>)}
+  </div>
+
+  {step===0&&(<div>
+    <Card style={{marginBottom:12}}>
+      <div style={{fontSize:14,lineHeight:1.7,color:T.text}}>Let's lay your money out so the numbers you see are ones you trust. Three things to bring — all optional, all skippable:</div>
+      <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:9,fontSize:13,color:T.textMuted,lineHeight:1.5}}>
+        <div><b style={{color:T.lumpGreen}}>1 · Bank statement CSV</b> — payments in become income, and mark matching invoices paid.</div>
+        <div><b style={{color:T.accent}}>2 · Invoices</b> — photos or PDFs. Honey reads them and you check each one before it saves.</div>
+        <div><b style={{color:T.business}}>3 · Receipts</b> — business costs and things clients owe you back.</div>
+      </div>
+    </Card>
+    {(entries.length>0||receipts.length>0||invoices.length>0)&&(
+      <div style={{fontSize:12,color:T.textMuted,marginBottom:12,lineHeight:1.6}}>You already have {entries.length} entries, {invoices.length} invoices and {receipts.length} receipts — anything you add here is checked against them, so nothing doubles up.</div>
+    )}
+    <Btn full onClick={()=>setStep(1)}>Start →</Btn>
+    <button onClick={finish} style={{width:'100%',background:'none',border:'none',color:T.textFaint,fontSize:12,fontWeight:700,padding:'14px 0',cursor:'pointer'}}>Skip setup — I'll add things myself</button>
+  </div>)}
+
+  {step===1&&(<div>
+    <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:14}}>Download a CSV from your bank's website. Credits become income; anything matching an unpaid invoice marks it paid; duplicates are skipped. You approve every line first.</div>
+    {!bankPending&&!bankSummary&&(
+      <Btn full color={T.lumpGreen} onClick={()=>csvRef.current&&csvRef.current.click()}><I n="sheets" sz={16} c={T.bg}/> Choose bank CSV</Btn>
+    )}
+    <input ref={csvRef} type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f){setBankSummary(null);onImportBank(f);}}}/>
+    {bankPending&&(<div style={{marginTop:14}}>
+      <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>{bankPending.filter(r=>!r.dup&&r.accept).length} selected · {bankPending.filter(r=>r.dup).length} already in Honey</div>
+      {bankPending.map((row,i)=><BankRow key={i} row={row} onToggle={()=>bankToggle(i)}/>)}
+      <div style={{display:'flex',gap:10,marginTop:10}}>
+        <Btn outline color={T.textMuted} onClick={()=>setBankPending(null)} style={{flex:1}}>Cancel</Btn>
+        <Btn color={T.lumpGreen} onClick={bankConfirm} disabled={!bankPending.some(r=>!r.dup&&r.accept)} style={{flex:2}}>Add to Honey</Btn>
+      </div>
+    </div>)}
+    {bankSummary&&(<Card style={{marginTop:14,border:`1.5px solid ${T.lumpGreen}55`,background:T.lumpGreen+'0d'}}>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>✓ Statement imported</div>
+      <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>{bankSummary.matched} invoice{bankSummary.matched===1?'':'s'} marked paid · {bankSummary.added} new income entr{bankSummary.added===1?'y':'ies'} · {fmt(bankSummary.total)} total</div>
+      <button onClick={()=>{setBankSummary(null);csvRef.current&&csvRef.current.click();}} style={{...secBtn,marginTop:10}}>Import another statement</button>
+    </Card>)}
+  </div>)}
+
+  {step===2&&(<div>
+    <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:14}}>Upload photos or PDFs of your invoices. Honey reads each one — check the details, fix anything, then save. Amounts matching a payment from your statement are marked paid automatically.</div>
+    <Btn full onClick={()=>invRef.current&&invRef.current.click()} disabled={!!scanProg}><I n="upload" sz={16} c={T.bg}/> {scanProg?`Reading ${scanProg.done+1} of ${scanProg.total}…`:'Upload invoices'}</Btn>
+    <input ref={invRef} type="file" accept="image/*,.pdf,application/pdf" multiple style={{display:'none'}} onChange={e=>{const fs=e.target.files;if(fs&&fs.length)scanFiles(fs,'invoice');e.target.value='';}}/>
+    {invMsg&&<div style={{fontSize:12,color:T.pending,marginTop:10,lineHeight:1.5}}>{invMsg}</div>}
+    {invRows.length>0&&(<div style={{marginTop:14}}>
+      {(()=>{const batch=[];return invRows.map(r=>{
+        const amount=parseFloat(r.amount)||0;
+        const cand={folder:'invoice',amount,date:r.date,description:r.description,vendor:r.client};
+        const dup=amount>0&&isDupDoc(cand,batch);
+        if(!dup&&r.accept&&amount>0)batch.push(cand);
+        const paid=!dup&&amount>0&&!!payMatchFor(amount,new Set());
+        return(
+        <div key={r.id} style={{...rowStyle,opacity:r.accept?1:.5,borderColor:dup?T.lumpGreen+'44':T.border}}>
+          <div onClick={()=>updInvRow(r.id,{accept:!r.accept})} style={{width:22,height:22,borderRadius:7,background:r.accept?T.accent:'transparent',border:`2px solid ${r.accept?T.accent:T.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer'}}>{r.accept&&<I n="check" sz={13} c={T.bg}/>}</div>
+          <Inp value={r.client} placeholder="Client" onChange={e=>updInvRow(r.id,{client:e.target.value})} style={{...miniInp,flex:'1 1 110px'}}/>
+          <Inp value={r.amount} placeholder="£" type="number" inputMode="decimal" onChange={e=>updInvRow(r.id,{amount:e.target.value})} style={{...miniInp,width:90}}/>
+          <Inp value={r.date} type="date" onChange={e=>updInvRow(r.id,{date:e.target.value})} style={{...miniInp,width:130}}/>
+          <Inp value={r.invoiceNum} placeholder="Invoice #" onChange={e=>updInvRow(r.id,{invoiceNum:e.target.value})} style={{...miniInp,width:100}}/>
+          <div style={{display:'flex',gap:5,alignItems:'center',flexBasis:'100%',paddingLeft:30}}>
+            <span style={{fontSize:10,color:T.textFaint,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{r.imageName}{r.scanned?'':' · not read — check by hand'}</span>
+            {dup&&flag('already in Honey','#5BBF8A')}
+            {!dup&&paid&&flag('matches a payment — will save as paid',T.lumpGreen)}
+            {!dup&&!paid&&amount>0&&flag('unpaid',T.pending)}
+          </div>
+        </div>);});})()}
+      <Btn full color={T.accent} onClick={confirmInvoices} disabled={!invRows.some(r=>r.accept&&parseFloat(r.amount)>0)} style={{marginTop:6}}>Save {invRows.filter(r=>r.accept&&parseFloat(r.amount)>0).length} invoice{invRows.filter(r=>r.accept&&parseFloat(r.amount)>0).length===1?'':'s'}</Btn>
+    </div>)}
+    <button onClick={()=>addBlankRow('invoice')} style={{...secBtn,marginTop:12}}>+ Add one by hand</button>
+  </div>)}
+
+  {step===3&&(<div>
+    <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:14}}>Upload receipt photos or PDFs. Mark each one as a business cost (lowers your tax bill) or reimbursable (a client owes it back).</div>
+    <Btn full color={T.business} onClick={()=>rcRef.current&&rcRef.current.click()} disabled={!!scanProg}><I n="upload" sz={16} c={T.bg}/> {scanProg?`Reading ${scanProg.done+1} of ${scanProg.total}…`:'Upload receipts'}</Btn>
+    <input ref={rcRef} type="file" accept="image/*,.pdf,application/pdf" multiple style={{display:'none'}} onChange={e=>{const fs=e.target.files;if(fs&&fs.length)scanFiles(fs,'receipt');e.target.value='';}}/>
+    {rcMsg&&<div style={{fontSize:12,color:T.pending,marginTop:10,lineHeight:1.5}}>{rcMsg}</div>}
+    {rcRows.length>0&&(<div style={{marginTop:14}}>
+      {(()=>{const batch=[];return rcRows.map(r=>{
+        const amount=parseFloat(r.amount)||0;
+        const cand={folder:r.category,amount,date:r.date,description:r.description};
+        const dup=amount>0&&isDupDoc(cand,batch);
+        if(!dup&&r.accept&&amount>0)batch.push(cand);
+        return(
+        <div key={r.id} style={{...rowStyle,opacity:r.accept?1:.5,borderColor:dup?T.lumpGreen+'44':T.border}}>
+          <div onClick={()=>updRcRow(r.id,{accept:!r.accept})} style={{width:22,height:22,borderRadius:7,background:r.accept?T.business:'transparent',border:`2px solid ${r.accept?T.business:T.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer'}}>{r.accept&&<I n="check" sz={13} c={T.bg}/>}</div>
+          <Inp value={r.description} placeholder="What was it?" onChange={e=>updRcRow(r.id,{description:e.target.value})} style={{...miniInp,flex:'1 1 120px'}}/>
+          <Inp value={r.amount} placeholder="£" type="number" inputMode="decimal" onChange={e=>updRcRow(r.id,{amount:e.target.value})} style={{...miniInp,width:90}}/>
+          <Inp value={r.date} type="date" onChange={e=>updRcRow(r.id,{date:e.target.value})} style={{...miniInp,width:130}}/>
+          <div style={{display:'flex',gap:6,alignItems:'center',flexBasis:'100%',paddingLeft:30,flexWrap:'wrap'}}>
+            <button onClick={()=>updRcRow(r.id,{category:r.category==='business'?'reimbursable':'business'})} style={{...secBtn,color:r.category==='business'?T.business:T.reimb,borderColor:(r.category==='business'?T.business:T.reimb)+'55'}}>{r.category==='business'?'Business cost':'Reimbursable'}</button>
+            {r.category==='business'&&<Sel value={r.subcategory} onChange={e=>updRcRow(r.id,{subcategory:e.target.value})} style={{...miniInp,width:170}}>{EXPENSE_CATS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</Sel>}
+            {dup&&flag('already in Honey',T.lumpGreen)}
+          </div>
+        </div>);});})()}
+      <Btn full color={T.business} onClick={confirmReceipts} disabled={!rcRows.some(r=>r.accept&&parseFloat(r.amount)>0)} style={{marginTop:6}}>Save {rcRows.filter(r=>r.accept&&parseFloat(r.amount)>0).length} receipt{rcRows.filter(r=>r.accept&&parseFloat(r.amount)>0).length===1?'':'s'}</Btn>
+    </div>)}
+    <button onClick={()=>addBlankRow('receipt')} style={{...secBtn,marginTop:12}}>+ Add one by hand</button>
+  </div>)}
+
+  {step===4&&(<div>
+    <Card style={{marginBottom:14,background:`linear-gradient(135deg,${T.surface} 0%,${T.bg} 100%)`}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <div><Lbl>Gross earned</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700}}>{fmt(allG)}</div></div>
+        <div><Lbl>Business costs</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.business}}>{fmt(bizCosts)}</div></div>
+        <div><Lbl>Tax stash</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div></div>
+        <div><Lbl>Take home</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.accentBright}}>{fmt(trueNet)}</div></div>
+      </div>
+      <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>These are exactly the numbers Home will show. Fix anything below and they update live.</div>
+    </Card>
+    {[
+      {key:'income',label:'Income',count:activeE.length},
+      {key:'invoices',label:'Invoices',count:invoices.length},
+      {key:'receipts',label:'Receipts',count:liveR.length},
+    ].map(g=>(<div key={g.key} style={{marginBottom:10}}>
+      <div onClick={()=>setOpenGrp(o=>o===g.key?'':g.key)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,cursor:'pointer'}}>
+        <div style={{fontWeight:700,fontSize:14}}>{g.label} <span style={{color:T.textMuted,fontWeight:600}}>· {g.count}</span></div>
+        <span style={{color:T.textFaint,transform:openGrp===g.key?'rotate(90deg)':'none',display:'inline-block',transition:'transform .15s'}}>›</span>
+      </div>
+      {openGrp===g.key&&(<div style={{marginTop:8}}>
+        {g.key==='income'&&(activeE.length?activeE.map(e=>(
+          <div key={e.id} style={rowStyle}>
+            <div style={{flex:'1 1 120px',minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.client||e.description||'Entry'}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>{fmtD(e.date)}</div>
+            </div>
+            <Inp value={e.subtotal} type="number" inputMode="decimal" onChange={ev=>{const v=parseFloat(ev.target.value)||0;updE(e.id,{subtotal:v,tax:v*TAX,net:v*(1-TAX)});}} style={{...miniInp,width:92}}/>
+            <button onClick={()=>onToggleStatus(e.id)} style={{...secBtn,color:e.status==='Paid'?T.paid:T.pending,borderColor:(e.status==='Paid'?T.paid:T.pending)+'55'}}>{e.status}</button>
+            <button onClick={()=>onToggleVoid(e.id)} style={secBtn}>Void</button>
+            <div style={{flexBasis:'100%',paddingLeft:2,display:'flex',gap:5}}>
+              {dupEntryIds.has(e.id)&&flag('possible duplicate — void one if so',T.danger)}
+              {!(e.subtotal>0)&&flag('amount is £0',T.danger)}
+            </div>
+          </div>)):<div style={{fontSize:12,color:T.textFaint,padding:'6px 2px'}}>Nothing here yet.</div>)}
+        {g.key==='invoices'&&(invoices.length?invoices.map(inv=>(
+          <div key={inv.id} style={rowStyle}>
+            <div style={{flex:'1 1 130px',minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{inv.invoiceNum} · {inv.client||'Client'}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>{fmt(inv.subtotal||0)}</div>
+            </div>
+            <button onClick={()=>updI(inv.id,inv.status==='paid'?{status:'unpaid',paidDate:null}:{status:'paid',paidDate:today()})} style={{...secBtn,color:inv.status==='paid'?T.paid:T.pending,borderColor:(inv.status==='paid'?T.paid:T.pending)+'55'}}>{inv.status==='paid'?'Paid':'Mark paid'}</button>
+          </div>)):<div style={{fontSize:12,color:T.textFaint,padding:'6px 2px'}}>Nothing here yet.</div>)}
+        {g.key==='receipts'&&(liveR.length?liveR.map(r=>(
+          <div key={r.id} style={rowStyle}>
+            <div style={{flex:'1 1 120px',minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.description||'Receipt'}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>{fmtD(r.date)}</div>
+            </div>
+            <Inp value={r.amount} type="number" inputMode="decimal" onChange={ev=>updR(r.id,{amount:parseFloat(ev.target.value)||0})} style={{...miniInp,width:92}}/>
+            <button onClick={()=>updR(r.id,{category:r.category==='business'?'reimbursable':'business',subcategory:r.category==='business'?null:(r.subcategory||'other')})} style={{...secBtn,color:r.category==='business'?T.business:T.reimb,borderColor:(r.category==='business'?T.business:T.reimb)+'55'}}>{r.category==='business'?'Business':'Reimbursable'}</button>
+            <button onClick={()=>delR(r.id)} style={{...secBtn,color:T.danger,borderColor:T.danger+'44'}}>Bin</button>
+            <div style={{flexBasis:'100%',paddingLeft:2,display:'flex',gap:5}}>
+              {dupReceiptIds.has(r.id)&&flag('possible duplicate — bin one if so',T.danger)}
+              {!(r.amount>0)&&flag('amount is £0',T.danger)}
+            </div>
+          </div>)):<div style={{fontSize:12,color:T.textFaint,padding:'6px 2px'}}>Nothing here yet.</div>)}
+      </div>)}
+    </div>))}
+  </div>)}
+
+  {step>0&&(<div style={{display:'flex',gap:10,margin:'22px 0 96px'}}>
+    <Btn outline color={T.textMuted} onClick={()=>setStep(step-1)} style={{flex:1}}>← Back</Btn>
+    {step<4
+      ?<Btn onClick={()=>setStep(step+1)} style={{flex:2}}>{(step===1&&!bankSummary&&!bankPending)||(step===2&&!invRows.length)||(step===3&&!rcRows.length)?'Skip this step →':'Continue →'}</Btn>
+      :<Btn color={T.lumpGreen} onClick={finish} style={{flex:2}}>Looks good — finish ✓</Btn>}
+  </div>)}
+  {step===0&&<div style={{height:80}}/>}
+</div>
+</Page>);}
+
 // ── NAV ──────────────────────────────────────────────────────────────────────
 function SheetsView({entries=[],invoices=[],sheetsUrl,onSync}){
 const[syncing,setSyncing]=useState(false);
@@ -2263,7 +2591,7 @@ const[clients,setClients]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
-const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.'});
+const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0});
 const[syncStatus,setSyncStatus]=useState('loading');
 const[loaded,setLoaded]=useState(false);
 const[booted,setBooted]=useState(false);
@@ -2297,6 +2625,12 @@ useEffect(()=>{
     }else{
       setSyncStatus('local');
     }
+    // First run: nothing local, nothing on the sheet, no legacy app data → open the guided setup
+    const finalE=LS.get('mhq-entries')||[],finalR=LS.get('mhq-receipts')||[],finalI=LS.get('mhq-invoices')||[];
+    const sheetHadData=sheetHydrated.current;
+    const st={...(localSettings||{})};
+    const legacy=!!((LS.get('ft-entries')||[]).length||(LS.get('ft-invoices')||[]).length||(LS.get('ft-receipts')||[]).length);
+    if(!finalE.length&&!finalR.length&&!finalI.length&&!sheetHadData&&!st.setupDone&&!legacy)setView('setup');
     setLoaded(true);
   })();
 },[]);
@@ -2469,7 +2803,7 @@ const go=(v,type)=>{
   setView(v);
 };
 
-const addE=e=>setEntries(p=>[{...e,id:mkId(),invoiceId:e.invoiceId||null,createdAt:new Date().toISOString()},...p]);
+const addE=e=>setEntries(p=>[{...e,id:e.id||mkId(),invoiceId:e.invoiceId||null,createdAt:new Date().toISOString()},...p]);
 const updE=(id,patch)=>setEntries(p=>p.map(e=>e.id===id?{...e,...patch}:e));
 const toTrash=(kind,items)=>{if(!items.length)return;const now=new Date().toISOString();setTrash(p=>[...items.map(it=>({tid:mkId(),kind,deletedAt:now,item:it})),...p]);};
 const delE=id=>setEntries(p=>{const v=p.find(e=>e.id===id);if(v)toTrash('entry',[v]);return p.filter(e=>e.id!==id);});
@@ -2534,6 +2868,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
+  {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go}/>}
   {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
   </div>
   </div>
@@ -2550,25 +2885,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
           {toAdd.length} to add · {fmt(tot)}
           {bankPending.filter(r=>r.dup).length?' · '+bankPending.filter(r=>r.dup).length+' already in Honey':''}
         </div>
-        {bankPending.map((row,i)=>{
-          const isNew=!row.dup&&row.accept;
-          const isDup=row.dup;
-          const isSkipped=!row.dup&&!row.accept;
-          const bg=isDup?T.lumpGreen+'12':isSkipped?T.surface:T.bg;
-          const bd=isDup?T.lumpGreen+'44':isSkipped?T.border:T.border;
-          return(
-          <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',marginBottom:7,borderRadius:10,background:bg,border:`1px solid ${bd}`,opacity:isDup?.7:1}}>
-            {!isDup&&<div onClick={()=>toggle(i)} style={{width:22,height:22,borderRadius:7,background:row.accept?T.lumpGreen:'transparent',border:`2px solid ${row.accept?T.lumpGreen:T.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer'}}>
-              {row.accept&&<I n="check" sz={13} c={T.bg}/>}
-            </div>}
-            {isDup&&<div style={{width:22,height:22,borderRadius:7,background:T.lumpGreen+'30',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><I n="check" sz={13} c={T.lumpGreen}/></div>}
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:T.text}}>{row.description||'Payment'}</div>
-              <div style={{fontSize:11,color:T.textMuted}}>{row.date}{row.inv?' · matches invoice '+row.inv.invoiceNum:isDup?' · already logged':' · new income entry'}</div>
-            </div>
-            <div style={{fontFamily:"'Geist Mono',monospace",fontSize:14,fontWeight:700,flexShrink:0,color:isDup?T.lumpGreen:isNew?T.text:T.textFaint}}>{isDup?'✓ ':''}{fmt(row.amount)}</div>
-          </div>);
-        })}
+        {bankPending.map((row,i)=><BankRow key={i} row={row} onToggle={()=>toggle(i)}/>)}
         <div style={{fontSize:11,color:T.textFaint,marginBottom:12,lineHeight:1.5}}>Matched invoices will be marked paid. Unmatched credits become new income entries dated from your statement.</div>
         <div style={{display:'flex',gap:10,marginTop:4}}>
           <button onClick={()=>setBankPending(null)} style={{flex:1,background:'none',border:`1px solid ${T.border}`,borderRadius:12,padding:'12px',fontWeight:700,color:T.textMuted,fontSize:14}}>Cancel</button>
