@@ -159,12 +159,15 @@ The most intricate atom. There are **three creators**, producing slightly differ
   entryIds:[tmpId], reimbIds:[], docUrl:null,
   status:"paid", paidDate:ISO }     // <-- this creator DOES set status:'paid'
 ```
-**(c) Imported invoice (Align everything)** — `confirmIngest` (line 2354):
+**(c) Imported invoice (Guided setup)** — `SetupView.confirmInvoices` (Align everything was removed; the guided setup replaced it):
 ```js
-{ id, invoiceNum:"IMP-XXXXX", date:ISO, client, clientEmail:"", subtotal, incomeTotal,
-  reimbTotal:0, deductTotal:0, deductions:[], dueDate:"", entryIds:[], reimbIds:[],
-  docUrl:driveUrl, status:"unpaid" }
+{ id, invoiceNum: scanned || "IMP-XXXXX", date:ISO, client, clientEmail:"", subtotal, incomeTotal,
+  reimbTotal:0, deductTotal:0, deductions:[], dueDate:"", entryIds:[entryId], reimbIds:[],
+  status:"paid"|"unpaid", paidDate }
 ```
+Unlike the old Align import, a guided-setup invoice is never left with empty `entryIds`:
+it either links an existing un-invoiced Paid entry whose amount matches (→ `status:'paid'`),
+or creates a linked Pending lump entry (→ `status:'unpaid'`). So paid-income sums stay correct.
 
 **Invoice `status` values & quirk:** can be `undefined` (standard invoice freshly saved), `'paid'`, or `'unpaid'`. Marked paid via `handleMarkPaid` → `onUpdateInvoice(inv.id,{status:'paid',paidDate:ISO,potted:'skipped'})` (line 778). Overdue logic relies on `inv.status!=='paid'` (line 236), so `undefined` counts as unpaid.
 
@@ -193,9 +196,11 @@ Default object (the exact shape a new install starts with):
   sheetsUrl:'',            // Google Apps Script /exec URL (Sheets backend); '' = local-only
   payRef:'PAYMENT REF: PTF',
   invoiceCounter:1,        // next invoice number; incremented after each invoice save
-  anthropicKey:'',         // used to gate the "Align everything" AI flow (note below)
+  anthropicKey:'',         // client-side enable flag for AI scanning (snap + guided setup)
   taxPercent:20,           // DISPLAY-ONLY (TaxSavingsCard). Core math ignores it.
-  holidayPayPercent:12.07  // DISPLAY-ONLY (TaxSavingsCard). Core math ignores it.
+  holidayPayPercent:12.07, // DISPLAY-ONLY (TaxSavingsCard). Core math ignores it.
+  setupDone:false,         // guided setup finished/skipped — suppresses first-run auto-launch
+  setupStep:0              // guided setup progress (0-4); >0 shows the Home "Resume" banner
 }
 ```
 Also referenced but not in default (set elsewhere / by old-app import): `paymentLink` (used in printInvoiceRecord, line 855).
@@ -237,8 +242,7 @@ All defined inside `App()`. Signatures + behavior:
 | `purgeTrashItem` | 2415 | `purgeTrashItem(tid)` — permanently remove one trash record. |
 | `emptyTrash` | 2416 | confirm() → `setTrash([])`. |
 | `syncFromSheets` | 2280 | `async () → bool` — manual pull from Sheets; overwrites atoms; merges receipt imageData. Wired as `onSync`. |
-| `runFolderAlign` | 2310 | `async ()` — scan Drive folders, AI-read new files, populate `ingestFound` for review. Requires `sheetsUrl` + `anthropicKey`. |
-| `confirmIngest` | 2351 | commit reviewed Align results via `addI`/`addR`. |
+| `isDupDoc` | — | `(candidate, batch=[]) → bool` — duplicate check for a scanned doc (`{folder:'invoice'\|'business'\|'reimbursable', amount, date, description/vendor}`) against stored invoices/receipts + the current batch. (Replaces the removed `runFolderAlign`/`confirmIngest` Align flow; used by the guided setup.) |
 | `testConn` | 2307 | `async () → diag` — `Sheets.testDiag()`. Wired as `onTest`. |
 
 **Mutator conventions to preserve:** all list adds **prepend** (newest first). `addR` is the only mutator that returns a value (the id). Deletes of entry/receipt/invoice go through trash; client delete does NOT.
@@ -265,7 +269,6 @@ Two mechanisms:
 | `createInvoice(inv,settings)` | JSONP | `?action=createInvoice&data=<encoded slim payload>` (30 s) | builds Google Doc; returns `{url}` or `{err}`. Aborts if encoded payload > 7000 chars. |
 | `uploadReceipt(receipt)` | fetch POST (cors, text/plain) | base `_url`, body `{action:'uploadReceipt',receipt:{...}}` | returns `driveUrl` or null. Reads `r.json()`. |
 | `scanGmailReceipts()` | JSONP | `?action=scanReceipts` (35 s) | Gmail receipt scan. |
-| `scanFolders(seen)` | JSONP | `?action=scanFolders&seen=<csv>` (60 s) | Drive folder scan for Align; returns `{files:[...]}` or `{error}`. |
 | `labelProcessed(ids)` | JSONP | `?action=labelProcessed&ids=<csv>` (15 s) | mark Gmail threads processed. |
 | `deleteReceiptFiles(threadId,driveFileId)` | JSONP | `?action=deleteReceiptFiles&threadId=&driveFileId=` (15 s) | |
 | `moveToFolder(fileId,category)` | JSONP | `?action=moveToFolder&fileId=&category=` (10 s) | |
@@ -349,9 +352,9 @@ Array of `[key, label]`. Keys (used as receipt `subcategory`):
 
 ### 6.6 AI proxy
 - `const PROXY_URL='https://honey-proxy.phoenix-2bc.workers.dev';` (line 64) — **hardcoded Cloudflare Worker**.
-- `aiScanImage(dataUrl,isPdf)` (65): POST to `PROXY_URL` with `{model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[...]}`; returns parsed receipt JSON `{vendor,amount,date,subcategory,description}`.
-- Category auto-guess (line 484): same proxy, `max_tokens:20`, returns one category key.
-- This proxy is **independent of Sheets**; it only needs network, not `sheetsUrl`. (Note: `runFolderAlign` additionally requires `settings.anthropicKey` to proceed (line 2313), though `aiScanImage` itself sends no key — the Worker holds the real key. The `anthropicKey` setting here acts as a client-side enable flag for the Align flow.)
+- `aiScanImage(dataUrl,isPdf,{model,kind})`: POST to `PROXY_URL` with `{model,max_tokens:500,messages:[...]}`. `model` defaults to `claude-haiku-4-5-20251001`; the guided setup passes `SCAN_MODEL` (`claude-sonnet-5`). `kind:'receipt'` (default) returns `{vendor,amount,date,subcategory,description}`; `kind:'invoice'` returns `{client,amount,date,invoiceNum,description}`.
+- Category auto-guess (Gmail scan): same proxy, `max_tokens:20`, returns one category key.
+- This proxy is **independent of Sheets**; it only needs network, not `sheetsUrl`. `aiScanImage` itself sends no key — the Worker holds the real key; the `anthropicKey` setting acts as a client-side enable flag for AI scanning (snap + guided setup).
 
 ---
 
@@ -359,7 +362,9 @@ Array of `[key, label]`. Keys (used as receipt `subcategory`):
 
 From the render block (lines 2421–2427). The new UI must supply equivalent props or call equivalent handlers.
 
-**HomeView** (219) — `entries, receipts, invoices, setView(=go), syncStatus, lastSynced, onSync(=syncFromSheets), onAlign(=runFolderAlign), aligning(=ingesting), alignResult, sheetsUrl, settings, oldDataAvailable`.
+**HomeView** (219) — `entries, receipts, invoices, setView(=go), syncStatus, lastSynced, onSync(=syncFromSheets), sheetsUrl, settings, oldDataAvailable`. (Align props removed with the Align feature; Home now also renders the guided-setup resume/start banners off `settings.setupDone`/`setupStep`.)
+
+**SetupView** (`view==='setup'`) — the guided setup wizard: `entries, receipts, invoices, settings, setSettings, onImportBank(=handleBankCSV), bankPending, setBankPending, onConfirmBank(=confirmBankIngest), isDupDoc, addE, updE, onToggleStatus(=toggleStatus), onToggleVoid(=toggleVoid), addR, updR, delR, addI, updI, go`. First run auto-opens it (no local data, no sheet data, no legacy `ft-*` data, `!settings.setupDone`).
 
 **AddView** (348) — `onAdd(=addE), settings, initialType(=addType), back(=()=>setView('home')), onAddInvoice(=addI), invoiceCounter(=settings.invoiceCounter||1)`.
 
