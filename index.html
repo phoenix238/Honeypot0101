@@ -76,8 +76,10 @@ const datesClose=(a,b)=>{if(!a||!b)return false;const da=new Date(String(a).slic
 const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
 const mkId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 const PROXY_URL='https://honey-proxy.phoenix-2bc.workers.dev';
+const AI_SCAN_MAX_B64=28*1024*1024; // ~28MB of base64 (~21MB raw file) — stays under Anthropic's 32MB request cap with headroom for the prompt
 const aiScanImage=async(dataUrl,isPdf,{model='claude-haiku-4-5-20251001',kind='receipt'}={})=>{
-  const base64=dataUrl.split(',')[1];
+  const base64=dataUrl.split(',')[1]||'';
+  if(base64.length>AI_SCAN_MAX_B64)throw new Error('File is too large to scan (over ~20MB) — enter the details by hand.');
   const mediaType=isPdf?'application/pdf':(dataUrl.match(/data:([^;]+);/)?.[1]||'image/jpeg');
   const catList=EXPENSE_CATS.map(c=>c[0]).join('|');
   const prompt=kind==='invoice'
@@ -86,11 +88,20 @@ const aiScanImage=async(dataUrl,isPdf,{model='claude-haiku-4-5-20251001',kind='r
   const content=isPdf
     ?[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:prompt}]
     :[{type:"image",source:{type:"base64",media_type:mediaType,data:base64}},{type:"text",text:prompt}];
-  const res=await fetch(PROXY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model,max_tokens:500,messages:[{role:"user",content}]})});
-  const data=await res.json();
-  if(data.error)throw new Error(data.error.message||'API error');
+  let res;
+  try{
+    res=await fetch(PROXY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model,max_tokens:500,messages:[{role:"user",content}]})});
+  }catch(e){throw new Error('Could not reach the scan service — check your connection and try again.');}
+  let data;
+  try{data=await res.json();}catch(e){throw new Error(res.ok?'Scan service returned an unreadable response.':'Scan service error (HTTP '+res.status+'). Try again in a moment.');}
+  if(data.error)throw new Error(data.error.message||('Scan service error (HTTP '+res.status+').'));
+  if(!res.ok)throw new Error('Scan service error (HTTP '+res.status+'). Try again in a moment.');
   const txt=(data.content||[]).map(b=>b.text||'').join('').trim().replace(/```json|```/g,'').trim();
-  return JSON.parse(txt);
+  try{return JSON.parse(txt);}catch(e){
+    const m=txt.match(/\{[\s\S]*\}/); // Claude occasionally wraps the JSON in a stray sentence despite instructions
+    if(m){try{return JSON.parse(m[0]);}catch(e2){}}
+    throw new Error("Couldn't understand the scan result — the file may be unreadable (blurry, encrypted, or scanned upside down).");
+  }
 };
 const SCAN_MODEL='claude-sonnet-5'; // used by the guided setup importer for higher-accuracy document reads
 const LS={get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
@@ -483,24 +494,7 @@ const handleScanAI=async()=>{
   if(!img?.dataUrl||scanning)return;
   setScanning('ai');setScanErr(null);
   try{
-    const base64=img.dataUrl.split(',')[1];
-    const isPdf=img.isPdf;
-    const mediaType=isPdf?'application/pdf':(img.dataUrl.match(/data:([^;]+);/)?.[1]||'image/jpeg');
-    const catList=EXPENSE_CATS.map(c=>c[0]).join('|');
-    const prompt=`You are a receipt scanner. Extract these fields and respond with ONLY a valid JSON object, no other text, no markdown fences:\n{"vendor":"shop name","amount":number,"date":"YYYY-MM-DD","subcategory":"one of: ${catList}","description":"short summary"}\n\nIf any field is unclear, use null. Date must be YYYY-MM-DD. Amount is the total in pounds as a number only. Pick the best matching subcategory.`;
-    const content=isPdf
-      ?[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:prompt}]
-      :[{type:"image",source:{type:"base64",media_type:mediaType,data:base64}},{type:"text",text:prompt}];
-    const res=await fetch(PROXY_URL,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content}]})
-    });
-    const data=await res.json();
-    if(data.error)throw new Error(data.error.message||'API error');
-    const txt=(data.content||[]).map(b=>b.text||'').join('').trim();
-    const clean=txt.replace(/```json|```/g,'').trim();
-    const parsed=JSON.parse(clean);
+    const parsed=await aiScanImage(img.dataUrl,img.isPdf,{kind:'receipt'});
     setForm(f=>({...f,
       description:parsed.description||parsed.vendor||f.description,
       amount:parsed.amount!=null?String(parsed.amount):f.amount,
@@ -2249,20 +2243,20 @@ const readFile=async file=>{
 const scanFiles=async(files,kind)=>{
   const list=[...files];if(!list.length)return;
   const setter=kind==='invoice'?setInvRows:setRcRows;
-  let failed=0;
+  let failed=0,lastErr='';
   for(let i=0;i<list.length;i++){
     const file=list[i];
     setScanProg({done:i,total:list.length,name:file.name});
     const{d,isPdf}=await readFile(file);
-    let p=null;
-    if(d&&settings.anthropicKey){try{p=await aiScanImage(d,isPdf,{model:SCAN_MODEL,kind});}catch(e){}}
-    if(!p)failed++;
+    let p=null,err='';
+    if(d&&settings.anthropicKey){try{p=await aiScanImage(d,isPdf,{model:SCAN_MODEL,kind});}catch(e){err=e.message||'Scan failed.';}}
+    if(!p){failed++;if(err)lastErr=err;}
     setter(prev=>[...prev,kind==='invoice'
-      ?{id:mkId(),client:p?.client||'',amount:p?.amount!=null?String(p.amount):'',date:p?.date||today(),invoiceNum:p?.invoiceNum||'',description:p?.description||file.name,accept:true,scanned:!!p,imageName:file.name}
-      :{id:mkId(),description:p?.description||p?.vendor||file.name,amount:p?.amount!=null?String(p.amount):'',date:p?.date||today(),category:'business',subcategory:p?.subcategory||'other',accept:true,scanned:!!p,imageData:isPdf?null:d,imageName:file.name}]);
+      ?{id:mkId(),client:p?.client||'',amount:p?.amount!=null?String(p.amount):'',date:p?.date||today(),invoiceNum:p?.invoiceNum||'',description:p?.description||file.name,accept:true,scanned:!!p,scanErr:err,imageName:file.name}
+      :{id:mkId(),description:p?.description||p?.vendor||file.name,amount:p?.amount!=null?String(p.amount):'',date:p?.date||today(),category:'business',subcategory:p?.subcategory||'other',accept:true,scanned:!!p,scanErr:err,imageData:isPdf?null:d,imageName:file.name}]);
   }
   setScanProg(null);
-  const msg=failed?(settings.anthropicKey?failed+" couldn't be read — fill those rows in by hand.":'No AI key set (Settings → AI Scan Key) — fill the rows in by hand.'):'';
+  const msg=failed?(settings.anthropicKey?failed+" couldn't be read — fill those rows in by hand."+(lastErr?' ('+lastErr+')':''):'No AI key set (Settings → AI Scan Key) — fill the rows in by hand.'):'';
   (kind==='invoice'?setInvMsg:setRcMsg)(msg);
 };
 const addBlankRow=kind=>{
@@ -2406,7 +2400,7 @@ return(<Page>
           <Inp value={r.date} type="date" onChange={e=>updInvRow(r.id,{date:e.target.value})} style={{...miniInp,width:130}}/>
           <Inp value={r.invoiceNum} placeholder="Invoice #" onChange={e=>updInvRow(r.id,{invoiceNum:e.target.value})} style={{...miniInp,width:100}}/>
           <div style={{display:'flex',gap:5,alignItems:'center',flexBasis:'100%',paddingLeft:30}}>
-            <span style={{fontSize:10,color:T.textFaint,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{r.imageName}{r.scanned?'':' · not read — check by hand'}</span>
+            <span style={{fontSize:10,color:r.scanErr?T.danger:T.textFaint,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}} title={r.scanErr||''}>{r.imageName}{r.scanned?'':' · '+(r.scanErr||'not read — check by hand')}</span>
             {dup&&flag('already in Honey','#5BBF8A')}
             {!dup&&paid&&flag('matches a payment — will save as paid',T.lumpGreen)}
             {!dup&&!paid&&amount>0&&flag('unpaid',T.pending)}
@@ -2438,6 +2432,7 @@ return(<Page>
             <button onClick={()=>updRcRow(r.id,{category:r.category==='business'?'reimbursable':'business'})} style={{...secBtn,color:r.category==='business'?T.business:T.reimb,borderColor:(r.category==='business'?T.business:T.reimb)+'55'}}>{r.category==='business'?'Business cost':'Reimbursable'}</button>
             {r.category==='business'&&<Sel value={r.subcategory} onChange={e=>updRcRow(r.id,{subcategory:e.target.value})} style={{...miniInp,width:170}}>{EXPENSE_CATS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</Sel>}
             {dup&&flag('already in Honey',T.lumpGreen)}
+            {!r.scanned&&<span style={{fontSize:10,color:r.scanErr?T.danger:T.textFaint}} title={r.scanErr||''}>{r.scanErr||'not read — check by hand'}</span>}
           </div>
         </div>);});})()}
       <Btn full color={T.business} onClick={confirmReceipts} disabled={!rcRows.some(r=>r.accept&&parseFloat(r.amount)>0)} style={{marginTop:6}}>Save {rcRows.filter(r=>r.accept&&parseFloat(r.amount)>0).length} receipt{rcRows.filter(r=>r.accept&&parseFloat(r.amount)>0).length===1?'':'s'}</Btn>
