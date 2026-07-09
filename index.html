@@ -963,7 +963,7 @@ useEffect(()=>{
 },[seedBankTxn]);
 const sc=(k,v)=>setClient(c=>({...c,[k]:v}));const pickClient=c=>{setClient({name:c.name,email:c.email||'',address:c.address||''});setSelectedClientId(c.id);};const handleSaveClient=()=>{if(!client.name)return;onSaveClient({name:client.name,email:client.email||'',address:client.address||''});setSaveClientFlash(true);setTimeout(()=>setSaveClientFlash(false),1800);};
 const[chaseOpen,setChaseOpen]=useState(null);const[chaseSending,setChaseSending]=useState(null);const[chaseResult,setChaseResult]=useState({});
-const[shareOpen,setShareOpen]=useState(null);const[shareTo,setShareTo]=useState('');const[shareSending,setShareSending]=useState(null);const[shareResult,setShareResult]=useState({});
+const[shareOpen,setShareOpen]=useState(null);const[shareTo,setShareTo]=useState('');const[shareSending,setShareSending]=useState(null);const[shareResult,setShareResult]=useState({});const[shareBody,setShareBody]=useState('');const[editingShareBody,setEditingShareBody]=useState({});
 // Inline quick-add: log a new day (timed/manual/lump) straight into the invoice being
 // built, without leaving this screen — reuses the exact gross/tax/net formula from AddView.
 const[quickType,setQuickType]=useState('timed');const[quickOpen,setQuickOpen]=useState(false);const[showCalPicker,setShowCalPicker]=useState(false);
@@ -991,6 +991,11 @@ const docPdfUrl=url=>{const m=String(url||'').match(/\/d\/([^/?]+)/);return m?`h
 const handleShare=inv=>{
   setChaseOpen(null);
   setShareTo(inv.clientEmail||'');
+  if(shareOpen!==inv.id){
+    const defaultBody=`Hi${inv.client?` ${inv.client.split(' ')[0]}`:''},\n\nPlease find your invoice for ${fmt(inv.subtotal)} attached${inv.docUrl?'.':' below.'}\n\nThanks,\n${settings.name||''}`;
+    setShareBody(defaultBody);
+    setEditingShareBody({});
+  }
   setShareOpen(shareOpen===inv.id?null:inv.id);
 };
 const invNum=`INV-${new Date().getFullYear()}-${String(settings.invoiceCounter||1).padStart(3,'0')}`;
@@ -1219,9 +1224,9 @@ ${settings.name||''}`;
       </div>
       {shareOpen===inv.id&&(()=>{
         const subj=`Invoice ${inv.invoiceNum}`;
-        const body=`Hi${inv.client?` ${inv.client.split(' ')[0]}`:''},\n\nPlease find your invoice for ${fmt(inv.subtotal)} attached${inv.docUrl?'.':' below.'}\n\nThanks,\n${settings.name||''}`;
         const pdfUrl=docPdfUrl(inv.docUrl);
-        const mailBody=pdfUrl?`${body}\n\n${pdfUrl}`:body;
+        const currentBody=shareBody;
+        const mailBody=pdfUrl?`${currentBody}\n\n${pdfUrl}`:currentBody;
         const mailTo=`mailto:${shareTo||''}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(mailBody)}`;
         return(<div style={{marginTop:10,padding:'12px',background:T.bg,borderRadius:12,border:`1px solid ${T.accent}33`}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -1231,8 +1236,14 @@ ${settings.name||''}`;
           <Inp type="email" placeholder="client@example.com" value={shareTo} onChange={e=>setShareTo(e.target.value)} style={{fontSize:13,marginBottom:8}}/>
           <div style={{fontSize:12,color:T.textMuted,marginBottom:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><strong style={{color:T.text}}>Subject:</strong> {subj}</div>
           {!inv.docUrl&&<div style={{fontSize:11,color:T.textMuted,marginBottom:10,lineHeight:1.4}}>No Google Doc on this invoice yet — this will send a text summary instead of a PDF.</div>}
+          <button onClick={()=>setEditingShareBody(s=>({...s,[inv.id]:!s[inv.id]}))} style={{background:'none',border:'none',color:T.accent,fontSize:11,fontWeight:700,padding:0,marginBottom:8,textDecoration:'underline',cursor:'pointer'}}>
+            {editingShareBody[inv.id]?'Hide':'Edit email message'}
+          </button>
+          {editingShareBody[inv.id]&&(
+            <textarea value={currentBody} onChange={e=>setShareBody(e.target.value)} placeholder="Write your email message..." style={{width:'100%',minHeight:80,fontSize:12,padding:'8px',marginBottom:8,border:`1px solid ${T.border}`,borderRadius:8,background:T.surface,color:T.text,fontFamily:'inherit',resize:'vertical'}}/>
+          )}
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {sheetsUrl&&(<button onClick={async()=>{if(!shareTo)return;setShareSending(inv.id);const res=await Sheets.sendEmail(shareTo,subj,body,inv.docUrl||'');setShareResult(r=>({...r,[inv.id]:res?.ok?'ok':'err'}));setShareSending(null);if(res?.ok)setTimeout(()=>{setShareOpen(null);setShareResult(r=>{const c={...r};delete c[inv.id];return c;});},1800);}} disabled={!shareTo||shareSending===inv.id} style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,background:shareResult[inv.id]==='ok'?T.lumpGreen+'20':shareResult[inv.id]==='err'?T.danger+'18':T.accent+'18',border:`1.5px solid ${shareResult[inv.id]==='ok'?T.lumpGreen:shareResult[inv.id]==='err'?T.danger:T.accent}44`,borderRadius:10,padding:'8px 10px',color:shareResult[inv.id]==='ok'?T.lumpGreen:shareResult[inv.id]==='err'?T.danger:T.accent,fontWeight:700,fontSize:12,cursor:'pointer',opacity:shareSending===inv.id||!shareTo?0.5:1}}>
+            {sheetsUrl&&(<button onClick={async()=>{if(!shareTo)return;setShareSending(inv.id);const res=await Sheets.sendEmail(shareTo,subj,currentBody,inv.docUrl||'');setShareResult(r=>({...r,[inv.id]:res?.ok?'ok':'err'}));setShareSending(null);if(res?.ok)setTimeout(()=>{setShareOpen(null);setShareResult(r=>{const c={...r};delete c[inv.id];return c;});},1800);}} disabled={!shareTo||shareSending===inv.id} style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,background:shareResult[inv.id]==='ok'?T.lumpGreen+'20':shareResult[inv.id]==='err'?T.danger+'18':T.accent+'18',border:`1.5px solid ${shareResult[inv.id]==='ok'?T.lumpGreen:shareResult[inv.id]==='err'?T.danger:T.accent}44`,borderRadius:10,padding:'8px 10px',color:shareResult[inv.id]==='ok'?T.lumpGreen:shareResult[inv.id]==='err'?T.danger:T.accent,fontWeight:700,fontSize:12,cursor:'pointer',opacity:shareSending===inv.id||!shareTo?0.5:1}}>
               {shareSending===inv.id?<><Spinner/> Sending…</>:shareResult[inv.id]==='ok'?'✓ Sent!':shareResult[inv.id]==='err'?'✗ Failed — try mail app':<><I n="mail" sz={13} c={T.accent}/> {inv.docUrl?'Send via Gmail (PDF attached)':'Send via Gmail'}</>}
             </button>)}
             <a href={mailTo} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:5,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:'8px 10px',color:T.textMuted,fontWeight:700,fontSize:12,textDecoration:'none',flexShrink:0}} onClick={()=>setTimeout(()=>setShareOpen(null),400)}><I n="mail" sz={12} c={T.textMuted}/> Mail app</a>
