@@ -2616,7 +2616,7 @@ const bankConfirm=()=>{
 // (usually a payment just imported from the bank CSV) is treated as paid and linked to that entry.
 const payMatchFor=(amount,used)=>entries.find(e=>!e.invoiceId&&e.status==='Paid'&&!used.has(e.id)&&Math.abs((e.subtotal||0)-amount)<0.02);
 const confirmInvoices=()=>{
-  const batch=[];const used=new Set();
+  const batch=[];const used=new Set();const createdInvoices=[];
   invRows.forEach(r=>{
     const amount=parseFloat(r.amount)||0;
     if(!r.accept||amount<=0)return;
@@ -2626,17 +2626,35 @@ const confirmInvoices=()=>{
     const iid=mkId();
     const num=r.invoiceNum||('IMP-'+mkId().slice(-5).toUpperCase());
     const match=payMatchFor(amount,used);
+    let inv,linkedE;
     if(match){
       used.add(match.id);
       updE(match.id,{invoiceId:iid,client:r.client||match.client});
-      addI({id:iid,invoiceNum:num,date:isoDate(r.date),client:r.client||match.client||'Client',clientEmail:'',subtotal:amount,incomeTotal:amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[match.id],reimbIds:[],status:'paid',paidDate:match.date});
+      linkedE=match;
+      inv={id:iid,invoiceNum:num,date:isoDate(r.date),client:r.client||match.client||'Client',clientEmail:'',subtotal:amount,incomeTotal:amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[match.id],reimbIds:[],status:'paid',paidDate:match.date};
+      addI(inv);
     }else{
       const eid=mkId();
-      addE({id:eid,type:'lump',date:r.date||today(),client:r.client||'Client',description:r.description||('Invoice '+num),rate:null,hours:null,subtotal:amount,tax:amount*TAX,net:amount*(1-TAX),status:'Pending',invoiceId:iid});
-      addI({id:iid,invoiceNum:num,date:isoDate(r.date),client:r.client||'Client',clientEmail:'',subtotal:amount,incomeTotal:amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[eid],reimbIds:[],status:'unpaid'});
+      const newE={id:eid,type:'lump',date:r.date||today(),client:r.client||'Client',description:r.description||('Invoice '+num),rate:null,hours:null,subtotal:amount,tax:amount*TAX,net:amount*(1-TAX),status:'Pending',invoiceId:iid};
+      addE(newE);
+      linkedE=newE;
+      inv={id:iid,invoiceNum:num,date:isoDate(r.date),client:r.client||'Client',clientEmail:'',subtotal:amount,incomeTotal:amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[eid],reimbIds:[],status:'unpaid'};
+      addI(inv);
     }
+    createdInvoices.push({inv,linkedE});
   });
   setInvRows([]);setInvMsg('');setStep(3);
+  // Generate docs in background (one at a time, non-blocking)
+  if(settings.sheetsUrl&&createdInvoices.length>0){
+    const genDocs=(idx=0)=>{
+      if(idx>=createdInvoices.length)return;
+      const {inv,linkedE}=createdInvoices[idx];
+      const docData={invoiceNum:inv.invoiceNum,client:inv.client,clientEmail:inv.clientEmail||'',clientAddress:'',dueDate:inv.dueDate||'',notes:'',grandTotal:inv.subtotal,incomeTotal:inv.incomeTotal||inv.subtotal,reimbTotal:inv.reimbTotal||0,deductTotal:inv.deductTotal||0,deductions:inv.deductions||[],invoicePeriod:'',selEntries:[linkedE],selReimbs:[]};
+      Sheets.init(settings.sheetsUrl);
+      Sheets.createInvoice(docData,settings).then(res=>{if(res?.url)updI(inv.id,{docUrl:res.url});}).catch(e=>{}).finally(()=>{setTimeout(()=>genDocs(idx+1),500);});
+    };
+    setTimeout(()=>genDocs(),1000);
+  }
 };
 
 // Step 4 — receipts
