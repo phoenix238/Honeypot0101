@@ -1340,7 +1340,7 @@ function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUn
       selectable={tab==='income'&&txn.status==='unreviewed'} selected={!!selected[txn.id]} onToggleSelect={toggleSelect}/>)}
     {selectedIds.length>0&&(
       <div style={{position:'sticky',bottom:80,marginTop:10,zIndex:5}}>
-        <Btn full color={T.lumpGreen} onClick={handleBulkConvert}>Convert {selectedIds.length} to invoice{selectedIds.length>1?'s':''}</Btn>
+        <Btn full color={T.lumpGreen} onClick={handleBulkConvert}>Make {selectedIds.length} Docs Invoice{selectedIds.length>1?'s':''}</Btn>
       </div>
     )}
   </Page>);
@@ -3365,14 +3365,26 @@ const bulkConvertBankTxnsToInvoices=ids=>{
     if(!txn||txn.category!=='income'||txn.status!=='unreviewed')return;
     const eid=mkId(),iid=mkId();
     const invNum=`INV-${year}-${String(counter).padStart(3,'0')}`;
-    addE({id:eid,type:'lump',date:txn.date,client:txn.description||'',description:txn.description||'',rate:null,hours:null,subtotal:txn.amount,tax:0,net:txn.amount,status:'Paid',invoiceId:iid});
+    const entry={id:eid,type:'lump',date:txn.date,client:txn.description||'',description:txn.description||'',rate:null,hours:null,subtotal:txn.amount,tax:0,net:txn.amount,status:'Paid',invoiceId:iid};
+    addE(entry);
     const inv={id:iid,invoiceNum:invNum,date:new Date().toISOString(),client:txn.description||'',clientEmail:'',subtotal:txn.amount,incomeTotal:txn.amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:txn.date,entryIds:[eid],reimbIds:[],docUrl:null,status:'paid',paidDate:txn.date,sourceBankTxnId:txn.id,matchedBankTxnId:txn.id};
     addI(inv);
-    createdInvoices.push(inv);
+    createdInvoices.push({inv,entry});
     onLinkBankTxn(txn.id,iid);
     counter++;
   });
   setSettings(s=>({...s,invoiceCounter:counter}));
+  // Generate Google Docs in background (one at a time, non-blocking)
+  if(settings.sheetsUrl&&createdInvoices.length>0){
+    const genDocs=(idx=0)=>{
+      if(idx>=createdInvoices.length)return;
+      const {inv,entry}=createdInvoices[idx];
+      const docData={invoiceNum:inv.invoiceNum,client:inv.client,clientEmail:inv.clientEmail||'',clientAddress:'',dueDate:inv.dueDate||'',notes:'',grandTotal:inv.subtotal,incomeTotal:inv.incomeTotal||inv.subtotal,reimbTotal:inv.reimbTotal||0,deductTotal:inv.deductTotal||0,deductions:inv.deductions||[],invoicePeriod:'',selEntries:[entry],selReimbs:[]};
+      Sheets.init(settings.sheetsUrl);
+      Sheets.createInvoice(docData,settings).then(res=>{if(res?.url)updI(inv.id,{docUrl:res.url});}).catch(e=>{console.error('Doc creation failed:',e);}).finally(()=>{setTimeout(()=>genDocs(idx+1),800);});
+    };
+    setTimeout(()=>genDocs(),1000);
+  }
 };
 const[starlingStatus,setStarlingStatus]=useState(null); // {ok,accountLabel|error}
 const[starlingSyncing,setStarlingSyncing]=useState(false);
