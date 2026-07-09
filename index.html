@@ -918,7 +918,6 @@ return(<Page>
 function InvoiceView({entries,receipts,invoices,clients=[],onAddInvoice,onUpdateInvoice,onDeleteInvoice,onUpdateReceipt,onUpdateEntry,onDeleteEntry,onSaveClient,onAddEntry,settings,setSettings,sheetsUrl,seedBankTxn,onConsumeSeedBankTxn,onLinkBankTxn}){
 const[mode,setMode]=useState('list');const[selE,setSelE]=useState({});const[selR,setSelR]=useState({});const[client,setClient]=useState({name:'',email:'',address:''});const[selectedClientId,setSelectedClientId]=useState(null);const oneMonthFromNow=()=>{const d=new Date();d.setMonth(d.getMonth()+1);return d.toISOString().split('T')[0];};const[dueDate,setDueDate]=useState(oneMonthFromNow());const[notes,setNotes]=useState(settings.bankDetails||'');const[flash,setFlash]=useState(false);const[docUrl,setDocUrl]=useState(null);const[creatingDoc,setCreatingDoc]=useState(false);const[docErr,setDocErr]=useState(null);const[docStatus,setDocStatus]=useState('');const[confInvId,setConfInvId]=useState(null);const[saveClientFlash,setSaveClientFlash]=useState(false);const[deductions,setDeductions]=useState([]);const addDeduction=()=>setDeductions(d=>[...d,{id:Date.now().toString(),description:'',amount:''}]);const updateDeduction=(id,k,v)=>setDeductions(d=>d.map(x=>x.id===id?{...x,[k]:v}:x));const removeDeduction=id=>setDeductions(d=>d.filter(x=>x.id!==id));
 const[linkedBankTxn,setLinkedBankTxn]=useState(null);
-const[shareFlash,setShareFlash]=useState(null);
 const[confId,setConfId]=useState(null);
 const[leftoverOpen,setLeftoverOpen]=useState(false);
 useEffect(()=>{
@@ -954,10 +953,15 @@ const handleQuickAdd=()=>{
   setQuickForm(f=>({...f,description:'',startTime:'',endTime:'',hours:'',amount:''}));
 };
 const handleMarkPaid=(inv)=>{onUpdateInvoice(inv.id,{status:'paid',paidDate:new Date().toISOString(),potted:'skipped'});};
-const handleShare=async inv=>{
-  const shareData={title:`Invoice ${inv.invoiceNum}`,text:`Invoice ${inv.invoiceNum} for ${inv.client||'client'} — ${fmt(inv.subtotal)}`,...(inv.docUrl?{url:inv.docUrl}:{})};
-  if(navigator.share){try{await navigator.share(shareData);}catch(e){/* user cancelled */}}
-  else if(inv.docUrl&&navigator.clipboard){await navigator.clipboard.writeText(inv.docUrl);setShareFlash(inv.id);setTimeout(()=>setShareFlash(null),1600);}
+// Google's export URL serves the Doc as an actual PDF, rather than opening the
+// interactive Doc editor the way inv.docUrl itself does.
+const docPdfUrl=url=>{const m=String(url||'').match(/\/d\/([^/?]+)/);return m?`https://docs.google.com/document/d/${m[1]}/export?format=pdf`:null;};
+const handleShare=inv=>{
+  const pdfUrl=docPdfUrl(inv.docUrl);
+  const subject=`Invoice ${inv.invoiceNum}`;
+  const greeting=inv.client?`Hi ${inv.client.split(' ')[0]},`:'Hi,';
+  const body=`${greeting}\n\nPlease find your invoice for ${fmt(inv.subtotal)} below.${pdfUrl?`\n\n${pdfUrl}`:''}\n\nThanks,\n${settings.name||''}`;
+  window.location.href=`mailto:${inv.clientEmail||''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 };
 const invNum=`INV-${new Date().getFullYear()}-${String(settings.invoiceCounter||1).padStart(3,'0')}`;
 const selEntries=entries.filter(e=>selE[e.id]);const selReimbs=receipts.filter(r=>selR[r.id]);const incomeTotal=selEntries.reduce((a,e)=>a+(e.subtotal||0),0);const reimbTotal=selReimbs.reduce((a,r)=>a+(r.amount||0),0);const deductTotal=deductions.reduce((a,d)=>a+(parseFloat(d.amount)||0),0);const grandTotal=Math.max(0,incomeTotal+reimbTotal-deductTotal);const pendingReimbs=receipts.filter(r=>r.category==='reimbursable'&&r.status==='pending');const hasItems=selEntries.length>0||selReimbs.length>0;
@@ -1175,7 +1179,7 @@ ${settings.name||''}`;
       <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
         {inv.docUrl&&(<a href={inv.docUrl} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:6,background:T.drive+'18',borderRadius:10,padding:'6px 10px',color:T.drive,fontWeight:700,fontSize:12,textDecoration:'none'}}><I n="link" sz={13} c={T.drive}/> Open Doc</a>)}
         <button onClick={()=>printInvoiceRecord(inv)} style={{display:'flex',alignItems:'center',gap:6,background:T.timed+'14',border:`1.5px solid ${T.timed}44`,borderRadius:10,padding:'5px 10px',color:T.timed,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="print" sz={13} c={T.timed}/> PDF</button>
-        <button onClick={()=>handleShare(inv)} style={{display:'flex',alignItems:'center',gap:6,background:shareFlash===inv.id?T.lumpGreen+'18':T.accent+'14',border:`1.5px solid ${shareFlash===inv.id?T.lumpGreen:T.accent}44`,borderRadius:10,padding:'5px 10px',color:shareFlash===inv.id?T.lumpGreen:T.accent,fontWeight:700,fontSize:12,cursor:'pointer'}}>{shareFlash===inv.id?<><I n="check" sz={13} c={T.lumpGreen}/> Copied!</>:<><I n="share" sz={13} c={T.accent}/> Share</>}</button>
+        <button onClick={()=>handleShare(inv)} style={{display:'flex',alignItems:'center',gap:6,background:T.accent+'14',border:`1.5px solid ${T.accent}44`,borderRadius:10,padding:'5px 10px',color:T.accent,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="share" sz={13} c={T.accent}/> Share</button>
         {!paid&&inv.clientEmail&&(<button onClick={()=>handleChase(inv)} style={{display:'flex',alignItems:'center',gap:6,background:chaseOpen===inv.id?(overdue?T.danger+'28':T.accent+'28'):(overdue?T.danger+'18':T.pending+'18'),border:`1.5px solid ${chaseOpen===inv.id?(overdue?T.danger+'88':T.accent+'66'):(overdue?T.danger+'66':T.pending+'44')}`,borderRadius:10,padding:'5px 10px',color:chaseOpen===inv.id?(overdue?T.danger:T.accent):(overdue?T.danger:T.pending),fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="mail" sz={13} c={chaseOpen===inv.id?(overdue?T.danger:T.accent):(overdue?T.danger:T.pending)}/> Chase up</button>)}
         {!paid&&onUpdateInvoice&&(<button onClick={()=>handleMarkPaid(inv)} style={{display:'flex',alignItems:'center',gap:6,background:T.lumpGreen+'18',border:`1.5px solid ${T.lumpGreen}44`,borderRadius:10,padding:'5px 10px',color:T.lumpGreen,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="check" sz={13} c={T.lumpGreen}/> Mark paid</button>)}
         {paid&&onUpdateInvoice&&(<button onClick={()=>onUpdateInvoice(inv.id,{status:'pending',paidDate:null})} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:`1px solid ${T.border}`,borderRadius:10,padding:'5px 10px',color:T.textMuted,fontWeight:700,fontSize:11,cursor:'pointer'}}>Mark unpaid</button>)}
@@ -2079,6 +2083,10 @@ function createInvoiceDoc(inv, settings) {
     });
   }
   doc.saveAndClose();
+  // Anyone with the link can view (and export as PDF) — the client receiving this
+  // link isn't a Google account added to the doc's ACL, so without this the link
+  // (and its PDF export URL) would 403 for them.
+  DriveApp.getFileById(doc.getId()).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return doc.getUrl();
 }
 
