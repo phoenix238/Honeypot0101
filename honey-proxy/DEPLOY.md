@@ -51,3 +51,27 @@ npx wrangler deploy
 - Users no longer need to enter a key
 - All AI scan features work automatically
 - Free tier: 100,000 requests/day
+
+## Optional: Starling Bank sync
+```
+npx wrangler secret put STARLING_TOKEN
+```
+Paste a Starling Personal Access Token (from developer.starlingbank.com) with
+`transactions:read` + `accounts:read` scope. Then `npx wrangler deploy` again to pick up
+the new routes. No further setup needed — the Bank tab's "Sync now" reads this secret
+server-side and pulls transactions since the current UK tax year start.
+
+## Optional: Google Calendar sync
+1. In Google Cloud Console: create/reuse a project, enable the Google Calendar API, and set
+   up an OAuth consent screen (External, Testing mode is fine for personal use).
+2. Create an OAuth Client ID (type: **Web application**) with redirect URI
+   `https://<your-worker-subdomain>.workers.dev/google/callback`.
+3. Store both values as secrets, then redeploy:
+   ```
+   npx wrangler secret put GOOGLE_CLIENT_ID
+   npx wrangler secret put GOOGLE_CLIENT_SECRET
+   npx wrangler deploy
+   ```
+4. In the app, go to Settings → Google Calendar → Connect. This does a real OAuth round
+   trip through the Worker; the refresh token is stored in the `HONEY_SYNC` KV namespace and
+   never touches the browser.

@@ -396,34 +396,85 @@ net  = gross - tax
 ```
 Stored on the entry as `subtotal=gross, tax, net`.
 
-### 8.2 HomeView aggregates (lines 224–235) — the headline figures
+### 8.2 HomeView aggregates — the headline figures (UPDATED: invoice-based, not entry-based)
+**As of the invoice-driven income model, `allG`/`confirmedG` sum INVOICES, not raw entries.**
+Log entries are a drafting mechanism for building invoices; they only count toward income
+once they're actually on an invoice. This was a deliberate change from the original
+entries-based math (kept below for history) because the old model let "Gross Earned"
+diverge from what was actually invoiced/paid — logging work and marking it "Paid" counted
+it as income even with zero invoices involved.
 ```
 activeE      = entries where status !== 'Void'
-allG         = Σ activeE.subtotal                         // "Gross Earned"
-paidInvIds   = set of (id ∪ invoiceNum) of invoices with status==='paid'
-confirmedG   = Σ subtotal of activeE where invoiceId ∈ paidInvIds   // "X confirmed"
+liveInvoices = invoices where status !== 'void'
+allG         = Σ liveInvoices.subtotal                    // "Gross Earned"
+confirmedG   = Σ subtotal of liveInvoices where status==='paid'   // "X confirmed"
+unbilledG    = Σ subtotal of activeE where !invoiceId      // "logged but not yet invoiced" — informational only, NOT part of allG
 bizCosts     = Σ amount of receipts where category==='business' && status!=='void'
 taxableProfit= max(0, allG - bizCosts)
 taxReserve   = taxableProfit * TAX            // "Tax Stash" (20% of profit)
 trueNet      = taxableProfit - taxReserve     // "Take Home"
-monG/monN    = Σ subtotal / Σ net for entries in current calendar month
+monG/monN    = Σ subtotal / Σ net for entries in current calendar month  // still entry-based, informational "this month" tile only
 pendAmt      = Σ amount of reimbursable receipts with status==='pending'  // "owed to you"
 unpaidAmt    = Σ subtotal of activeE with status==='Pending'
 overdueAmt   = Σ subtotal of invoices where status!=='paid' && dueDate < today
 ```
 Key distinctions:
-- **Gross Earned** (`allG`) = all non-void entries, regardless of invoice/payment.
-- **Confirmed** (`confirmedG`) = only entries tied to a **paid** invoice (matched by `invoiceId` against paid invoices' id OR invoiceNum).
+- **Gross Earned** (`allG`) = all non-void **invoices**, regardless of paid/matched status. An entry that's never been put on an invoice does NOT count, however "Paid" its own status is.
+- **Confirmed** (`confirmedG`) = invoices with `status==='paid'` (this now includes invoices matched to a real bank transaction — see §9 below — as well as ones marked paid manually).
+- **Unbilled** (`unbilledG`) = logged work with no `invoiceId` yet — shown as a separate line so work done isn't invisible, but it is deliberately excluded from `allG`.
 - **Take Home** (`trueNet`) = profit after expenses minus the 20% reserve — NOT the sum of per-entry `net` (which ignores expenses).
+- A one-time migration (gated on `settings.migratedInvoiceModel`) backfills a synthetic invoice for any pre-existing entry that was `status==='Paid'` but never wrapped in a real invoice, so this change didn't crater historical Gross Earned figures for existing data.
 
-### 8.3 Reports / year-end (lines 1095–1103)
+### 8.3 Reports / year-end (UPDATED: also invoice-based)
+`ReportsView`'s P&L card, `exportTaxYear`, and `exportYearWorkbook` all compute their headline
+"Gross Income"/`ge` from invoices within the date range (`liveInvoices`/`tyInvoices`), the same
+as Home — kept deliberately consistent so switching screens never shows two different "gross"
+numbers again. The entry-level CSV/workbook exports still list individual logged entries as
+a detail/audit trail (useful for HMRC record-keeping), but their own totals are computed
+independently from what's actually listed, not from the invoice-based headline figure.
 ```
-ge     = Σ subtotal of non-void entries within tax-year bounds
+ge     = Σ subtotal of non-void invoices within tax-year bounds
 be     = Σ amount of business receipts (status!=='void') within bounds
 profit = max(0, ge - be)
 taxStash = profit * 0.20
 ```
 (Hardcoded 0.20 again — `taxPercent` setting unused here.)
+
+### 8.3a Bank transactions, matching engine & Starling/Google Calendar integrations (NEW)
+- New atom **`bankTxns`** (`mhq-banktxns`), local-only (not pushed through the Google Sheets
+  sync path). Shape: `{id,source('starling'|'csv'),feedItemUid,date,description,amount,
+  direction('IN'|'OUT'),category('income'|'spending'),status('unreviewed'|'invoiced'|'matched'|'voided'),
+  matchedInvoiceId,createdAt}`.
+- Invoice objects gained `matchedBankTxnId` and `sourceBankTxnId` (both optional/nullable) —
+  no new invoice *status* enum was introduced; invoices still use the existing
+  `undefined|'unpaid'|'paid'` values, with a matched invoice simply being `status:'paid'`
+  plus `matchedBankTxnId` set.
+- **Bank tab** (`BankView`/`BankTxnRow`, nav id `'bank'`): Income/Spending toggle. Income rows
+  get "Make invoice" (creates an invoice directly from the row) and "Void" (excluded from
+  income permanently). CSV import extended via a new `parseBankCSVFull` (keeps both credit
+  AND debit rows, unlike the original credits-only `parseBankCSV` still used by the guided
+  setup's legacy bank-CSV path).
+- **Matching engine**: `findBankTxnMatch`/`findInvoiceMatch` (amount ±2p + `datesClose`
+  date-proximity) plus an always-on `useEffect` in `App()` that reconciles unmatched invoices
+  against unreviewed bank income rows on every change to either list. Manual matching is also
+  available from the Bank tab and is symmetric (bank row → invoice picker).
+- **Starling integration**: real API calls happen server-side in `honey-proxy` (`GET
+  /starling/status`, `GET /starling/transactions?since=`), reading a `STARLING_TOKEN` secret
+  (`wrangler secret put STARLING_TOKEN`) — the token never reaches the browser, following the
+  same trust model as the existing `ANTHROPIC_KEY`.
+- **Google Calendar integration**: full OAuth round trip lives in `honey-proxy`
+  (`/google/authorize`, `/google/callback`, `/google/status`, `/google/disconnect`,
+  `/google/calendar/events`) using `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` secrets and a
+  refresh token stored in the `HONEY_SYNC` KV namespace — again, no token ever touches the
+  client. `CalendarEventPicker` (shared component) lets the user pick a date range, load
+  events, and convert selected ones into timed log entries; wired into both `AddView` and the
+  invoice maker's inline quick-add panel (see §8.3b).
+
+### 8.3b Invoice maker inline entry (NEW)
+`InvoiceView`'s build mode gained a "Log a day straight onto this invoice" panel — the same
+three entry types (timed/hours/lump) and gross/tax/net formula as `AddView`, but the resulting
+entry is immediately auto-selected onto the invoice being built, so a batch of days can be
+logged without leaving the invoice screen.
 
 ### 8.4 "Pot" figures — effectively removed
 `homePotsConfigured=false` (line 238) hardcodes the old pot-transfer system off. `needPotCount` (239) is therefore always 0; the "tax not yet potted" action card never renders. `handleMarkPaid` still writes `potted:'skipped'` (line 778) as a vestige. **No live pot math** — do not resurrect it unless intended.
@@ -447,6 +498,9 @@ Only surfaced in `TaxSavingsCard` (1973, 1977) as an informational "set aside 12
 10. **Deletes are soft** (entry/receipt/invoice → 30-day trash); client delete is hard.
 11. **The passcode gate is cosmetic** — runs after React mounts and loads data; protects nothing. The passcode is unrecoverable (only its SHA-256 `GATE_HASH` is in source).
 12. **`ft-*` keys are legacy & read-only** — never write them; they back the one-time `importOld` migration.
+13. **Gross Earned/Confirmed are invoice-based, not entry-based** (§8.2) — don't reintroduce a raw entries-sum for any headline "income" figure; route it through `invoices` instead, and remember the `settings.migratedInvoiceModel` backfill guard exists precisely to protect historical figures from that change.
+14. **`bankTxns` (`mhq-banktxns`) is local-only** — not part of the Google Sheets sync payload. If cross-device bank data ever matters, that's a deliberate follow-up, not an oversight.
+15. **Starling/Google secrets never touch the browser** — both live as `wrangler secret put` values on `honey-proxy`; the client only ever sees derived status (`{ok, accountLabel}`), never a token.
 
 ---
 
@@ -456,7 +510,11 @@ PROXY_URL  = 'https://honey-proxy.phoenix-2bc.workers.dev'
 GATE_KEY   = 'honey_auth'
 GATE_HASH  = '3d73cd5cb74f8ab1d4496133cde249d9825e0f19d0f1a011f46afc287f881299'
 TAX        = 0.20
-localStorage keys: mhq-entries, mhq-receipts, mhq-invoices, mhq-clients, mhq-settings, mhq-trash, honey_auth
+localStorage keys: mhq-entries, mhq-receipts, mhq-invoices, mhq-clients, mhq-settings, mhq-trash, mhq-banktxns, honey_auth
 AI model   = 'claude-haiku-4-5-20251001'
 Sheets debounce = 2500 ms ; poll interval = 60000 ms ; trash TTL = 30 days
+honey-proxy secrets: ANTHROPIC_KEY, STARLING_TOKEN, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+honey-proxy routes (new): GET /starling/status, GET /starling/transactions?since=,
+  GET /google/authorize, GET /google/callback, GET /google/status, POST /google/disconnect,
+  GET /google/calendar/events?timeMin=&timeMax=
 ```
