@@ -440,7 +440,72 @@ return(<Page>
 </Page>);}
 
 // ── ADD ──────────────────────────────────────────────────────────────────────
-function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[createInv,setCreateInv]=useState(true);const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*TAX,net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null;if(form.status==='Paid'&&createInv&&onAddInvoice){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');const invNum='INV-'+yr+'-'+num;const inv={invoiceNum:invNum,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};onAddInvoice(inv);invId=invNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div><Field label="Date"><Inp type="date" value={form.date} onChange={e=>set('date',e.target.value)}/></Field><Field label="Client"><Inp placeholder="Client name" value={form.client} onChange={e=>set('client',e.target.value)}/></Field><Field label="Description"><Inp placeholder="What did you do?" value={form.description} onChange={e=>set('description',e.target.value)}/></Field>{type==='timed'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}><Field label="Start"><Inp type="time" value={form.startTime} onChange={e=>set('startTime',e.target.value)}/></Field><Field label="End"><Inp type="time" value={form.endTime} onChange={e=>set('endTime',e.target.value)}/></Field></div>}{type==='manual'&&<Field label="Hours"><Inp type="number" step="0.5" min="0" placeholder="2.5" value={form.hours} onChange={e=>set('hours',e.target.value)}/></Field>}{type!=='lump'&&<Field label="Hourly Rate (£)"><Inp type="number" step="1" min="0" value={form.rate} onChange={e=>set('rate',e.target.value)}/></Field>}{type==='lump'&&<Field label="Amount (£)"><Inp type="number" step="0.01" min="0" placeholder="500.00" value={form.amount} onChange={e=>set('amount',e.target.value)}/></Field>}<Field label="Status"><Sel value={form.status} onChange={e=>set('status',e.target.value)}><option value="Pending">Pending</option><option value="Paid">Paid</option></Sel></Field>{form.status==='Paid'&&onAddInvoice&&(<label style={{display:'flex',alignItems:'center',gap:10,fontSize:13,color:T.textMuted,padding:'10px 14px',background:T.lumpGreen+'10',borderRadius:12,border:'1px solid '+T.lumpGreen+'33',marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={createInv} onChange={e=>setCreateInv(e.target.checked)} style={{accentColor:T.lumpGreen,width:17,height:17}}/><span><strong style={{color:T.lumpGreen}}>Create invoice now</strong><span style={{display:'block',fontSize:11,marginTop:2}}>Auto-generates a paid invoice for HMRC records</span></span></label>)}{gross>0&&(<Card style={{marginTop:6,marginBottom:16,border:`1px solid ${tc}44`}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.textMuted}}>{type==='timed'?`${timedH().toFixed(2)}h @ £${form.rate}/hr`:type==='manual'?`${form.hours}h @ £${form.rate}/hr`:'Lump sum'}</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(gross)}</span></div><div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}><span style={{fontSize:13,color:T.textMuted}}>Tax Stash (20%)</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.danger}}>{fmt(tax)}</span></div><Hr/><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700}}>Take home</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:tc}}>{fmt(net)}</span></div></Card>)}<Btn full onClick={handleAdd} disabled={gross<=0} color={flash?T.lumpGreen:tc}>{flash?<><I n="check" sz={17} c={T.bg}/> Saved!</>:'Add Entry'}</Btn></Page>);}
+// Picks Google Calendar events in a date range and turns them into ready-to-save timed
+// entries (start/end from the event, description from its title). Used by AddView and
+// the invoice maker's quick-add panel — both just get back entry objects to save.
+function CalendarEventPicker({rate,onImport,onClose}){
+  const[from,setFrom]=useState(today());
+  const[to,setTo]=useState(today());
+  const[events,setEvents]=useState(null);
+  const[selected,setSelected]=useState({});
+  const[loading,setLoading]=useState(false);
+  const[err,setErr]=useState('');
+  const loadEvents=async()=>{
+    setLoading(true);setErr('');setEvents(null);
+    try{
+      const timeMin=new Date(from+'T00:00:00').toISOString();
+      const timeMax=new Date(to+'T23:59:59').toISOString();
+      const res=await fetch(`${PROXY_URL}/google/calendar/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`);
+      const data=await res.json();
+      if(data.error)throw new Error(data.error);
+      setEvents(data.events||[]);
+    }catch(e){setErr(e.message||'Could not load calendar events');}
+    finally{setLoading(false);}
+  };
+  const toggle=id=>setSelected(s=>({...s,[id]:!s[id]}));
+  const doImport=()=>{
+    const picked=(events||[]).filter(ev=>selected[ev.id]&&!ev.allDay);
+    const entries=picked.map(ev=>{
+      const start=new Date(ev.startISO),end=new Date(ev.endISO||ev.startISO);
+      const startTime=start.toTimeString().slice(0,5),endTime=end.toTimeString().slice(0,5);
+      const hours=Math.max(0,(end-start)/3600000);
+      const gross=hours*(parseFloat(rate)||0),tax=gross*TAX,net=gross-tax;
+      return{id:mkId(),type:'timed',date:start.toISOString().slice(0,10),client:'',description:ev.title,
+        rate:parseFloat(rate)||0,hours,startTime,endTime,subtotal:gross,tax,net,status:'Pending'};
+    });
+    onImport(entries);
+    onClose();
+  };
+  return(<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:260,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:'20px 20px 0 0',padding:'20px 18px 26px',width:'100%',maxWidth:480,maxHeight:'80vh',overflowY:'auto'}}>
+      <div style={{fontWeight:700,fontSize:16,marginBottom:12}}>Select calendar events</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+        <Field label="From"><Inp type="date" value={from} onChange={e=>setFrom(e.target.value)}/></Field>
+        <Field label="To"><Inp type="date" value={to} onChange={e=>setTo(e.target.value)}/></Field>
+      </div>
+      <Btn full outline onClick={loadEvents} disabled={loading} style={{marginBottom:12}}>{loading?'Loading…':'Load events'}</Btn>
+      {err&&<div style={{color:T.danger,fontSize:12,marginBottom:10}}>{err}</div>}
+      {events&&events.length===0&&<div style={{textAlign:'center',color:T.textMuted,fontSize:13,padding:'10px 0'}}>No events in that range.</div>}
+      {events&&events.map(ev=>(
+        <button key={ev.id} disabled={ev.allDay} onClick={()=>toggle(ev.id)} style={{width:'100%',textAlign:'left',background:selected[ev.id]?T.accent+'12':T.bg,border:`1.5px solid ${selected[ev.id]?T.accent:T.border}`,borderRadius:12,padding:'10px 12px',marginBottom:7,opacity:ev.allDay?.5:1,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.title}</div>
+            <div style={{fontSize:11,color:T.textMuted}}>{ev.allDay?'All-day (skipped — no start/end time)':new Date(ev.startISO).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+          </div>
+          {!ev.allDay&&<div style={{width:20,height:20,borderRadius:6,background:selected[ev.id]?T.accent:'transparent',border:`2px solid ${selected[ev.id]?T.accent:T.border}`,flexShrink:0}}/>}
+        </button>
+      ))}
+      <div style={{display:'flex',gap:8,marginTop:14}}>
+        <Btn outline color={T.textMuted} onClick={onClose} style={{flex:1}}>Cancel</Btn>
+        <Btn color={T.lumpGreen} onClick={doImport} disabled={!Object.values(selected).some(Boolean)} style={{flex:2}}>Add selected as entries</Btn>
+      </div>
+    </div>
+  </div>);
+}
+function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[showCalPicker,setShowCalPicker]=useState(false);const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[createInv,setCreateInv]=useState(true);const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*TAX,net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null;if(form.status==='Paid'&&createInv&&onAddInvoice){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');const invNum='INV-'+yr+'-'+num;const inv={invoiceNum:invNum,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};onAddInvoice(inv);invId=invNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div>
+<button onClick={()=>setShowCalPicker(true)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginBottom:16,display:'flex',alignItems:'center',gap:5}}><I n="clock" sz={13} c={T.accent}/> Select calendar events instead</button>
+{showCalPicker&&<CalendarEventPicker rate={settings.defaultRate||35} onClose={()=>setShowCalPicker(false)} onImport={entries=>entries.forEach(e=>onAdd(e))}/>}
+<Field label="Date"><Inp type="date" value={form.date} onChange={e=>set('date',e.target.value)}/></Field><Field label="Client"><Inp placeholder="Client name" value={form.client} onChange={e=>set('client',e.target.value)}/></Field><Field label="Description"><Inp placeholder="What did you do?" value={form.description} onChange={e=>set('description',e.target.value)}/></Field>{type==='timed'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}><Field label="Start"><Inp type="time" value={form.startTime} onChange={e=>set('startTime',e.target.value)}/></Field><Field label="End"><Inp type="time" value={form.endTime} onChange={e=>set('endTime',e.target.value)}/></Field></div>}{type==='manual'&&<Field label="Hours"><Inp type="number" step="0.5" min="0" placeholder="2.5" value={form.hours} onChange={e=>set('hours',e.target.value)}/></Field>}{type!=='lump'&&<Field label="Hourly Rate (£)"><Inp type="number" step="1" min="0" value={form.rate} onChange={e=>set('rate',e.target.value)}/></Field>}{type==='lump'&&<Field label="Amount (£)"><Inp type="number" step="0.01" min="0" placeholder="500.00" value={form.amount} onChange={e=>set('amount',e.target.value)}/></Field>}<Field label="Status"><Sel value={form.status} onChange={e=>set('status',e.target.value)}><option value="Pending">Pending</option><option value="Paid">Paid</option></Sel></Field>{form.status==='Paid'&&onAddInvoice&&(<label style={{display:'flex',alignItems:'center',gap:10,fontSize:13,color:T.textMuted,padding:'10px 14px',background:T.lumpGreen+'10',borderRadius:12,border:'1px solid '+T.lumpGreen+'33',marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={createInv} onChange={e=>setCreateInv(e.target.checked)} style={{accentColor:T.lumpGreen,width:17,height:17}}/><span><strong style={{color:T.lumpGreen}}>Create invoice now</strong><span style={{display:'block',fontSize:11,marginTop:2}}>Auto-generates a paid invoice for HMRC records</span></span></label>)}{gross>0&&(<Card style={{marginTop:6,marginBottom:16,border:`1px solid ${tc}44`}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.textMuted}}>{type==='timed'?`${timedH().toFixed(2)}h @ £${form.rate}/hr`:type==='manual'?`${form.hours}h @ £${form.rate}/hr`:'Lump sum'}</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(gross)}</span></div><div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}><span style={{fontSize:13,color:T.textMuted}}>Tax Stash (20%)</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.danger}}>{fmt(tax)}</span></div><Hr/><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700}}>Take home</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:tc}}>{fmt(net)}</span></div></Card>)}<Btn full onClick={handleAdd} disabled={gross<=0} color={flash?T.lumpGreen:tc}>{flash?<><I n="check" sz={17} c={T.bg}/> Saved!</>:'Add Entry'}</Btn></Page>);}
 
 // ── LOG ──────────────────────────────────────────────────────────────────────
 function LogView({entries,invoices=[],onDelete,onToggleStatus,onToggleVoid,onAdd}){const[confId,setConfId]=useState(null);const[filter,setFilter]=useState('all');const invoicedMap={};invoices.forEach(inv=>(inv.entryIds||[]).forEach(eid=>{if(!invoicedMap[eid])invoicedMap[eid]=inv.invoiceNum||'INV';}));const getInvNum=eid=>invoicedMap[eid]||null;const[logAgainFlash,setLogAgainFlash]=useState(null);useEffect(()=>{if(confId){const t=setTimeout(()=>setConfId(null),3000);return()=>clearTimeout(t);}},[confId]);const filtered=filter==='all'?entries:filter==='uninvoiced'?entries.filter(e=>!e.invoiceId&&!invoicedMap[e.id]):entries.filter(e=>(e.status||'Pending')===filter);const tot=filtered.reduce((a,e)=>({g:a.g+(e.subtotal||0),n:a.n+(e.net||0)}),{g:0,n:0});const handleLogAgain=onAdd?e=>{onAdd({type:e.type==='timed'?'lump':e.type,date:today(),client:e.client||'',description:e.description||'',rate:e.rate,hours:e.type==='timed'?null:e.hours,startTime:null,endTime:null,subtotal:e.subtotal,tax:e.tax,net:e.net,status:'Pending'});setLogAgainFlash(e.id);setTimeout(()=>setLogAgainFlash(null),1600);}:null;return(<Page><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,marginBottom:4}}>Entry Log</div><div style={{fontSize:13,color:T.textMuted,marginBottom:14}}>{filtered.length} entries · {fmt(tot.g)} gross · {fmt(tot.n)} take home</div>{logAgainFlash&&<div style={{background:T.lumpGreen+'18',border:`1px solid ${T.lumpGreen}44`,borderRadius:10,padding:'9px 14px',marginBottom:10,fontSize:12,color:T.lumpGreen,fontWeight:700,display:'flex',alignItems:'center',gap:6}}><I n="check" sz={14} c={T.lumpGreen}/>Logged again — dated today, status Pending</div>}<div style={{display:'flex',gap:8,marginBottom:16}}>{[['all','All'],['uninvoiced','Uninvoiced'],['Pending','Pending'],['Paid','Paid']].map(([v,l])=>(<button key={v} onClick={()=>setFilter(v)} style={{background:filter===v?T.accent+'22':T.surface,border:`1.5px solid ${filter===v?T.accent:T.border}`,borderRadius:10,padding:'6px 14px',fontSize:12,fontWeight:700,color:filter===v?T.accent:T.textMuted}}>{l}</button>))}</div>{filtered.length===0?<div style={{textAlign:'center',padding:'60px 20px',color:T.textMuted}}>No entries</div>:filtered.map(e=><EntryRow key={e.id} e={e} onDelete={onDelete} onToggleStatus={onToggleStatus} onToggleVoid={onToggleVoid} confId={confId} setConfId={setConfId} onLogAgain={handleLogAgain} invoiceNum={getInvNum(e.id)}/>)}</Page>);}
@@ -855,7 +920,7 @@ const sc=(k,v)=>setClient(c=>({...c,[k]:v}));const pickClient=c=>{setClient({nam
 const[chaseOpen,setChaseOpen]=useState(null);const[chaseSending,setChaseSending]=useState(null);const[chaseResult,setChaseResult]=useState({});
 // Inline quick-add: log a new day (timed/manual/lump) straight into the invoice being
 // built, without leaving this screen — reuses the exact gross/tax/net formula from AddView.
-const[quickType,setQuickType]=useState('timed');const[quickOpen,setQuickOpen]=useState(false);
+const[quickType,setQuickType]=useState('timed');const[quickOpen,setQuickOpen]=useState(false);const[showCalPicker,setShowCalPicker]=useState(false);
 const[quickForm,setQuickForm]=useState({date:today(),description:'',startTime:'',endTime:'',hours:'',rate:settings.defaultRate||35,amount:''});
 const qf=(k,v)=>setQuickForm(f=>({...f,[k]:v}));
 const quickTimedH=()=>{if(!quickForm.startTime||!quickForm.endTime)return 0;const[sh,sm]=quickForm.startTime.split(':').map(Number);const[eh,em]=quickForm.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};
@@ -961,6 +1026,8 @@ if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});s
       <button key={v} onClick={()=>setQuickType(v)} style={{background:quickType===v?c+'22':T.bg,border:`1.5px solid ${quickType===v?c:T.border}`,borderRadius:9,padding:'7px 4px',fontSize:11,fontWeight:700,color:quickType===v?c:T.textMuted}}>{l}</button>
     ))}
   </div>
+  <button onClick={()=>setShowCalPicker(true)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginBottom:10,display:'flex',alignItems:'center',gap:5}}><I n="clock" sz={13} c={T.accent}/> Or select calendar events</button>
+  {showCalPicker&&<CalendarEventPicker rate={settings.defaultRate||35} onClose={()=>setShowCalPicker(false)} onImport={entries=>{entries.forEach(e=>{onAddEntry(e);setSelE(s=>({...s,[e.id]:true}));});}}/>}
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
     <Field label="Date"><Inp type="date" value={quickForm.date} onChange={e=>qf('date',e.target.value)}/></Field>
     <Field label="Description"><Inp value={quickForm.description} onChange={e=>qf('description',e.target.value)}/></Field>
@@ -2251,6 +2318,9 @@ const[confClientId,setConfClientId]=useState(null);
 const importFileRef=useRef();
 const bankFileRef=useRef();
 const[showCatchup,setShowCatchup]=useState(false);
+const[googleStatus,setGoogleStatus]=useState(null);
+useEffect(()=>{fetch(PROXY_URL+'/google/status').then(r=>r.json()).then(setGoogleStatus).catch(()=>setGoogleStatus({ok:false}));},[]);
+const disconnectGoogle=()=>{fetch(PROXY_URL+'/google/disconnect',{method:'POST'}).then(()=>setGoogleStatus({ok:false}));};
 const setCF=(k,v)=>setClientForm(f=>({...f,[k]:v}));
 const handleAddClient=()=>{if(!clientForm.name)return;onAddClient({name:clientForm.name,email:clientForm.email||''});setClientForm({name:'',email:''});};
 const copyCode=()=>{navigator.clipboard.writeText(GAS).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2200);});};
@@ -2310,6 +2380,19 @@ return(<Page>
       <pre style={{fontSize:9,color:T.textFaint,lineHeight:1.6,maxHeight:220,overflowY:'auto'}}>{GAS}</pre>
     </div>
   </div>}
+</SettingsSection>
+
+<SettingsSection title="Google Calendar">
+  <div style={{fontSize:13,color:T.textFaint,marginBottom:14}}>Connect so you can turn calendar events into timed log entries from Add Entry or the invoice maker.</div>
+  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+    <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:99,background:T.bg,border:`1px solid ${T.border}`}}>
+      <div style={{width:6,height:6,borderRadius:'50%',background:googleStatus?.ok?T.lumpGreen:T.textFaint}}/>
+      <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10,letterSpacing:'.06em',color:T.textMuted}}>{googleStatus===null?'CHECKING…':googleStatus.ok?'CONNECTED':'NOT CONNECTED'}</span>
+    </div>
+  </div>
+  {googleStatus?.ok
+    ?<button onClick={disconnectGoogle} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.danger,fontWeight:600,fontSize:13}}>Disconnect</button>
+    :<button onClick={()=>{window.location.href=PROXY_URL+'/google/authorize';}} style={{height:40,padding:'0 18px',background:T.accent,border:'none',borderRadius:10,color:T.bg,fontWeight:700,fontSize:13}}>Connect Google Calendar</button>}
 </SettingsSection>
 
 <SettingsSection title="Clients">
@@ -2805,6 +2888,18 @@ useEffect(()=>{
 },[loaded]);
 
 useEffect(()=>{if(loaded)checkStarlingStatus();},[loaded]);
+
+// Google Calendar OAuth lands back here via a full-page redirect (?googleCalendar=connected|error)
+useEffect(()=>{
+  const params=new URLSearchParams(window.location.search);
+  const result=params.get('googleCalendar');
+  if(!result)return;
+  if(result==='connected')alert('Google Calendar connected!');
+  else if(result==='error')alert('Could not connect Google Calendar — please try again.');
+  params.delete('googleCalendar');
+  const clean=window.location.pathname+(params.toString()?'?'+params.toString():'');
+  window.history.replaceState({},'',clean);
+},[]);
 
 // Keep bank income rows and invoices reconciled: whenever either list changes, try to
 // auto-match any still-unreviewed bank income row against any still-unmatched invoice.

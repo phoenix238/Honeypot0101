@@ -7,11 +7,20 @@
  *   POST /sync                     → push synced data to KV (body: {key, data})
  *   GET  /starling/status          → check the Starling connection is configured + reachable
  *   GET  /starling/transactions?since=YYYY-MM-DD  → normalized bank feed items since a date
+ *   GET  /google/authorize         → redirects to Google's OAuth consent screen
+ *   GET  /google/callback          → exchanges the auth code, stores the refresh token, redirects home
+ *   GET  /google/status            → whether a Google Calendar connection is stored
+ *   POST /google/disconnect        → clears the stored Google refresh token
+ *   GET  /google/calendar/events?timeMin=&timeMax=  → normalized calendar events in a range
  *
  * Secrets:
- *   ANTHROPIC_KEY   — set via: wrangler secret put ANTHROPIC_KEY
- *   STARLING_TOKEN  — set via: wrangler secret put STARLING_TOKEN
- *                     (a Starling Personal Access Token with transactions:read + accounts:read)
+ *   ANTHROPIC_KEY         — set via: wrangler secret put ANTHROPIC_KEY
+ *   STARLING_TOKEN        — set via: wrangler secret put STARLING_TOKEN
+ *                           (a Starling Personal Access Token with transactions:read + accounts:read)
+ *   GOOGLE_CLIENT_ID      — set via: wrangler secret put GOOGLE_CLIENT_ID
+ *   GOOGLE_CLIENT_SECRET  — set via: wrangler secret put GOOGLE_CLIENT_SECRET
+ *                           (OAuth Web application client; redirect URI must be
+ *                           https://<this-worker>/google/callback)
  *
  * KV namespace:
  *   HONEY_SYNC      — bound in wrangler.toml; create with:
@@ -50,6 +59,35 @@ async function getStarlingAccount(env) {
   return result;
 }
 
+// ── Google Calendar OAuth ──────────────────────────────────────────────────────
+const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+
+function googleRedirectUri(request) {
+  return `${new URL(request.url).origin}/google/callback`;
+}
+
+async function getGoogleAccessToken(env) {
+  if (!env.HONEY_SYNC) throw new Error('HONEY_SYNC KV namespace not bound — cannot store Google tokens');
+  const refreshToken = await env.HONEY_SYNC.get('google-refresh-token');
+  if (!refreshToken) throw new Error('Google Calendar is not connected yet');
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Google token refresh failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  return data.access_token;
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
@@ -65,11 +103,15 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    if (allowed !== '*' && origin !== allowed) {
+    const url = new URL(request.url);
+
+    // /google/authorize and /google/callback are hit by a top-level browser navigation
+    // (the user's browser going to/from Google's consent screen), not a fetch() from the
+    // app's own JS — there's no Origin header to check on those, so they're exempt.
+    const isGoogleOAuthHop = url.pathname === '/google/authorize' || url.pathname === '/google/callback';
+    if (!isGoogleOAuthHop && allowed !== '*' && origin !== allowed) {
       return new Response('Forbidden', { status: 403 });
     }
-
-    const url = new URL(request.url);
 
     // ── Sync routes ──────────────────────────────────────────────────────────
 
@@ -186,6 +228,118 @@ export default {
           }))
           .filter(t => t.date && t.amount > 0);
         return new Response(JSON.stringify({ accountLabel: account.name, transactions }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+    }
+
+    // ── Google Calendar routes ──────────────────────────────────────────────────
+
+    if (url.pathname === '/google/authorize') {
+      if (!env.GOOGLE_CLIENT_ID) {
+        return new Response('GOOGLE_CLIENT_ID secret not set on Worker', { status: 503 });
+      }
+      const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      authUrl.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
+      authUrl.searchParams.set('redirect_uri', googleRedirectUri(request));
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', GOOGLE_SCOPE);
+      authUrl.searchParams.set('access_type', 'offline');
+      authUrl.searchParams.set('prompt', 'consent');
+      return new Response(null, { status: 302, headers: { Location: authUrl.toString() } });
+    }
+
+    if (url.pathname === '/google/callback') {
+      const code = url.searchParams.get('code');
+      const appUrl = allowed !== '*' ? allowed : '/';
+      if (!code) {
+        return new Response(null, { status: 302, headers: { Location: `${appUrl}?googleCalendar=error` } });
+      }
+      try {
+        if (!env.HONEY_SYNC) throw new Error('HONEY_SYNC KV namespace not bound');
+        const res = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            code,
+            client_id: env.GOOGLE_CLIENT_ID,
+            client_secret: env.GOOGLE_CLIENT_SECRET,
+            redirect_uri: googleRedirectUri(request),
+            grant_type: 'authorization_code',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.refresh_token) {
+          // Google only issues a refresh_token on the FIRST consent for a given account;
+          // if the user had already granted access before without revoking it, prompt=consent
+          // above should still force a fresh one — but surface a clear error if not.
+          throw new Error(data.error_description || data.error || 'No refresh token returned');
+        }
+        await env.HONEY_SYNC.put('google-refresh-token', data.refresh_token);
+        return new Response(null, { status: 302, headers: { Location: `${appUrl}?googleCalendar=connected` } });
+      } catch (err) {
+        return new Response(null, { status: 302, headers: { Location: `${appUrl}?googleCalendar=error` } });
+      }
+    }
+
+    if (url.pathname === '/google/status') {
+      if (request.method !== 'GET') {
+        return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+      }
+      const connected = !!(env.HONEY_SYNC && await env.HONEY_SYNC.get('google-refresh-token'));
+      return new Response(JSON.stringify({ ok: connected }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    if (url.pathname === '/google/disconnect') {
+      if (request.method !== 'POST') {
+        return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+      }
+      if (env.HONEY_SYNC) await env.HONEY_SYNC.delete('google-refresh-token');
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    if (url.pathname === '/google/calendar/events') {
+      if (request.method !== 'GET') {
+        return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+      }
+      const timeMin = url.searchParams.get('timeMin');
+      const timeMax = url.searchParams.get('timeMax');
+      if (!timeMin || !timeMax) {
+        return new Response(JSON.stringify({ error: 'timeMin and timeMax query params are required (ISO datetimes)' }), {
+          status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+      try {
+        const accessToken = await getGoogleAccessToken(env);
+        const eventsUrl = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
+        eventsUrl.searchParams.set('timeMin', timeMin);
+        eventsUrl.searchParams.set('timeMax', timeMax);
+        eventsUrl.searchParams.set('singleEvents', 'true');
+        eventsUrl.searchParams.set('orderBy', 'startTime');
+        const res = await fetch(eventsUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`Calendar API returned ${res.status}: ${text.slice(0, 200)}`);
+        }
+        const data = await res.json();
+        const events = (data.items || [])
+          .filter(ev => ev.status !== 'cancelled' && ev.start)
+          .map(ev => ({
+            id: ev.id,
+            title: ev.summary || 'Untitled event',
+            startISO: ev.start.dateTime || ev.start.date,
+            endISO: ev.end?.dateTime || ev.end?.date,
+            allDay: !ev.start.dateTime,
+          }));
+        return new Response(JSON.stringify({ events }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
         });
       } catch (err) {
