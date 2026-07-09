@@ -3246,8 +3246,10 @@ const checkStarlingStatus=async()=>{
 const syncStarling=async()=>{
   setStarlingSyncing(true);
   try{
-    const since=settings.starlingLastSync||TAX_YEAR_START;
-    const res=await fetch(`${PROXY_URL}/starling/transactions?since=${since}`);
+    // Always pull the whole current UK tax year, not just since the last sync —
+    // addBankTxns already dedupes against what's stored locally, so this is safe
+    // to re-run and guarantees a resync never drops earlier-in-year transactions.
+    const res=await fetch(`${PROXY_URL}/starling/transactions?since=${TAX_YEAR_START}`);
     const data=await res.json();
     if(data.error)throw new Error(data.error);
     addBankTxns(data.transactions||[],'starling');
