@@ -175,7 +175,8 @@ const buildYearWorkbook=async({year,period,biz,summary,income,expenses,catTotals
   const incHead=['Date','Client','Invoice','Description','Hours','Rate','Gross','Status'];
   const iRows=[incHead.map(h=>xCell(h,{bold:true,color:'FFFFFF',fill:XW.ink,align:h==='Gross'||h==='Rate'||h==='Hours'?'right':'left'}))];
   income.forEach((e,i)=>{const f=i%2?XW.band:XW.paper;iRows.push([xCell(e.date,{fill:f}),xCell(e.client||'',{fill:f}),xCell(e.invoiceRef||'',{fill:f}),xCell(e.description||'',{fill:f,wrap:true}),xCell(e.hours||0,{fill:f,money:false,numFmt:'0.00'}),xCell(e.rate||0,{fill:f}),xCell(e.gross||0,{fill:f,bold:true}),xCell(e.status||'',{fill:f})]);});
-  iRows.push([xCell('TOTAL',{bold:true,fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell(summary.gross,{bold:true,fill:XW.goldSoft,color:XW.ink}),xCell('',{fill:XW.goldSoft})]);
+  const loggedTotal=income.reduce((a,e)=>a+(e.gross||0),0);
+  iRows.push([xCell('TOTAL LOGGED (may include un-invoiced work)',{bold:true,fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell('',{fill:XW.goldSoft}),xCell(loggedTotal,{bold:true,fill:XW.goldSoft,color:XW.ink}),xCell('',{fill:XW.goldSoft})]);
   const ws2=XLSX.utils.aoa_to_sheet(iRows);
   ws2['!cols']=[{wch:12},{wch:20},{wch:12},{wch:30},{wch:8},{wch:9},{wch:13},{wch:11}];
   ws2['!freeze']={xSplit:0,ySplit:1};ws2['!autofilter']={ref:`A1:H${income.length+1}`};
@@ -267,7 +268,11 @@ const[homeMenu,setHomeMenu]=useState(false);
 const now=new Date();
 const today0=new Date();today0.setHours(0,0,0,0);
 const activeE=entries.filter(e=>e.status!=='Void');
-const allG=activeE.reduce((a,e)=>a+(e.subtotal||0),0);const paidInvIds=new Set([...invoices.filter(i=>i.status==='paid').map(i=>i.id||''),...invoices.filter(i=>i.status==='paid').map(i=>i.invoiceNum||'')]);const confirmedG=activeE.filter(e=>e.invoiceId&&paidInvIds.has(e.invoiceId)).reduce((a,e)=>a+(e.subtotal||0),0);
+// Gross Earned is invoice-based: only work that's actually been invoiced counts as income.
+const liveInvoices=invoices.filter(i=>i.status!=='void');
+const allG=liveInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
+const confirmedG=liveInvoices.filter(i=>i.status==='paid').reduce((a,i)=>a+(i.subtotal||0),0);
+const unbilledG=activeE.filter(e=>!e.invoiceId).reduce((a,e)=>a+(e.subtotal||0),0);
 const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void').reduce((a,r)=>a+(r.amount||0),0);
 const taxableProfit=Math.max(0,allG-bizCosts);
 const taxReserve=taxableProfit*TAX;
@@ -345,6 +350,7 @@ return(<Page>
     {entries.filter(e=>e.status==='Void').length>0&&<span style={{color:T.textFaint}}>{entries.filter(e=>e.status==='Void').length} voided</span>}
     <span style={{color:T.pending}}>{unpaid.length} pending {fmt(unpaidAmt)}</span>
   </div>
+  {unbilledG>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{fmt(unbilledG)} logged but not yet invoiced — doesn't count toward Gross Earned until it's on an invoice</div>}
   <button onClick={()=>setShowTaxGuide(s=>!s)} style={{background:'none',border:'none',color:T.accent,fontSize:11,fontWeight:700,padding:0,marginTop:10,display:'flex',alignItems:'center',gap:4}}>
     <I n="bulb" sz={11} c={T.accent}/> {showTaxGuide?'Hide':'What is the Tax Stash?'}
   </button>
@@ -1055,7 +1061,9 @@ const activeE=entries.filter(e=>e.status!=='Void'&&inRange(e.date));
 const bizExp=receipts.filter(r=>r.category==='business'&&r.status!=='void'&&inRange(r.date));
 const pending=receipts.filter(r=>r.category==='reimbursable'&&r.status==='pending'&&inRange(r.date));
 const reimbursed=receipts.filter(r=>r.category==='reimbursable'&&r.status==='reimbursed'&&inRange(r.date));
-const totG=activeE.reduce((a,e)=>a+(e.subtotal||0),0);
+// Gross income is invoice-based, matching Home — only invoiced work counts.
+const liveInvoices=invoices.filter(i=>i.status!=='void'&&inRange((i.date||'').slice(0,10)));
+const totG=liveInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
 const totBiz=bizExp.reduce((a,r)=>a+(r.amount||0),0);
 const taxableP=Math.max(0,totG-totBiz);
 const totTax=taxableP*TAX;
@@ -1063,9 +1071,9 @@ const totN=taxableP-totTax;
 const totPend=pending.reduce((a,r)=>a+(r.amount||0),0);
 const totPaid=reimbursed.reduce((a,r)=>a+(r.amount||0),0);
 
-// Income by client
+// Income by client (from invoices — matches the invoice-based Gross Income above)
 const byClient={};
-activeE.forEach(e=>{const k=e.client||'Unspecified';byClient[k]=(byClient[k]||0)+(e.subtotal||0);});
+liveInvoices.forEach(i=>{const k=i.client||'Unspecified';byClient[k]=(byClient[k]||0)+(i.subtotal||0);});
 const clientRows=Object.entries(byClient).sort((a,b)=>b[1]-a[1]).slice(0,8);
 
 // Expenses by subcategory
@@ -1076,7 +1084,7 @@ const maxCat=catRows[0]?catRows[0][1]:1;
 
 // Monthly P&L
 const months={};
-activeE.forEach(e=>{const k=(e.date||'').substring(0,7);if(k){months[k]=months[k]||{income:0,expenses:0};months[k].income+=(e.subtotal||0);}});
+liveInvoices.forEach(i=>{const k=(i.date||'').substring(0,7);if(k){months[k]=months[k]||{income:0,expenses:0};months[k].income+=(i.subtotal||0);}});
 bizExp.forEach(r=>{const k=(r.date||'').substring(0,7);if(k){months[k]=months[k]||{income:0,expenses:0};months[k].expenses+=(r.amount||0);}});
 const monthRows=Object.entries(months).sort().map(([k,v])=>({month:k,income:v.income,expenses:v.expenses,profit:v.income-v.expenses}));
 const maxMonth=monthRows.reduce((m,r)=>Math.max(m,r.income,r.expenses),0)||1;
@@ -1090,7 +1098,7 @@ const rangeLabel=()=>{
   return'';
 };
 
-const exportIncome=()=>{const rows=[['ID','Invoice Ref','Date','Client','Description','Type','Start','End','Hours','Rate','Gross','Tax Stash','Take Home','Status']];activeE.forEach(e=>rows.push([e.id||'',e.invoiceRef||'',e.date,e.client||'',e.description||'',e.type,e.startTime||'',e.endTime||'',(e.hours||0).toFixed(2),e.rate||'',(e.subtotal||0).toFixed(2),(e.tax||0).toFixed(2),(e.net||0).toFixed(2),e.status||'Pending']));rows.push([],[' ','','','','','','','','','TOTAL',totG.toFixed(2),(totG*TAX).toFixed(2),(totG-totG*TAX).toFixed(2),'']);dlCSV(rows,`income_${rangeLabel().replace(/\s/g,'_')}_${today()}.csv`);};
+const exportIncome=()=>{const rows=[['ID','Invoice Ref','Date','Client','Description','Type','Start','End','Hours','Rate','Gross','Tax Stash','Take Home','Status']];activeE.forEach(e=>rows.push([e.id||'',e.invoiceRef||'',e.date,e.client||'',e.description||'',e.type,e.startTime||'',e.endTime||'',(e.hours||0).toFixed(2),e.rate||'',(e.subtotal||0).toFixed(2),(e.tax||0).toFixed(2),(e.net||0).toFixed(2),e.status||'Pending']));const loggedTot=activeE.reduce((a,e)=>a+(e.subtotal||0),0);rows.push([],[' ','','','','','','','','','TOTAL LOGGED (may include un-invoiced work)',loggedTot.toFixed(2),(loggedTot*TAX).toFixed(2),(loggedTot-loggedTot*TAX).toFixed(2),'']);dlCSV(rows,`income_${rangeLabel().replace(/\s/g,'_')}_${today()}.csv`);};
 
 const exportExpenses=()=>{const rows=[['ID','Date','Description','Type','Category','Amount','Status','Paid By','Owed By','Drive Link']];const allInRange=receipts.filter(r=>inRange(r.date));allInRange.forEach(r=>rows.push([r.id||'',r.date,r.description||'',r.category,r.subcategory?catLabel(r.subcategory):'',(r.amount||0).toFixed(2),r.status||'pending',r.paidBy||'',r.owedBy||'',r.driveUrl||'']));rows.push([],[' ','Business expenses','','',totBiz.toFixed(2)],[' ','Still owed to you','','',totPend.toFixed(2)],[' ','Reimbursed','','',totPaid.toFixed(2)]);dlCSV(rows,`expenses_${rangeLabel().replace(/\s/g,'_')}_${today()}.csv`);};
 
@@ -1100,8 +1108,9 @@ const exportTaxYear=()=>{
   const year=range==='lastTax'?currentTaxYearStart-1:currentTaxYearStart;
   const b=taxYearBounds(year);
   const tyEntries=entries.filter(e=>e.status!=='Void'&&e.date>=b.from&&e.date<=b.to);
+  const tyInvoices=invoices.filter(i=>i.status!=='void'&&(i.date||'').slice(0,10)>=b.from&&(i.date||'').slice(0,10)<=b.to);
   const tyExp=receipts.filter(r=>r.category==='business'&&r.status!=='void'&&r.date>=b.from&&r.date<=b.to);
-  const ge=tyEntries.reduce((a,e)=>a+(e.subtotal||0),0);
+  const ge=tyInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
   const be=tyExp.reduce((a,r)=>a+(r.amount||0),0);
   const profit=Math.max(0,ge-be);
   const rows=[
@@ -1109,12 +1118,16 @@ const exportTaxYear=()=>{
     [`Period: ${fmtD(b.from)} to ${fmtD(b.to)}`],
     [],
     ['SUMMARY'],
-    ['Gross Income',ge.toFixed(2)],
+    ['Gross Income (invoiced)',ge.toFixed(2)],
     ['Allowable Business Expenses',be.toFixed(2)],
     ['Taxable Profit',profit.toFixed(2)],
     ['Estimated Tax Stash (20%)',(profit*0.20).toFixed(2)],
     [],
-    ['INCOME'],
+    ['INVOICES'],
+    ['Date','Client','Invoice No','Gross','Status'],
+    ...tyInvoices.map(i=>[(i.date||'').slice(0,10),i.client||'',i.invoiceNum||'',(i.subtotal||0).toFixed(2),i.status||'']),
+    [],
+    ['LOGGED WORK (detail — may include work not yet invoiced)'],
     ['Date','Client','Description','Hours','Rate','Gross','Status'],
     ...tyEntries.map(e=>[e.date,e.client||'',e.description||'',(e.hours||0).toFixed(2),e.rate||'',(e.subtotal||0).toFixed(2),e.status||'']),
     [],
@@ -1136,8 +1149,9 @@ const exportYearWorkbook=async()=>{
     const year=range==='lastTax'?currentTaxYearStart-1:currentTaxYearStart;
     const b=taxYearBounds(year);
     const tyEntries=entries.filter(e=>e.status!=='Void'&&e.date>=b.from&&e.date<=b.to).sort((a,x)=>(a.date||'').localeCompare(x.date||''));
+    const tyInvoices=invoices.filter(i=>i.status!=='void'&&(i.date||'').slice(0,10)>=b.from&&(i.date||'').slice(0,10)<=b.to);
     const tyExp=receipts.filter(r=>r.category==='business'&&r.status!=='void'&&r.date>=b.from&&r.date<=b.to).sort((a,x)=>(a.date||'').localeCompare(x.date||''));
-    const ge=tyEntries.reduce((a,e)=>a+(e.subtotal||0),0);
+    const ge=tyInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
     const be=tyExp.reduce((a,r)=>a+(r.amount||0),0);
     const profit=Math.max(0,ge-be);
     const catTotals=Object.entries(tyExp.reduce((acc,r)=>{const k=catLabel(r.subcategory||'other');acc[k]=(acc[k]||0)+(r.amount||0);return acc;},{})).sort((a,x)=>x[1]-a[1]).map(([k,v])=>[k,v]);
@@ -2586,7 +2600,7 @@ const[clients,setClients]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
-const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0});
+const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
 const[syncStatus,setSyncStatus]=useState('loading');
 const[loaded,setLoaded]=useState(false);
 const[booted,setBooted]=useState(false);
@@ -2629,6 +2643,28 @@ useEffect(()=>{
     setLoaded(true);
   })();
 },[]);
+
+// One-time migration: Gross Earned now sums invoices, not raw entries. Any entry
+// already marked Paid that was never wrapped in an invoice gets a backfill invoice
+// so historic Gross Earned figures don't collapse the moment this ships.
+useEffect(()=>{
+  if(!loaded||settings.migratedInvoiceModel)return;
+  const invoicedEntryIds=new Set(invoices.flatMap(inv=>inv.entryIds||[]));
+  const needsBackfill=entries.filter(e=>e.status==='Paid'&&!e.invoiceId&&!invoicedEntryIds.has(e.id));
+  if(needsBackfill.length){
+    const backfilled=needsBackfill.map(e=>({
+      id:mkId(),invoiceNum:'BF-'+e.id,date:e.createdAt||(e.date?e.date+'T12:00:00.000Z':new Date().toISOString()),
+      client:e.client||'',clientEmail:'',subtotal:e.subtotal||0,incomeTotal:e.subtotal||0,reimbTotal:0,deductTotal:0,
+      deductions:[],dueDate:'',entryIds:[e.id],reimbIds:[],docUrl:null,status:'paid',
+      paidDate:e.createdAt||e.date,backfilled:true
+    }));
+    const invByEntryId={};
+    needsBackfill.forEach((e,i)=>{invByEntryId[e.id]=backfilled[i].id;});
+    setInvoices(p=>[...backfilled,...p]);
+    setEntries(p=>p.map(e=>invByEntryId[e.id]?{...e,invoiceId:invByEntryId[e.id]}:e));
+  }
+  setSettings(s=>({...s,migratedInvoiceModel:true}));
+},[loaded]);
 
 useEffect(()=>{
   if(!loaded)return;
