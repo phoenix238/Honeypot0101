@@ -40,7 +40,37 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:'Geist Mono,monospace'
   <button onclick="checkGate()" style="width:180px;padding:12px;background:#E0A92E;color:#16140F;border:none;border-radius:12px;font-size:15px;font-weight:700;font-family:'Space Grotesk',sans-serif;cursor:pointer;">Enter</button>
   <p id="gateErr" style="color:#B8392F;font-size:13px;margin:0;visibility:hidden;">Incorrect passcode</p>
 </div>
-<div id="root"></div>
+<script>
+// Passcode gate — plain JS, runs immediately (does not wait on React/Babel to load or transpile).
+const GATE_KEY='honey_auth';
+const GATE_HASH='3d73cd5cb74f8ab1d4496133cde249d9825e0f19d0f1a011f46afc287f881299';
+async function checkGate(){
+  const val=document.getElementById('gateInput').value;
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(val));
+  const hash=Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  if(hash===GATE_HASH){
+    localStorage.setItem(GATE_KEY,'1');
+    document.getElementById('gateOverlay').style.display='none';
+  } else {
+    document.getElementById('gateErr').style.visibility='visible';
+    document.getElementById('gateInput').value='';
+    document.getElementById('gateInput').focus();
+  }
+}
+document.getElementById('gateInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkGate();});
+if(!localStorage.getItem(GATE_KEY)){
+  document.getElementById('gateOverlay').style.display='flex';
+  setTimeout(()=>document.getElementById('gateInput').focus(),50);
+} else {
+  document.getElementById('gateOverlay').style.display='none';
+}
+</script>
+<div id="root">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:100vh;color:#8A8576;font-family:'Space Grotesk',sans-serif;font-size:13px;">
+    <div style="width:28px;height:28px;border:2.5px solid #322D23;border-top-color:#E0A92E;border-radius:50%;animation:spin .7s linear infinite;"></div>
+    <span>Loading Honey…</span>
+  </div>
+</div>
 <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
@@ -3361,30 +3391,6 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
 </div>);}
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-
-// Passcode gate
-const GATE_KEY='honey_auth';
-const GATE_HASH='3d73cd5cb74f8ab1d4496133cde249d9825e0f19d0f1a011f46afc287f881299';
-async function checkGate(){
-  const val=document.getElementById('gateInput').value;
-  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(val));
-  const hash=Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  if(hash===GATE_HASH){
-    localStorage.setItem(GATE_KEY,'1');
-    document.getElementById('gateOverlay').style.display='none';
-  } else {
-    document.getElementById('gateErr').style.visibility='visible';
-    document.getElementById('gateInput').value='';
-    document.getElementById('gateInput').focus();
-  }
-}
-document.getElementById('gateInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkGate();});
-if(!localStorage.getItem(GATE_KEY)){
-  document.getElementById('gateOverlay').style.display='flex';
-  setTimeout(()=>document.getElementById('gateInput').focus(),50);
-} else {
-  document.getElementById('gateOverlay').style.display='none';
-}
 </script>
 </body>
 </html>
