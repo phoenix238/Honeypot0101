@@ -219,6 +219,10 @@ export default {
         const data = await res.json();
         const transactions = (data.feedItems || [])
           .filter(item => item.status === 'SETTLED')
+          // Money moved to/from a Starling Space (or a legacy Savings Goal) isn't
+          // real income or spending — it's the same money moving within the same
+          // account — so drop it before it can be miscounted as income.
+          .filter(item => item.source !== 'INTERNAL_TRANSFER')
           .map(item => ({
             feedItemUid: item.feedItemUid,
             date: (item.transactionTime || '').slice(0, 10),

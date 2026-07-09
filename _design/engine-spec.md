@@ -461,7 +461,9 @@ taxStash = profit * 0.20
 - **Starling integration**: real API calls happen server-side in `honey-proxy` (`GET
   /starling/status`, `GET /starling/transactions?since=`), reading a `STARLING_TOKEN` secret
   (`wrangler secret put STARLING_TOKEN`) — the token never reaches the browser, following the
-  same trust model as the existing `ANTHROPIC_KEY`.
+  same trust model as the existing `ANTHROPIC_KEY`. Feed items with `source==='INTERNAL_TRANSFER'`
+  are dropped before normalization — that's Starling's marker for money moving to/from the
+  user's own Spaces/Savings Goals, not real income or spending.
 - **Google Calendar integration**: full OAuth round trip lives in `honey-proxy`
   (`/google/authorize`, `/google/callback`, `/google/status`, `/google/disconnect`,
   `/google/calendar/events`) using `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` secrets and a
