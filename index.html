@@ -2968,6 +2968,18 @@ useEffect(()=>{
   setBankTxns(p=>p.map(t=>txnUpdates[t.id]?{...t,status:'matched',matchedInvoiceId:txnUpdates[t.id].id}:t));
 },[loaded,invoices,bankTxns]);
 
+// Self-healing: if a bank row is marked matched/invoiced but the invoice it points to no
+// longer exists (deleted before this check existed, or by some other path), free it up
+// again instead of leaving it permanently stuck with no way to act on it.
+useEffect(()=>{
+  if(!loaded)return;
+  const invoiceIds=new Set(invoices.map(i=>i.id));
+  const orphaned=bankTxns.filter(t=>(t.status==='matched'||t.status==='invoiced')&&t.matchedInvoiceId&&!invoiceIds.has(t.matchedInvoiceId));
+  if(!orphaned.length)return;
+  const orphanedIds=new Set(orphaned.map(t=>t.id));
+  setBankTxns(p=>p.map(t=>orphanedIds.has(t.id)?{...t,status:'unreviewed',matchedInvoiceId:null}:t));
+},[loaded,invoices,bankTxns]);
+
 useEffect(()=>{
   if(!loaded)return;
   LS.set('mhq-entries',entries);LS.set('mhq-receipts',receipts);LS.set('mhq-invoices',invoices);LS.set('mhq-clients',clients);LS.set('mhq-settings',settings);LS.set('mhq-banktxns',bankTxns);
