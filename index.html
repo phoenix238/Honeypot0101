@@ -2452,9 +2452,9 @@ return(<Page>
 
 // ── GUIDED SETUP ─────────────────────────────────────────────────────────────
 // One clean way in for a new (or re-syncing) user: bank CSV → invoices → receipts → check it over.
-const SETUP_STEPS=['Welcome','Bank statement','Invoices','Receipts','Check it over'];
+const SETUP_STEPS=['Welcome','Connect your bank','Invoices','Receipts','Check it over'];
 const isoDate=d=>d?new Date(d+'T12:00:00').toISOString():new Date().toISOString();
-function SetupView({entries,receipts,invoices,settings,setSettings,onImportBank,bankPending,setBankPending,onConfirmBank,isDupDoc,addE,updE,onToggleStatus,onToggleVoid,addR,updR,delR,addI,updI,go}){
+function SetupView({entries,receipts,invoices,bankTxns=[],settings,setSettings,onImportBank,bankPending,setBankPending,onConfirmBank,isDupDoc,addE,updE,onToggleStatus,onToggleVoid,addR,updR,delR,addI,updI,go,starlingStatus,starlingSyncing,onSyncStarling}){
 const step=Math.min(Math.max(settings.setupStep||0,0),4);
 const setStep=n=>setSettings(s=>({...s,setupStep:n}));
 const finish=()=>{setSettings(s=>({...s,setupDone:true,setupStep:0}));go('home');};
@@ -2549,7 +2549,9 @@ const confirmReceipts=()=>{
 
 // Step 5 — the same figures Home shows, so what's confirmed here is what Home will say
 const activeE=entries.filter(e=>e.status!=='Void');
-const allG=activeE.reduce((a,e)=>a+(e.subtotal||0),0);
+const liveInvoices=invoices.filter(i=>i.status!=='void');
+const allG=liveInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
+const unbilledG=activeE.filter(e=>!e.invoiceId).reduce((a,e)=>a+(e.subtotal||0),0);
 const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void').reduce((a,r)=>a+(r.amount||0),0);
 const taxableProfit=Math.max(0,allG-bizCosts);
 const taxReserve=taxableProfit*TAX;
@@ -2560,7 +2562,7 @@ const liveR=receipts.filter(r=>r.status!=='void');
 const dupReceiptIds=new Set();
 liveR.forEach((e,i)=>{for(let j=i+1;j<liveR.length;j++){const f=liveR[j];if(Math.abs((e.amount||0)-(f.amount||0))<0.02&&datesClose(e.date,f.date)&&(e.description||'').toLowerCase().trim()===(f.description||'').toLowerCase().trim()){dupReceiptIds.add(e.id);dupReceiptIds.add(f.id);}}});
 
-const stepTitle=['Welcome to Honey','Your bank statement','Your invoices','Receipts & reimbursements','Check it over'][step];
+const stepTitle=['Welcome to Honey','Connect your bank','Your invoices','Receipts & reimbursements','Check it over'][step];
 const rowStyle={display:'flex',alignItems:'center',gap:8,padding:'9px 11px',marginBottom:7,borderRadius:10,background:T.bg,border:`1px solid ${T.border}`,flexWrap:'wrap'};
 const miniInp={...iBase,padding:'7px 9px',fontSize:13,width:'auto'};
 const flag=(txt,c)=><span style={{background:c+'18',color:c,border:`1px solid ${c}44`,borderRadius:6,padding:'2px 7px',fontSize:10,fontWeight:700,whiteSpace:'nowrap'}}>{txt}</span>;
@@ -2594,9 +2596,22 @@ return(<Page>
   </div>)}
 
   {step===1&&(<div>
-    <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:14}}>Download a CSV from your bank's website. Credits become income; anything matching an unpaid invoice marks it paid; duplicates are skipped. You approve every line first.</div>
-    {!bankPending&&!bankSummary&&(
-      <Btn full color={T.lumpGreen} onClick={()=>csvRef.current&&csvRef.current.click()}><I n="sheets" sz={16} c={T.bg}/> Choose bank CSV</Btn>
+    <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:14}}>Connect Starling and Honey pulls in this tax year's transactions automatically — payments in become income, and anything matching an unpaid invoice marks it paid. No Starling account? Import a bank CSV instead.</div>
+    <Card style={{marginBottom:14,border:`1px solid ${T.border}`}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted}}>Starling connection</div>
+          <div style={{fontSize:12,color:starlingStatus?.ok?T.lumpGreen:T.textMuted,fontWeight:700}}>{starlingStatus===null?'Not checked yet':starlingStatus.ok?`Connected · ${starlingStatus.accountLabel}`:'Not connected'}</div>
+        </div>
+        <Btn small color={T.lumpGreen} onClick={()=>onSyncStarling().then(()=>setBankSummary({synced:true}))} disabled={starlingSyncing}>{starlingSyncing?'Syncing…':'Sync now'}</Btn>
+      </div>
+    </Card>
+    <button onClick={()=>csvRef.current&&csvRef.current.click()} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginBottom:10}}>Or import a bank CSV instead →</button>
+    {!bankPending&&bankSummary?.synced&&(
+      <Card style={{marginBottom:14,border:`1.5px solid ${T.lumpGreen}55`,background:T.lumpGreen+'0d'}}>
+        <div style={{fontWeight:700,fontSize:14}}>✓ Synced with Starling</div>
+        <div style={{fontSize:12,color:T.textMuted,marginTop:4}}>New transactions are matched against your invoices automatically — check the Bank tab any time to review or match the rest by hand.</div>
+      </Card>
     )}
     <input ref={csvRef} type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f){setBankSummary(null);onImportBank(f);}}}/>
     {bankPending&&(<div style={{marginTop:14}}>
@@ -2607,7 +2622,7 @@ return(<Page>
         <Btn color={T.lumpGreen} onClick={bankConfirm} disabled={!bankPending.some(r=>!r.dup&&r.accept)} style={{flex:2}}>Add to Honey</Btn>
       </div>
     </div>)}
-    {bankSummary&&(<Card style={{marginTop:14,border:`1.5px solid ${T.lumpGreen}55`,background:T.lumpGreen+'0d'}}>
+    {bankSummary&&typeof bankSummary.matched==='number'&&(<Card style={{marginTop:14,border:`1.5px solid ${T.lumpGreen}55`,background:T.lumpGreen+'0d'}}>
       <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>✓ Statement imported</div>
       <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>{bankSummary.matched} invoice{bankSummary.matched===1?'':'s'} marked paid · {bankSummary.added} new income entr{bankSummary.added===1?'y':'ies'} · {fmt(bankSummary.total)} total</div>
       <button onClick={()=>{setBankSummary(null);csvRef.current&&csvRef.current.click();}} style={{...secBtn,marginTop:10}}>Import another statement</button>
@@ -2682,8 +2697,22 @@ return(<Page>
         <div><Lbl>Tax stash</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div></div>
         <div><Lbl>Take home</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.accentBright}}>{fmt(trueNet)}</div></div>
       </div>
-      <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>These are exactly the numbers Home will show. Fix anything below and they update live.</div>
+      {unbilledG>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>{fmt(unbilledG)} logged but not yet invoiced — doesn't count toward Gross Earned until it's on an invoice.</div>}
+      <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>These are exactly the numbers Home will show. Fix anything below and they update live.</div>
     </Card>
+    {(()=>{
+      const matchedCount=liveInvoices.filter(i=>i.matchedBankTxnId).length;
+      const awaitingCount=liveInvoices.filter(i=>!i.matchedBankTxnId&&i.status!=='paid').length;
+      if(!liveInvoices.length&&!bankTxns.length)return null;
+      return(<Card style={{marginBottom:14,border:`1px solid ${T.border}`}}>
+        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Reconciliation</div>
+        <div style={{fontSize:13,lineHeight:1.6}}>
+          {matchedCount>0&&<div><strong style={{color:T.lumpGreen}}>{matchedCount}</strong> invoice{matchedCount===1?'':'s'} auto-matched to a bank payment</div>}
+          {awaitingCount>0&&<div><strong style={{color:T.pending}}>{awaitingCount}</strong> invoice{awaitingCount===1?'':'s'} still awaiting a match — review in the Bank tab any time</div>}
+          {matchedCount===0&&awaitingCount===0&&<div style={{color:T.textMuted}}>Nothing to reconcile yet.</div>}
+        </div>
+      </Card>);
+    })()}
     {[
       {key:'income',label:'Income',count:activeE.length},
       {key:'invoices',label:'Invoices',count:invoices.length},
@@ -3278,7 +3307,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={makeInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
-  {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go}/>}
+  {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
   {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
   </div>
   </div>
