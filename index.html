@@ -2305,7 +2305,7 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 function SettingsRow({label,children}){return(<div style={{display:'grid',gridTemplateColumns:'176px 1fr',gap:16,alignItems:'flex-start',marginBottom:14}}><div style={{fontSize:13,color:T.textMuted,paddingTop:11}}>{label}</div>{children}</div>);}
 function SettingsSection({title,children}){return(<div style={{marginBottom:36}}><Lbl>{title}</Lbl><Hr/><div>{children}</div></div>);}
-function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onImportOld,onExportBackup,onImportBackup,onOpenSetup,onImportBank}){
+function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onClearBankTxns,onImportOld,onExportBackup,onImportBackup,onOpenSetup,onImportBank}){
 const set=(k,v)=>setSettings(s=>({...s,[k]:v}));
 const[showSetup,setShowSetup]=useState(!settings.sheetsUrl);
 const[copied,setCopied]=useState(false);
@@ -2443,6 +2443,7 @@ return(<Page>
       <button onClick={onClearEntries} style={{height:36,padding:'0 16px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,cursor:'pointer'}}>Clear entries</button>
       <button onClick={onClearReceipts} style={{height:36,padding:'0 16px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,cursor:'pointer'}}>Clear receipts</button>
       <button onClick={onClearInvoices} style={{height:36,padding:'0 16px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,cursor:'pointer'}}>Clear invoices</button>
+      <button onClick={onClearBankTxns} style={{height:36,padding:'0 16px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,cursor:'pointer'}}>Clear bank transactions</button>
     </div>
   </div>
 </SettingsSection>
@@ -3181,7 +3182,7 @@ const updR=(id,patch)=>setReceipts(p=>p.map(r=>r.id===id?{...r,...patch}:r));
 const delR=id=>setReceipts(p=>{const v=p.find(r=>r.id===id);if(v)toTrash('receipt',[v]);return p.filter(r=>r.id!==id);});
 const addI=inv=>setInvoices(p=>[{...inv,id:inv.id||mkId()},...p]);
 const updI=(id,patch)=>setInvoices(p=>p.map(i=>i.id===id?{...i,...patch}:i));
-const delI=id=>setInvoices(p=>{const v=p.find(i=>i.id===id);if(v)toTrash('invoice',[v]);return p.filter(i=>i.id!==id);});
+const delI=id=>{setInvoices(p=>{const v=p.find(i=>i.id===id);if(v)toTrash('invoice',[v]);return p.filter(i=>i.id!==id);});setBankTxns(p=>p.map(t=>t.matchedInvoiceId===id?{...t,status:'unreviewed',matchedInvoiceId:null}:t));};
 
 // ── Bank transactions (Starling + CSV) ──────────────────────────────────────
 // Merge new rows into bankTxns, skipping anything already seen (by Starling's own
@@ -3288,7 +3289,8 @@ const exportBackup=()=>{const payload={entries,receipts,invoices,clients,bankTxn
 const importBackup=file=>{const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);if(!d||typeof d!=='object')throw new Error('bad file');if(!window.confirm('Restore from this backup? This replaces all current entries, receipts, invoices and clients in the app.'))return;if(Array.isArray(d.entries))setEntries(d.entries);if(Array.isArray(d.receipts))setReceipts(d.receipts);if(Array.isArray(d.invoices))setInvoices(d.invoices);if(Array.isArray(d.clients))setClients(d.clients);if(Array.isArray(d.bankTxns))setBankTxns(d.bankTxns);if(d.settings)setSettings(s=>({...s,...d.settings}));}catch(e){window.alert('Could not read that backup file.');}};reader.readAsText(file);};
 const clearEntries=()=>{if(window.confirm('Move ALL income entries to Trash? You can restore them for 30 days.')){toTrash('entry',entries);setEntries([]);}};
 const clearReceipts=()=>{if(window.confirm('Move ALL receipts to Trash? You can restore them for 30 days.')){toTrash('receipt',receipts);setReceipts([]);}};
-const clearInvoices=()=>{if(window.confirm('Move ALL invoice records to Trash? You can restore them for 30 days.')){toTrash('invoice',invoices);setInvoices([]);}};
+const clearInvoices=()=>{if(window.confirm('Move ALL invoice records to Trash? You can restore them for 30 days.')){toTrash('invoice',invoices);const clearedIds=new Set(invoices.map(i=>i.id));setBankTxns(p=>p.map(t=>clearedIds.has(t.matchedInvoiceId)?{...t,status:'unreviewed',matchedInvoiceId:null}:t));setInvoices([]);}};
+const clearBankTxns=()=>{if(window.confirm('Delete ALL bank transactions (Starling + CSV imports)? This is not soft-deleted — there is no trash for these. Your invoices are not affected, but any "matched" link back to a bank row will be cleared.')){setBankTxns([]);}};
 const restoreTrash=tid=>{const v=trash.find(x=>x.tid===tid);if(!v)return;if(v.kind==='entry')setEntries(p=>p.some(e=>e.id===v.item.id)?p:[v.item,...p]);else if(v.kind==='receipt')setReceipts(p=>p.some(r=>r.id===v.item.id)?p:[v.item,...p]);else if(v.kind==='invoice')setInvoices(p=>p.some(i=>i.id===v.item.id)?p:[v.item,...p]);setTrash(p=>p.filter(x=>x.tid!==tid));};
 const purgeTrashItem=tid=>setTrash(p=>p.filter(x=>x.tid!==tid));
 const emptyTrash=()=>{if(window.confirm('Permanently delete everything in Trash? This cannot be undone.'))setTrash([]);};
@@ -3308,7 +3310,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
-  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
+  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onClearBankTxns={clearBankTxns} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
   </div>
   </div>
   {ingestMsg&&<div style={{position:'fixed',bottom:84,left:'50%',transform:'translateX(-50%)',background:T.text,color:T.bg,padding:'10px 16px',borderRadius:12,fontSize:13,fontWeight:700,zIndex:300,maxWidth:'88%',textAlign:'center',boxShadow:'0 6px 20px rgba(0,0,0,.22)'}}>{ingestMsg}</div>}
