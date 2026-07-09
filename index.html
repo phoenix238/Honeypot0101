@@ -1728,6 +1728,7 @@ function doGet(e) {
           var fileId = extractDriveId(docUrl);
           var pdfBlob = null;
           if (fileId) {
+            ensureDocViewableByLink(fileId);
             try { pdfBlob = DriveApp.getFileById(fileId).getAs(MimeType.PDF); } catch (e2) { pdfBlob = null; }
           }
           if (pdfBlob) {
@@ -2043,6 +2044,14 @@ function deleteReceiptFiles(threadId, driveFileId) {
   return { ok: true, restored: restored, deleted: deleted };
 }
 
+// Anyone with the link can view (and export as PDF) — the client receiving an
+// invoice link isn't a Google account added to the doc's ACL, so without this
+// the link (and its PDF export URL) would 403 for them. Re-applied whenever a
+// Doc is touched (created or shared) so it self-heals invoices made before
+// this was added, not just new ones.
+function ensureDocViewableByLink(fileId) {
+  try { DriveApp.getFileById(fileId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+}
 function createInvoiceDoc(inv, settings) {
   var folder=getInvoiceFolder();
   var docName=(inv.invoiceNum||'Invoice')+(inv.client?' \\u2014 '+inv.client:'');
@@ -2150,10 +2159,7 @@ function createInvoiceDoc(inv, settings) {
     });
   }
   doc.saveAndClose();
-  // Anyone with the link can view (and export as PDF) — the client receiving this
-  // link isn't a Google account added to the doc's ACL, so without this the link
-  // (and its PDF export URL) would 403 for them.
-  DriveApp.getFileById(doc.getId()).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  ensureDocViewableByLink(doc.getId());
   return doc.getUrl();
 }
 
