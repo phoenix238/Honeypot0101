@@ -226,7 +226,7 @@ const buildYearWorkbook=async({year,period,biz,summary,income,expenses,catTotals
   XLSX.writeFile(wb,`Year-End_${year}-${(year+1)%100}.xlsx`);
 };
 
-const P={home:'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',plus:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z',list:'M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z',receipt:'M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z',invoice:'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',export:'M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z',settings:'M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.34.07-.68.07-1.08s-.03-.73-.07-1.08l2.33-1.81c.21-.16.27-.46.13-.7l-2.2-3.81c-.14-.24-.42-.32-.66-.24l-2.74 1.1c-.57-.44-1.18-.81-1.86-1.08L14.5 2.16A.553.553 0 0 0 14 1.7h-4c-.28 0-.5.18-.54.46l-.42 2.92c-.68.27-1.29.64-1.86 1.08l-2.74-1.1c-.24-.1-.52-.01-.66.24L1.58 9.11c-.14.24-.08.54.13.7l2.33 1.81c-.04.35-.07.69-.07 1.08s.03.73.07 1.08l-2.33 1.81c-.21.16-.27.46-.13.7l2.2 3.81c.14.24.42.32.66.24l2.74-1.1c.57.44 1.18.81 1.86 1.08l.42 2.92c.04.28.26.46.54.46h4c.28 0 .5-.18.54-.46l.42-2.92c.68-.27 1.29-.64 1.86-1.08l2.74 1.1c.24.1.52.01.66-.24l2.2-3.81c.14-.24.08-.54-.13-.7l-2.33-1.81z',camera:'M12 15.2A3.2 3.2 0 0 1 8.8 12 3.2 3.2 0 0 1 12 8.8 3.2 3.2 0 0 1 15.2 12 3.2 3.2 0 0 1 12 15.2M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z',upload:'M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z',check:'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',chevL:'M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z',clock:'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z',pencil:'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',money:'M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z',paid:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',print:'M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z',sheets:'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z',link:'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',drive:'M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z',sync:'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z',chart:'M5 9.2h3V19H5zm5.6-4.2h2.8v14h-2.8zm5.6 8H19v6h-2.8z',bulb:'M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z',mail:'M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z',warn:'M12 2L1 21h22L12 2zm1 14h-2v-2h2v2zm0-4h-2V8h2v4z',scan:'M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13zm1.5 1.5H16V16h-1.5zM16 13h1.5v1.5H16zm-3 3h1.5v1.5H13zm1.5 1.5H16V19h-1.5zM16 16h1.5v1.5H16zm1.5-1.5H19V16h-1.5zm0 3H19V19h-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z'};
+const P={home:'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',plus:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z',list:'M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z',receipt:'M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z',invoice:'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',export:'M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z',settings:'M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.34.07-.68.07-1.08s-.03-.73-.07-1.08l2.33-1.81c.21-.16.27-.46.13-.7l-2.2-3.81c-.14-.24-.42-.32-.66-.24l-2.74 1.1c-.57-.44-1.18-.81-1.86-1.08L14.5 2.16A.553.553 0 0 0 14 1.7h-4c-.28 0-.5.18-.54.46l-.42 2.92c-.68.27-1.29.64-1.86 1.08l-2.74-1.1c-.24-.1-.52-.01-.66.24L1.58 9.11c-.14.24-.08.54.13.7l2.33 1.81c-.04.35-.07.69-.07 1.08s.03.73.07 1.08l-2.33 1.81c-.21.16-.27.46-.13.7l2.2 3.81c.14.24.42.32.66.24l2.74-1.1c.57.44 1.18.81 1.86 1.08l.42 2.92c.04.28.26.46.54.46h4c.28 0 .5-.18.54-.46l.42-2.92c.68-.27 1.29-.64 1.86-1.08l2.74 1.1c.24.1.52.01.66-.24l2.2-3.81c.14-.24.08-.54-.13-.7l-2.33-1.81z',camera:'M12 15.2A3.2 3.2 0 0 1 8.8 12 3.2 3.2 0 0 1 12 8.8 3.2 3.2 0 0 1 15.2 12 3.2 3.2 0 0 1 12 15.2M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z',upload:'M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z',check:'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',chevL:'M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z',clock:'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z',pencil:'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',money:'M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z',paid:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',print:'M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z',sheets:'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z',link:'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',drive:'M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z',sync:'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z',chart:'M5 9.2h3V19H5zm5.6-4.2h2.8v14h-2.8zm5.6 8H19v6h-2.8z',bulb:'M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z',mail:'M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z',warn:'M12 2L1 21h22L12 2zm1 14h-2v-2h2v2zm0-4h-2V8h2v4z',scan:'M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13zm1.5 1.5H16V16h-1.5zM16 13h1.5v1.5H16zm-3 3h1.5v1.5H13zm1.5 1.5H16V19h-1.5zM16 16h1.5v1.5H16zm1.5-1.5H19V16h-1.5zm0 3H19V19h-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z',share:'M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z'};
 const I=({n,sz=22,c='currentColor'})=>(<svg width={sz} height={sz} viewBox="0 0 24 24" fill={c} style={{flexShrink:0}}><path d={P[n]}/></svg>);
 const Page=({children})=><div style={{padding:'26px 18px 10px',animation:'fadeIn .2s ease'}}>{children}</div>;
 const PgTitle=({back,children})=>(<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:22}}>{back&&<button onClick={back} style={{background:'none',border:'none',padding:2}}><I n="chevL" sz={26} c={T.textMuted}/></button>}<div style={{fontFamily:'Bricolage Grotesque,serif',fontSize:22,fontWeight:800,letterSpacing:'-.01em'}}>{children}</div></div>);
@@ -915,13 +915,28 @@ return(<Page>
 </Page>);}
 
 // ── INVOICE ──────────────────────────────────────────────────────────────────
-function InvoiceView({entries,receipts,invoices,clients=[],onAddInvoice,onUpdateInvoice,onDeleteInvoice,onUpdateReceipt,onUpdateEntry,onSaveClient,onAddEntry,settings,setSettings,sheetsUrl}){
+function InvoiceView({entries,receipts,invoices,clients=[],onAddInvoice,onUpdateInvoice,onDeleteInvoice,onUpdateReceipt,onUpdateEntry,onDeleteEntry,onSaveClient,onAddEntry,settings,setSettings,sheetsUrl,seedBankTxn,onConsumeSeedBankTxn,onLinkBankTxn}){
 const[mode,setMode]=useState('list');const[selE,setSelE]=useState({});const[selR,setSelR]=useState({});const[client,setClient]=useState({name:'',email:'',address:''});const[selectedClientId,setSelectedClientId]=useState(null);const oneMonthFromNow=()=>{const d=new Date();d.setMonth(d.getMonth()+1);return d.toISOString().split('T')[0];};const[dueDate,setDueDate]=useState(oneMonthFromNow());const[notes,setNotes]=useState(settings.bankDetails||'');const[flash,setFlash]=useState(false);const[docUrl,setDocUrl]=useState(null);const[creatingDoc,setCreatingDoc]=useState(false);const[docErr,setDocErr]=useState(null);const[docStatus,setDocStatus]=useState('');const[confInvId,setConfInvId]=useState(null);const[saveClientFlash,setSaveClientFlash]=useState(false);const[deductions,setDeductions]=useState([]);const addDeduction=()=>setDeductions(d=>[...d,{id:Date.now().toString(),description:'',amount:''}]);const updateDeduction=(id,k,v)=>setDeductions(d=>d.map(x=>x.id===id?{...x,[k]:v}:x));const removeDeduction=id=>setDeductions(d=>d.filter(x=>x.id!==id));
+const[linkedBankTxn,setLinkedBankTxn]=useState(null);
+const[shareFlash,setShareFlash]=useState(null);
+const[confId,setConfId]=useState(null);
+const[leftoverOpen,setLeftoverOpen]=useState(false);
+useEffect(()=>{
+  if(!seedBankTxn)return;
+  const draft={id:mkId(),type:'lump',date:seedBankTxn.date,client:'',description:seedBankTxn.description||'',rate:null,hours:null,subtotal:seedBankTxn.amount,tax:0,net:seedBankTxn.amount,status:'Paid'};
+  onAddEntry(draft);
+  setSelE(s=>({...s,[draft.id]:true}));
+  setClient(c=>({...c,name:seedBankTxn.description||''}));
+  setMode('build');
+  setLinkedBankTxn(seedBankTxn);
+  onConsumeSeedBankTxn();
+  // eslint-disable-next-line
+},[seedBankTxn]);
 const sc=(k,v)=>setClient(c=>({...c,[k]:v}));const pickClient=c=>{setClient({name:c.name,email:c.email||'',address:c.address||''});setSelectedClientId(c.id);};const handleSaveClient=()=>{if(!client.name)return;onSaveClient({name:client.name,email:client.email||'',address:client.address||''});setSaveClientFlash(true);setTimeout(()=>setSaveClientFlash(false),1800);};
 const[chaseOpen,setChaseOpen]=useState(null);const[chaseSending,setChaseSending]=useState(null);const[chaseResult,setChaseResult]=useState({});
 // Inline quick-add: log a new day (timed/manual/lump) straight into the invoice being
 // built, without leaving this screen — reuses the exact gross/tax/net formula from AddView.
-const[quickType,setQuickType]=useState('timed');const[quickOpen,setQuickOpen]=useState(false);const[showCalPicker,setShowCalPicker]=useState(false);
+const[quickType,setQuickType]=useState('timed');const[quickOpen,setQuickOpen]=useState(true);const[showCalPicker,setShowCalPicker]=useState(false);
 const[quickForm,setQuickForm]=useState({date:today(),description:'',startTime:'',endTime:'',hours:'',rate:settings.defaultRate||35,amount:''});
 const qf=(k,v)=>setQuickForm(f=>({...f,[k]:v}));
 const quickTimedH=()=>{if(!quickForm.startTime||!quickForm.endTime)return 0;const[sh,sm]=quickForm.startTime.split(':').map(Number);const[eh,em]=quickForm.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};
@@ -939,6 +954,11 @@ const handleQuickAdd=()=>{
   setQuickForm(f=>({...f,description:'',startTime:'',endTime:'',hours:'',amount:''}));
 };
 const handleMarkPaid=(inv)=>{onUpdateInvoice(inv.id,{status:'paid',paidDate:new Date().toISOString(),potted:'skipped'});};
+const handleShare=async inv=>{
+  const shareData={title:`Invoice ${inv.invoiceNum}`,text:`Invoice ${inv.invoiceNum} for ${inv.client||'client'} — ${fmt(inv.subtotal)}`,...(inv.docUrl?{url:inv.docUrl}:{})};
+  if(navigator.share){try{await navigator.share(shareData);}catch(e){/* user cancelled */}}
+  else if(inv.docUrl&&navigator.clipboard){await navigator.clipboard.writeText(inv.docUrl);setShareFlash(inv.id);setTimeout(()=>setShareFlash(null),1600);}
+};
 const invNum=`INV-${new Date().getFullYear()}-${String(settings.invoiceCounter||1).padStart(3,'0')}`;
 const selEntries=entries.filter(e=>selE[e.id]);const selReimbs=receipts.filter(r=>selR[r.id]);const incomeTotal=selEntries.reduce((a,e)=>a+(e.subtotal||0),0);const reimbTotal=selReimbs.reduce((a,r)=>a+(r.amount||0),0);const deductTotal=deductions.reduce((a,d)=>a+(parseFloat(d.amount)||0),0);const grandTotal=Math.max(0,incomeTotal+reimbTotal-deductTotal);const pendingReimbs=receipts.filter(r=>r.category==='reimbursable'&&r.status==='pending');const hasItems=selEntries.length>0||selReimbs.length>0;
 const invoicePeriod=(()=>{const dates=selEntries.map(e=>e.date).sort();if(dates.length===0)return new Date().toLocaleDateString('en-GB',{month:'long',year:'numeric'});const first=new Date(dates[0]+'T12:00:00');const last=new Date(dates[dates.length-1]+'T12:00:00');const fStr=first.toLocaleDateString('en-GB',{month:'long',year:'numeric'});const lStr=last.toLocaleDateString('en-GB',{month:'long',year:'numeric'});return fStr===lStr?fStr:`${fStr} to ${lStr}`;})();
@@ -985,23 +1005,27 @@ const handleCreateDocAndSave=async()=>{
   }
   // Step 2: save invoice record (with docUrl baked in directly, not from state)
   const inv={invoiceNum:invNum,date:new Date().toISOString(),client:client.name,clientEmail:client.email,subtotal:grandTotal,incomeTotal,reimbTotal,deductTotal,deductions:deductions.filter(d=>d.description&&parseFloat(d.amount)>0),dueDate,entryIds:selEntries.map(e=>e.id),reimbIds:selReimbs.map(r=>r.id),docUrl:finalDocUrl||null};
+  if(linkedBankTxn){inv.status='paid';inv.paidDate=linkedBankTxn.date;inv.sourceBankTxnId=linkedBankTxn.id;inv.matchedBankTxnId=linkedBankTxn.id;}
   onAddInvoice(inv);
   selReimbs.forEach(r=>onUpdateReceipt(r.id,{status:'invoiced'}));
   if(onUpdateEntry)selEntries.forEach(e=>onUpdateEntry(e.id,{invoiceId:inv.id||inv.invoiceNum}));
+  if(linkedBankTxn&&onLinkBankTxn)onLinkBankTxn(linkedBankTxn.id,inv.id);
   setSettings(s=>({...s,invoiceCounter:(s.invoiceCounter||1)+1}));
   setFlash(true);
-  setTimeout(()=>{setFlash(false);setMode('list');setSelE({});setSelR({});setDocUrl(null);setDeductions([]);},1400);
+  setTimeout(()=>{setFlash(false);setMode('list');setSelE({});setSelR({});setDocUrl(null);setDeductions([]);setLinkedBankTxn(null);},1400);
 };
 
 // plain save (no Sheets connected)
 const handleSaveOnly=()=>{
   const inv={invoiceNum:invNum,date:new Date().toISOString(),client:client.name,clientEmail:client.email,subtotal:grandTotal,incomeTotal,reimbTotal,deductTotal,deductions:deductions.filter(d=>d.description&&parseFloat(d.amount)>0),dueDate,entryIds:selEntries.map(e=>e.id),reimbIds:selReimbs.map(r=>r.id),docUrl:null};
+  if(linkedBankTxn){inv.status='paid';inv.paidDate=linkedBankTxn.date;inv.sourceBankTxnId=linkedBankTxn.id;inv.matchedBankTxnId=linkedBankTxn.id;}
   onAddInvoice(inv);
   selReimbs.forEach(r=>onUpdateReceipt(r.id,{status:'invoiced'}));
   if(onUpdateEntry)selEntries.forEach(e=>onUpdateEntry(e.id,{invoiceId:inv.id||inv.invoiceNum}));
+  if(linkedBankTxn&&onLinkBankTxn)onLinkBankTxn(linkedBankTxn.id,inv.id);
   setSettings(s=>({...s,invoiceCounter:(s.invoiceCounter||1)+1}));
   setFlash(true);
-  setTimeout(()=>{setFlash(false);setMode('list');setSelE({});setSelR({});setDeductions([]);},1400);
+  setTimeout(()=>{setFlash(false);setMode('list');setSelE({});setSelR({});setDeductions([]);setLinkedBankTxn(null);},1400);
 };
 
 // Print/PDF any saved invoice record (incl. ones made from a payment) — no Google needed
@@ -1020,6 +1044,7 @@ const printInvoiceRecord=(inv)=>{
 };
 
 if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});setSelR({});setDocUrl(null);setSelectedClientId(null);}}>Build Invoice</PgTitle>
+{selEntries.length>0&&(<><Lbl>Added to this invoice</Lbl><div style={{marginBottom:14}}>{selEntries.map(e=>(<EntryRow key={e.id} e={e} confId={confId} setConfId={setConfId} onDelete={id=>{setSelE(s=>{const c={...s};delete c[id];return c;});onDeleteEntry(id);}}/>))}</div></>)}
 <button onClick={()=>setQuickOpen(o=>!o)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginBottom:10,display:'flex',alignItems:'center',gap:5}}><I n="plus" sz={13} c={T.accent}/> {quickOpen?'Hide log-a-day':'Log a day straight onto this invoice'}</button>
 {quickOpen&&(<Card style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:10}}>
@@ -1045,7 +1070,11 @@ if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});s
     <Btn small color={T.lumpGreen} disabled={quickGross<=0} onClick={handleQuickAdd}>Add to invoice</Btn>
   </div>
 </Card>)}
-<Lbl>Income entries</Lbl>{entries.length===0?(<div style={{background:T.surface,borderRadius:14,padding:14,marginBottom:14,color:T.textMuted,fontSize:13,textAlign:'center'}}>No income entries yet</div>):(<div style={{marginBottom:16}}>{(entries.filter(e=>!e.invoiceId)).map(e=>(<button key={e.id} onClick={()=>setSelE(s=>({...s,[e.id]:!s[e.id]}))} style={{width:'100%',textAlign:'left',background:selE[e.id]?T.accent+'12':T.surface,border:`1.5px solid ${selE[e.id]?T.accent:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.client||'No client'} · {fmtD(e.date)}</div>{e.description&&<div style={{fontSize:12,color:T.textMuted}}>{e.description}</div>}<StatusTag status={e.status}/></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(e.subtotal)}</span><div style={{width:22,height:22,borderRadius:7,background:selE[e.id]?T.accent:'transparent',border:`2px solid ${selE[e.id]?T.accent:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selE[e.id]&&<I n="check" sz={13} c={T.bg}/>}</div></div></button>))}</div>)}{pendingReimbs.length>0&&<><Lbl>Reimbursable expenses</Lbl><div style={{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.5}}>Tick to include on invoice.</div><div style={{marginBottom:16}}>{pendingReimbs.map(r=>(<button key={r.id} onClick={()=>setSelR(s=>({...s,[r.id]:!s[r.id]}))} style={{width:'100%',textAlign:'left',background:selR[r.id]?T.reimb+'15':T.surface,border:`1.5px solid ${selR[r.id]?T.reimb:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.description}</div><div style={{fontSize:12,color:T.textMuted}}>{fmtD(r.date)}{r.owedBy?` · ${r.owedBy}`:''}{r.driveUrl&&<span style={{color:T.drive}}> · ☁</span>}</div></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.reimb}}>{fmt(r.amount)}</span><div style={{width:22,height:22,borderRadius:7,background:selR[r.id]?T.reimb:'transparent',border:`2px solid ${selR[r.id]?T.reimb:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selR[r.id]&&<I n="check" sz={13} c={T.bg}/>}</div></div></button>))}</div></>}{!hasItems&&<div style={{textAlign:'center',padding:'20px 20px 30px',color:T.textMuted,fontSize:13}}>Select entries or expenses above</div>}{hasItems&&<><Card style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>{selEntries.length>0&&selReimbs.length>0&&<><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:5,color:T.textMuted}}><span>Services ({selEntries.length})</span><span style={{fontFamily:'Geist Mono,monospace'}}>{fmt(incomeTotal)}</span></div><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.textMuted}}><span>Expenses ({selReimbs.length})</span><span style={{fontFamily:'Geist Mono,monospace',color:T.reimb}}>{fmt(reimbTotal)}</span></div></>}{deductions.map(d=>(<div key={d.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}><Inp placeholder="Deduction (e.g. materials)" value={d.description} onChange={e=>updateDeduction(d.id,'description',e.target.value)} style={{flex:2,fontSize:12}}/><Inp type="number" placeholder="0.00" value={d.amount} onChange={e=>updateDeduction(d.id,'amount',e.target.value)} style={{flex:1,fontSize:12}}/><button onClick={()=>removeDeduction(d.id)} style={{background:'transparent',border:'none',color:T.danger,fontSize:18,padding:'0 4px',flexShrink:0}}>×</button></div>))}<button onClick={addDeduction} style={{background:T.danger+'15',border:`1.5px dashed ${T.danger}44`,borderRadius:10,padding:'7px 14px',color:T.danger,fontSize:12,fontWeight:700,width:'100%',marginBottom:deductTotal>0?10:0}}>+ Add deduction</button>{deductTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.danger}}><span>Deductions</span><span style={{fontFamily:'Geist Mono,monospace'}}>− {fmt(deductTotal)}</span></div>}<Hr/><div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}}><span>Invoice total</span><span style={{fontFamily:'Geist Mono,monospace',color:T.accentBright}}>{fmt(grandTotal)}</span></div><div style={{fontSize:12,color:T.textMuted,marginTop:6}}>Period: {invoicePeriod} · Ref: {invNum}</div></Card>
+{(()=>{const leftover=entries.filter(e=>!e.invoiceId);return leftover.length>0&&(<>
+<button onClick={()=>setLeftoverOpen(o=>!o)} style={{background:'none',border:'none',color:T.textMuted,fontSize:12,fontWeight:700,padding:0,marginBottom:10,display:'flex',alignItems:'center',gap:5}}>{leftoverOpen?'▾':'▸'} {leftover.length} entr{leftover.length===1?'y':'ies'} logged earlier, not yet invoiced</button>
+{leftoverOpen&&(<div style={{marginBottom:16}}>{leftover.map(e=>(<button key={e.id} onClick={()=>setSelE(s=>({...s,[e.id]:!s[e.id]}))} style={{width:'100%',textAlign:'left',background:selE[e.id]?T.accent+'12':T.surface,border:`1.5px solid ${selE[e.id]?T.accent:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.client||'No client'} · {fmtD(e.date)}</div>{e.description&&<div style={{fontSize:12,color:T.textMuted}}>{e.description}</div>}<StatusTag status={e.status}/></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(e.subtotal)}</span><div style={{width:22,height:22,borderRadius:7,background:selE[e.id]?T.accent:'transparent',border:`2px solid ${selE[e.id]?T.accent:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selE[e.id]&&<I n="check" sz={13} c={T.bg}/>}</div></div></button>))}</div>)}
+</>);})()}
+{pendingReimbs.length>0&&<><Lbl>Reimbursable expenses</Lbl><div style={{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.5}}>Tick to include on invoice.</div><div style={{marginBottom:16}}>{pendingReimbs.map(r=>(<button key={r.id} onClick={()=>setSelR(s=>({...s,[r.id]:!s[r.id]}))} style={{width:'100%',textAlign:'left',background:selR[r.id]?T.reimb+'15':T.surface,border:`1.5px solid ${selR[r.id]?T.reimb:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.description}</div><div style={{fontSize:12,color:T.textMuted}}>{fmtD(r.date)}{r.owedBy?` · ${r.owedBy}`:''}{r.driveUrl&&<span style={{color:T.drive}}> · ☁</span>}</div></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.reimb}}>{fmt(r.amount)}</span><div style={{width:22,height:22,borderRadius:7,background:selR[r.id]?T.reimb:'transparent',border:`2px solid ${selR[r.id]?T.reimb:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selR[r.id]&&<I n="check" sz={13} c={T.bg}/>}</div></div></button>))}</div></>}{!hasItems&&<div style={{textAlign:'center',padding:'20px 20px 30px',color:T.textMuted,fontSize:13}}>Select entries or expenses above</div>}{hasItems&&<><Card style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>{selEntries.length>0&&selReimbs.length>0&&<><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:5,color:T.textMuted}}><span>Services ({selEntries.length})</span><span style={{fontFamily:'Geist Mono,monospace'}}>{fmt(incomeTotal)}</span></div><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.textMuted}}><span>Expenses ({selReimbs.length})</span><span style={{fontFamily:'Geist Mono,monospace',color:T.reimb}}>{fmt(reimbTotal)}</span></div></>}{deductions.map(d=>(<div key={d.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}><Inp placeholder="Deduction (e.g. materials)" value={d.description} onChange={e=>updateDeduction(d.id,'description',e.target.value)} style={{flex:2,fontSize:12}}/><Inp type="number" placeholder="0.00" value={d.amount} onChange={e=>updateDeduction(d.id,'amount',e.target.value)} style={{flex:1,fontSize:12}}/><button onClick={()=>removeDeduction(d.id)} style={{background:'transparent',border:'none',color:T.danger,fontSize:18,padding:'0 4px',flexShrink:0}}>×</button></div>))}<button onClick={addDeduction} style={{background:T.danger+'15',border:`1.5px dashed ${T.danger}44`,borderRadius:10,padding:'7px 14px',color:T.danger,fontSize:12,fontWeight:700,width:'100%',marginBottom:deductTotal>0?10:0}}>+ Add deduction</button>{deductTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.danger}}><span>Deductions</span><span style={{fontFamily:'Geist Mono,monospace'}}>− {fmt(deductTotal)}</span></div>}<Hr/><div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}}><span>Invoice total</span><span style={{fontFamily:'Geist Mono,monospace',color:T.accentBright}}>{fmt(grandTotal)}</span></div><div style={{fontSize:12,color:T.textMuted,marginTop:6}}>Period: {invoicePeriod} · Ref: {invNum}</div></Card>
 {clients.length>0&&(<div style={{marginBottom:14}}><Lbl>Saved clients</Lbl><div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{clients.map(c=>(<button key={c.id} onClick={()=>pickClient(c)} style={{background:selectedClientId===c.id?T.accent+'22':T.surface,border:`1.5px solid ${selectedClientId===c.id?T.accent:T.border}`,borderRadius:20,padding:'6px 14px',color:selectedClientId===c.id?T.accent:T.text,fontSize:13,fontWeight:700,cursor:'pointer'}}>{c.name}</button>))}</div></div>)}
 <Lbl>Client details</Lbl>
 <Field label="Client name"><Inp placeholder="Person or company" value={client.name} onChange={e=>sc('name',e.target.value)}/></Field>
@@ -1146,6 +1175,7 @@ ${settings.name||''}`;
       <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
         {inv.docUrl&&(<a href={inv.docUrl} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:6,background:T.drive+'18',borderRadius:10,padding:'6px 10px',color:T.drive,fontWeight:700,fontSize:12,textDecoration:'none'}}><I n="link" sz={13} c={T.drive}/> Open Doc</a>)}
         <button onClick={()=>printInvoiceRecord(inv)} style={{display:'flex',alignItems:'center',gap:6,background:T.timed+'14',border:`1.5px solid ${T.timed}44`,borderRadius:10,padding:'5px 10px',color:T.timed,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="print" sz={13} c={T.timed}/> PDF</button>
+        <button onClick={()=>handleShare(inv)} style={{display:'flex',alignItems:'center',gap:6,background:shareFlash===inv.id?T.lumpGreen+'18':T.accent+'14',border:`1.5px solid ${shareFlash===inv.id?T.lumpGreen:T.accent}44`,borderRadius:10,padding:'5px 10px',color:shareFlash===inv.id?T.lumpGreen:T.accent,fontWeight:700,fontSize:12,cursor:'pointer'}}>{shareFlash===inv.id?<><I n="check" sz={13} c={T.lumpGreen}/> Copied!</>:<><I n="share" sz={13} c={T.accent}/> Share</>}</button>
         {!paid&&inv.clientEmail&&(<button onClick={()=>handleChase(inv)} style={{display:'flex',alignItems:'center',gap:6,background:chaseOpen===inv.id?(overdue?T.danger+'28':T.accent+'28'):(overdue?T.danger+'18':T.pending+'18'),border:`1.5px solid ${chaseOpen===inv.id?(overdue?T.danger+'88':T.accent+'66'):(overdue?T.danger+'66':T.pending+'44')}`,borderRadius:10,padding:'5px 10px',color:chaseOpen===inv.id?(overdue?T.danger:T.accent):(overdue?T.danger:T.pending),fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="mail" sz={13} c={chaseOpen===inv.id?(overdue?T.danger:T.accent):(overdue?T.danger:T.pending)}/> Chase up</button>)}
         {!paid&&onUpdateInvoice&&(<button onClick={()=>handleMarkPaid(inv)} style={{display:'flex',alignItems:'center',gap:6,background:T.lumpGreen+'18',border:`1.5px solid ${T.lumpGreen}44`,borderRadius:10,padding:'5px 10px',color:T.lumpGreen,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="check" sz={13} c={T.lumpGreen}/> Mark paid</button>)}
         {paid&&onUpdateInvoice&&(<button onClick={()=>onUpdateInvoice(inv.id,{status:'pending',paidDate:null})} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:`1px solid ${T.border}`,borderRadius:10,padding:'5px 10px',color:T.textMuted,fontWeight:700,fontSize:11,cursor:'pointer'}}>Mark unpaid</button>)}
@@ -1598,7 +1628,6 @@ function syncFromSheet(ss) {
   data.entries = entries; data.receipts = receipts; data.invoices = invoices;
   var store = ss.getSheetByName('_app_data') || ss.insertSheet('_app_data');
   store.getRange('A1').setValue(JSON.stringify(data));
-  buildIncomeSheet(ss, entries, data.settings || {});
   buildExpensesSheet(ss, receipts);
   buildInvoicesSheet(ss, invoices);
 }
@@ -1685,13 +1714,14 @@ function save(ss, data) {
     delete c.imageData;
     return c;
   });
+  var incSh0 = ss.getSheetByName('Income');
+  if (incSh0) ss.deleteSheet(incSh0);
   var store = ss.getSheetByName('_app_data') || ss.insertSheet('_app_data');
   store.getRange('A1').setValue(JSON.stringify({
     entries:data.entries||[], receipts:receipts,
     invoices:data.invoices||[], settings:data.settings||{}, clients:data.clients||[]
   }));
   try { store.hideSheet(); } catch(e) {}
-  buildIncomeSheet(ss, data.entries||[], data.settings||{});
   buildExpensesSheet(ss, receipts);
   buildInvoicesSheet(ss, data.invoices||[]);
 }
@@ -1739,47 +1769,6 @@ function setupFolders(ss){
     if(!inM){master.addFile(ssFile);try{DriveApp.getRootFolder().removeFile(ssFile);}catch(e2){}}
     props.setProperty('mhq_folders_v1','1');
   }catch(e){}
-}
-
-function buildIncomeSheet(ss, entries, settings) {
-  var sh = ss.getSheetByName('Income') || ss.insertSheet('Income');
-  sh.clearContents(); sh.clearFormats(); sh.clearConditionalFormatRules();
-  var totG=entries.reduce(function(a,e){return a+(e.subtotal||0);},0);
-  var totT=totG*0.20, totN=totG-totT;
-  sh.getRange('A1:N1').merge().setValue('HONEY — INCOME')
-    .setFontWeight('bold').setFontSize(16).setBackground('#eceadf').setFontColor('#c8941a').setHorizontalAlignment('center');
-  sh.getRange('B2').setValue('Tax rate:').setFontColor('#1a1a1a');
-  sh.getRange('C2').setValue(0.20).setNumberFormat('0%').setFontColor('#1a1a1a');
-  sh.getRange('D2').setValue('\\u2190 change if needed').setFontColor('#888888').setFontStyle('italic');
-  [['B',totG,'#c8941a','TOTAL GROSS'],['F',totT,'#c05048','SET ASIDE'],['J',totN,'#3aaa82','TAKE HOME']].forEach(function(p){
-    sh.getRange(p[0]+'4').setValue(p[3]).setFontWeight('bold').setFontSize(9).setBackground('#ffffff').setFontColor('#7a7090');
-    sh.getRange(p[0]+'5').setValue(p[1]).setNumberFormat('"\\u00a3"#,##0.00').setFontSize(18).setFontWeight('bold').setBackground('#ffffff').setFontColor(p[2]);
-  });
-  var headers=['ID','Invoice Ref','Date','Client / Description','Start','End','Hours','Rate \\u00a3/hr','Lump Sum \\u00a3','Dec. Hrs','Gross','Tax Stash','Take Home','Status'];
-  sh.getRange(7,1,1,headers.length).setValues([headers]).setFontWeight('bold').setBackground('#eceadf').setFontColor('#1a1a1a').setFontSize(10);
-  sh.setFrozenRows(7);
-  if(entries.length>0){
-    var rows=entries.map(function(e){return[e.id||'',e.invoiceRef||(settings.payRef||''),e.date||'',(e.client||'')+(e.client&&e.description?'\\u2014 ':''+(e.description||''))||'',e.startTime||'',e.endTime||'',e.type==='manual'?(e.hours||''):(e.hours||0),e.type!=='lump'?(e.rate||''):'',e.type==='lump'?(e.subtotal||0):'',e.hours||0,e.subtotal||0,e.tax||0,e.net||0,e.status||'Pending'];});
-    sh.getRange(8,1,rows.length,headers.length).setValues(rows).setFontColor('#1a1a1a').setFontSize(10);
-    sh.getRange(8,8,rows.length,1).setNumberFormat('"\\u00a3"#,##0.00');
-    sh.getRange(8,9,rows.length,1).setNumberFormat('"\\u00a3"#,##0.00');
-    sh.getRange(8,10,rows.length,1).setNumberFormat('0.00');
-    sh.getRange(8,11,rows.length,1).setNumberFormat('"\\u00a3"#,##0.00');
-    sh.getRange(8,12,rows.length,1).setNumberFormat('"\\u00a3"#,##0.00');
-    sh.getRange(8,13,rows.length,1).setNumberFormat('"\\u00a3"#,##0.00');
-    for(var i=0;i<rows.length;i++) sh.getRange(8+i,1,1,headers.length).setBackground(i%2===0?'#f2f1ea':'#ffffff').setFontColor('#1a1a1a');
-    for(var j=0;j<rows.length;j++) sh.getRange(8+j,14).setFontColor(rows[j][13]==='Paid'?'#3aaa82':'#c8941a').setFontWeight('bold');
-    var sv=SpreadsheetApp.newDataValidation().requireValueInList(['Pending','Paid'],true).setAllowInvalid(false).build();
-    sh.getRange(8,14,rows.length,1).setDataValidation(sv);
-  }
-  sh.setColumnWidth(2,160);sh.setColumnWidth(3,100);sh.setColumnWidth(4,220);
-  sh.setColumnWidth(5,65);sh.setColumnWidth(6,65);
-  sh.setColumnWidth(11,110);sh.setColumnWidth(12,110);sh.setColumnWidth(13,110);sh.setColumnWidth(14,90);
-  try{sh.hideColumns(1);}catch(e){}
-  try{sh.setHiddenGridlines(true);
-    sh.getRange(1,1,Math.max(sh.getLastRow(),8),14).setFontFamily('Roboto').setVerticalAlignment('middle');
-    sh.getRange('A1:N1').setFontFamily('Montserrat');
-    sh.setRowHeight(1,42);sh.setRowHeight(7,28);}catch(e){}
 }
 
 function buildExpensesSheet(ss, receipts) {
@@ -2840,7 +2829,7 @@ return(<button onClick={onClick} style={vertical?{background:active?'rgba(224,16
 function Sidebar({view,setView,onSnap,userName}){
 return(<div id="hn-sidebar">
   <div className="hn-wordmark" style={{fontFamily:'Bricolage Grotesque,serif',fontSize:22,fontWeight:800,color:T.accent,padding:'0 12px',marginBottom:28}}>Honey</div>
-  {NAV_ITEMS.map(([id,icon,label])=>(<NavButton key={id} id={id} icon={icon} label={label} active={view===id} onClick={()=>id==='snap'?onSnap():setView(id)} vertical/>))}
+  {NAV_ITEMS.filter(([id])=>id!=='log').map(([id,icon,label])=>(<NavButton key={id} id={id} icon={icon} label={label} active={view===id} onClick={()=>id==='snap'?onSnap():setView(id)} vertical/>))}
   <div style={{flex:1}}/>
   <div className="hn-sidebar-label" style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:`1px solid ${T.border}`,marginTop:12}}>
     <div style={{width:28,height:28,borderRadius:'50%',background:T.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:T.accent,flexShrink:0}}>{(userName||'?').charAt(0).toUpperCase()}</div>
@@ -2848,7 +2837,7 @@ return(<div id="hn-sidebar">
   </div>
 </div>);}
 function BottomDock({view,setView,onSnap}){
-const tabs=NAV_ITEMS.filter(([id])=>id!=='sheets');
+const tabs=NAV_ITEMS.filter(([id])=>id!=='sheets'&&id!=='log');
 return(<div id="hn-bottom-dock" style={{position:'fixed',bottom:0,left:0,width:'100%',background:T.surface,borderTop:`1px solid ${T.border}`,gridTemplateColumns:`repeat(${tabs.length},1fr)`,zIndex:100}}>{tabs.map(([id,icon,label])=>(<NavButton key={id} id={id} icon={icon} label={label} active={view===id} onClick={()=>id==='snap'?onSnap():setView(id)}/>))}</div>);}
 
 // ── APP ──────────────────────────────────────────────────────────────────────
@@ -3233,19 +3222,12 @@ const addBankTxns=(rows,source)=>{
 };
 const voidBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'voided'}:t));
 const restoreBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'unreviewed'}:t));
-// Turn a bank income row directly into an invoice — used when the income wasn't already
-// captured via a log entry / the invoice maker.
-const makeInvoiceFromBankTxn=(bankTxnId,client)=>{
-  const txn=bankTxns.find(t=>t.id===bankTxnId);
-  if(!txn)return;
-  const invId=mkId();
-  const num=`INV-${new Date().getFullYear()}-${String(settings.invoiceCounter||1).padStart(3,'0')}`;
-  addI({id:invId,invoiceNum:num,date:txn.date+'T12:00:00.000Z',client:client||txn.description||'Client',clientEmail:'',
-    subtotal:txn.amount,incomeTotal:txn.amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[],reimbIds:[],
-    docUrl:null,status:'paid',paidDate:txn.date,sourceBankTxnId:txn.id,matchedBankTxnId:txn.id});
-  setSettings(s=>({...s,invoiceCounter:(s.invoiceCounter||1)+1}));
-  setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invId}:t));
-};
+// Turn a bank income row into an invoice by opening the real Build Invoice screen,
+// pre-seeded with the transaction as a draft line item — so it goes through the same
+// Doc-creation/save path as a manually-built invoice.
+const[bankTxnForInvoice,setBankTxnForInvoice]=useState(null);
+const startInvoiceFromBankTxn=id=>{const txn=bankTxns.find(t=>t.id===id);if(!txn)return;setBankTxnForInvoice(txn);go('invoice');};
+const onLinkBankTxn=(bankTxnId,invoiceId)=>setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invoiceId}:t));
 const matchBankTxnToInvoice=(bankTxnId,invoiceId)=>{
   const txn=bankTxns.find(t=>t.id===bankTxnId);
   if(!txn)return;
@@ -3334,8 +3316,8 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='add'&&<AddView onAdd={addE} settings={settings} initialType={addType} back={()=>setView('home')} onAddInvoice={addI} invoiceCounter={settings.invoiceCounter||1}/>}
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
-  {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl}/>}
-  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={makeInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync}/>}
+  {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}
+  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
