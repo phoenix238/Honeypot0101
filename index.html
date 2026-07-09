@@ -2958,7 +2958,25 @@ return(<button onClick={onClick} style={vertical?{background:active?'rgba(224,16
 </button>);}
 function Sidebar({view,setView,onSnap,userName}){
 return(<div id="hn-sidebar">
-  <div className="hn-wordmark" style={{fontFamily:'Bricolage Grotesque,serif',fontSize:22,fontWeight:800,color:T.accent,padding:'0 12px',marginBottom:28}}>Honey</div>
+  <div className="hn-wordmark" style={{fontFamily:'Bricolage Grotesque,serif',fontSize:22,fontWeight:800,color:T.accent,padding:'0 12px',marginBottom:28,display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <svg width="32" height="40" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0}}>
+      {/* Pot body */}
+      <ellipse cx="16" cy="12" rx="10" ry="3" fill="#D4A237" opacity="0.6"/>
+      <path d="M 6 12 L 6 28 Q 6 32 10 34 L 22 34 Q 26 32 26 28 L 26 12" fill="#E8C14A" stroke="#B8860B" strokeWidth="1.5"/>
+      {/* Pot shine */}
+      <ellipse cx="12" cy="20" rx="3" ry="5" fill="white" opacity="0.25"/>
+      {/* Lid rim */}
+      <rect x="7" y="10" width="18" height="2.5" rx="1" fill="#C9A032" stroke="#8B6914" strokeWidth="1"/>
+      {/* Lid */}
+      <ellipse cx="16" cy="10" rx="9.5" ry="2.5" fill="#D4A237" stroke="#8B6914" strokeWidth="1.5"/>
+      {/* Label */}
+      <rect x="8" y="20" width="16" height="8" rx="1.5" fill="#F5DEB3" stroke="#D2B48C" strokeWidth="1"/>
+      {/* Label text - H */}
+      <text x="16" y="26" fontSize="6" fontWeight="bold" fill="#8B6914" textAnchor="middle" style={{fontFamily:'Bricolage Grotesque,serif'}}>H</text>
+      {/* Handle (optional curved line) */}
+      <path d="M 24 15 Q 28 15 28 22" stroke="#B8860B" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+    </svg>
+  </div>
   {NAV_ITEMS.filter(([id])=>id!=='log').map(([id,icon,label])=>(<NavButton key={id} id={id} icon={icon} label={label} active={view===id} onClick={()=>id==='snap'?onSnap():setView(id)} vertical/>))}
   <div style={{flex:1}}/>
   <div className="hn-sidebar-label" style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:`1px solid ${T.border}`,marginTop:12}}>
