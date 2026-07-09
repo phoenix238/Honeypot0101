@@ -1262,7 +1262,7 @@ ${settings.name||''}`;
 </Page>);}
 
 // ── BANK ─────────────────────────────────────────────────────────────────────
-function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch}){
+function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,selectable,selected,onToggleSelect}){
   const[matching,setMatching]=useState(false);
   const isIncome=txn.category==='income';
   const isVoided=txn.status==='voided';
@@ -1272,18 +1272,20 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch}){
   return(
   <div style={{padding:'11px 13px',marginBottom:8,borderRadius:12,background:isVoided?T.bg:T.surface,border:`1px solid ${T.border}`,opacity:isVoided?.55:1}}>
     <div style={{display:'flex',alignItems:'center',gap:10}}>
+      {selectable&&<input type="checkbox" checked={!!selected} onChange={()=>onToggleSelect(txn.id)} style={{width:17,height:17,flexShrink:0,accentColor:T.accent}}/>}
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{txn.description}</div>
         <div style={{fontSize:11,color:T.textMuted}}>{fmtD(txn.date)}{txn.source==='starling'?' · Starling':' · CSV'}{isVoided?' · voided':''}{isDone&&doneInvoice?' · '+doneInvoice.invoiceNum:''}</div>
       </div>
       <div style={{fontFamily:"'Geist Mono',monospace",fontSize:14,fontWeight:700,color:isVoided?T.textFaint:isIncome?T.lumpGreen:T.business}}>{isIncome?'+':'−'}{fmt(txn.amount)}</div>
     </div>
-    {isIncome&&!isVoided&&(
-      <div style={{display:'flex',gap:8,marginTop:9}}>
-        {!isDone&&<Btn small color={T.lumpGreen} onClick={()=>onMakeInvoice(txn.id)}>Make invoice</Btn>}
-        {!isDone&&candidates.length>0&&<Btn small outline color={T.accent} onClick={()=>setMatching(m=>!m)}>Match existing</Btn>}
-        {!isDone&&<Btn small outline color={T.danger} onClick={()=>onVoid(txn.id)}>Void</Btn>}
+    {isIncome&&(
+      <div style={{display:'flex',gap:8,marginTop:9,flexWrap:'wrap'}}>
+        {!isDone&&!isVoided&&<Btn small color={T.lumpGreen} onClick={()=>onMakeInvoice(txn.id)}>Make invoice</Btn>}
+        {!isDone&&!isVoided&&candidates.length>0&&<Btn small outline color={T.accent} onClick={()=>setMatching(m=>!m)}>Match existing</Btn>}
+        {!isDone&&!isVoided&&<Btn small outline color={T.danger} onClick={()=>{if(window.confirm('Void this transaction? You can restore it later.'))onVoid(txn.id);}}>Void</Btn>}
         {isVoided&&<Btn small outline color={T.textMuted} onClick={()=>onRestore(txn.id)}>Restore</Btn>}
+        {isDone&&<Btn small outline color={T.textMuted} onClick={()=>{if(window.confirm(`Unmatch this transaction from ${doneInvoice?doneInvoice.invoiceNum:'its invoice'}? The invoice itself won't be deleted — this just frees up the bank row so you can act on it again.`))onUnmatch(txn.id);}}>Unmatch</Btn>}
       </div>
     )}
     {matching&&(
@@ -1297,12 +1299,22 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch}){
     )}
   </div>);
 }
-function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync}){
+function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,onBulkConvert,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync}){
   const[tab,setTab]=useState('income');
+  const[selected,setSelected]=useState({});
   const fileRef=useRef(null);
   const rows=bankTxns.filter(t=>t.category===tab).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const totalIncome=bankTxns.filter(t=>t.category==='income'&&t.status!=='voided').reduce((a,t)=>a+t.amount,0);
   const totalSpending=bankTxns.filter(t=>t.category==='spending'&&t.status!=='voided').reduce((a,t)=>a+t.amount,0);
+  const toggleSelect=id=>setSelected(s=>({...s,[id]:!s[id]}));
+  const selectedIds=Object.keys(selected).filter(id=>selected[id]);
+  useEffect(()=>{setSelected({});},[tab]);
+  const handleBulkConvert=()=>{
+    if(!selectedIds.length)return;
+    if(!window.confirm(`Turn ${selectedIds.length} transaction${selectedIds.length>1?'s':''} into ${selectedIds.length>1?'their own invoices':'an invoice'}? Each becomes a separate paid invoice — this won't create Google Docs for them.`))return;
+    onBulkConvert(selectedIds);
+    setSelected({});
+  };
   return(<Page>
     <PgTitle>Bank</PgTitle>
     <Card style={{marginBottom:14,border:`1px solid ${T.border}`}}>
@@ -1324,7 +1336,13 @@ function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onIm
       <button onClick={()=>setTab('spending')} style={{background:tab==='spending'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='spending'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='spending'?T.accent:T.textMuted}}>Spending · {fmt(totalSpending)}</button>
     </div>
     {rows.length===0&&<div style={{textAlign:'center',color:T.textMuted,fontSize:13,padding:'30px 0'}}>No {tab} transactions yet — connect Starling or import a CSV above.</div>}
-    {rows.map(txn=><BankTxnRow key={txn.id} txn={txn} invoices={invoices} onMakeInvoice={onMakeInvoice} onVoid={onVoid} onRestore={onRestore} onMatch={onMatch}/>)}
+    {rows.map(txn=><BankTxnRow key={txn.id} txn={txn} invoices={invoices} onMakeInvoice={onMakeInvoice} onVoid={onVoid} onRestore={onRestore} onMatch={onMatch} onUnmatch={onUnmatch}
+      selectable={tab==='income'&&txn.status==='unreviewed'} selected={!!selected[txn.id]} onToggleSelect={toggleSelect}/>)}
+    {selectedIds.length>0&&(
+      <div style={{position:'sticky',bottom:80,marginTop:10,zIndex:5}}>
+        <Btn full color={T.lumpGreen} onClick={handleBulkConvert}>Convert {selectedIds.length} to invoice{selectedIds.length>1?'s':''}</Btn>
+      </div>
+    )}
   </Page>);
 }
 
@@ -3303,6 +3321,9 @@ const addBankTxns=(rows,source)=>{
 };
 const voidBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'voided'}:t));
 const restoreBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'unreviewed'}:t));
+// Undo a match/invoice link without touching the invoice itself — for when a bank row
+// got linked to an invoice the user didn't mean to create (e.g. navigated away mid-save).
+const unmatchBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'unreviewed',matchedInvoiceId:null}:t));
 // Turn a bank income row into an invoice by opening the real Build Invoice screen,
 // pre-seeded with the transaction as a draft line item — so it goes through the same
 // Doc-creation/save path as a manually-built invoice.
@@ -3314,6 +3335,25 @@ const matchBankTxnToInvoice=(bankTxnId,invoiceId)=>{
   if(!txn)return;
   updI(invoiceId,{status:'paid',paidDate:txn.date,matchedBankTxnId:bankTxnId});
   setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invoiceId}:t));
+};
+// Turn several bank income rows into their own invoices in one go. Runs synchronously
+// (no Google Doc creation) and advances the invoice counter from a local variable rather
+// than re-reading settings each iteration, so batch items never mint duplicate invoice
+// numbers the way N parallel single-item saves could.
+const bulkConvertBankTxnsToInvoices=ids=>{
+  let counter=settings.invoiceCounter||1;
+  const year=new Date().getFullYear();
+  ids.forEach(id=>{
+    const txn=bankTxns.find(t=>t.id===id);
+    if(!txn||txn.category!=='income'||txn.status!=='unreviewed')return;
+    const eid=mkId(),iid=mkId();
+    const invNum=`INV-${year}-${String(counter).padStart(3,'0')}`;
+    addE({id:eid,type:'lump',date:txn.date,client:txn.description||'',description:txn.description||'',rate:null,hours:null,subtotal:txn.amount,tax:0,net:txn.amount,status:'Paid',invoiceId:iid});
+    addI({id:iid,invoiceNum:invNum,date:new Date().toISOString(),client:txn.description||'',clientEmail:'',subtotal:txn.amount,incomeTotal:txn.amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:txn.date,entryIds:[eid],reimbIds:[],docUrl:null,status:'paid',paidDate:txn.date,sourceBankTxnId:txn.id,matchedBankTxnId:txn.id});
+    onLinkBankTxn(txn.id,iid);
+    counter++;
+  });
+  setSettings(s=>({...s,invoiceCounter:counter}));
 };
 const[starlingStatus,setStarlingStatus]=useState(null); // {ok,accountLabel|error}
 const[starlingSyncing,setStarlingSyncing]=useState(false);
@@ -3400,7 +3440,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}
-  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync}/>}
+  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
