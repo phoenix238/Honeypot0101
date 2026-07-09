@@ -166,7 +166,8 @@ const Sheets={
   async labelProcessed(ids){if(!this._url||!ids||!ids.length)return;try{await this._jsonp(this._url+'?action=labelProcessed&ids='+ids.join(','),15000);}catch{}},
   async deleteReceiptFiles(threadId,driveFileId){if(!this._url)return;try{return await this._jsonp(this._url+'?action=deleteReceiptFiles&threadId='+encodeURIComponent(threadId||'')+'&driveFileId='+encodeURIComponent(driveFileId||''),15000);}catch{return null;}},
   async moveToFolder(fileId,category){if(!this._url||!fileId)return;try{return await this._jsonp(this._url+'?action=moveToFolder&fileId='+encodeURIComponent(fileId)+'&category='+encodeURIComponent(category),10000);}catch{return null;}},
-  async sendEmail(to,subject,body,docUrl){if(!this._url||!to)return{ok:false};try{const u=this._url+'?action=sendInvoice&to='+encodeURIComponent(to)+'&subject='+encodeURIComponent(subject||'')+'&body='+encodeURIComponent(body||'')+'&docUrl='+encodeURIComponent(docUrl||'');return await this._jsonp(u,15000);}catch(e){return{ok:false,error:e.message};}}
+  async sendEmail(to,subject,body,docUrl){if(!this._url||!to)return{ok:false};try{const u=this._url+'?action=sendInvoice&to='+encodeURIComponent(to)+'&subject='+encodeURIComponent(subject||'')+'&body='+encodeURIComponent(body||'')+'&docUrl='+encodeURIComponent(docUrl||'');return await this._jsonp(u,15000);}catch(e){return{ok:false,error:e.message};}},
+  async getFolderUrl(){if(!this._url)return null;try{const d=await this._jsonp(this._url+'?action=getFolderUrl',10000);return d?.url||null;}catch{return null;}}
 };
 
 // UK tax year start (6 April) for the current tax year
@@ -1625,6 +1626,9 @@ function doGet(e) {
     } else if (action === 'moveToFolder') {
       result = moveToFolder(e.parameter.fileId||'', e.parameter.category||'business');
 
+    } else if (action === 'getFolderUrl') {
+      result = { ok: true, url: getMasterFolder().getUrl() };
+
     } else if (action === 'sendInvoice') {
       var to = e.parameter.to || '';
       var subj = e.parameter.subject || '';
@@ -2326,6 +2330,16 @@ const handleAddClient=()=>{if(!clientForm.name)return;onAddClient({name:clientFo
 const copyCode=()=>{navigator.clipboard.writeText(GAS).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2200);});};
 const runTest=async()=>{setTesting(true);setTestMsg(null);const res=await onTest();setTestMsg(res);setTesting(false);};
 const handleSync=async()=>{setSyncing(true);setSyncResult(null);const ok=await onSyncFromSheets();setSyncing(false);setSyncResult(ok?'ok':'err');setTimeout(()=>setSyncResult(null),3000);};
+const[openingFolder,setOpeningFolder]=useState(false);
+const[folderErr,setFolderErr]=useState('');
+const openDriveFolder=async()=>{
+  setOpeningFolder(true);setFolderErr('');
+  Sheets.init(settings.sheetsUrl);
+  const url=await Sheets.getFolderUrl();
+  setOpeningFolder(false);
+  if(url)window.open(url,'_blank');
+  else setFolderErr('Could not reach it — check your Sheets connection above, or paste the updated Apps Script code and redeploy.');
+};
 return(<Page>
 <div style={{fontFamily:'Bricolage Grotesque,serif',fontSize:28,fontWeight:800,color:T.text,marginBottom:44,maxWidth:700}}>Settings</div>
 <div style={{maxWidth:700}}>
@@ -2367,6 +2381,9 @@ return(<Page>
       <button onClick={handleSync} disabled={!settings.sheetsUrl||syncing} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,fontWeight:500,fontSize:13,opacity:!settings.sheetsUrl||syncing?.5:1,display:'flex',alignItems:'center',gap:8}}>{syncing?<Spinner/>:null}{syncing?'Pulling…':syncResult==='ok'?'✓ Updated':syncResult==='err'?'Sync failed':'Pull latest from Sheets'}</button>
       <span style={{fontSize:12,color:T.textFaint}}>Never synced</span>
     </div>
+  </SettingsRow>
+  <SettingsRow label="">
+    <button onClick={openDriveFolder} disabled={!settings.sheetsUrl||openingFolder} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,fontWeight:500,fontSize:13,opacity:!settings.sheetsUrl||openingFolder?.5:1,display:'flex',alignItems:'center',gap:8}}><I n="drive" sz={15} c={T.drive}/> {openingFolder?'Opening…':folderErr||'Open my Drive folder'}</button>
   </SettingsRow>
   <button onClick={()=>setShowSetup(s=>!s)} style={{display:'flex',alignItems:'center',gap:8,background:'none',border:'none',padding:'10px 0',cursor:'pointer'}}>
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMuted} strokeWidth="2.2" strokeLinecap="round" style={{transform:showSetup?'rotate(180deg)':'rotate(0deg)'}}><path d="M6 9l6 6 6-6"/></svg>
