@@ -1299,7 +1299,7 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmat
     )}
   </div>);
 }
-function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,onBulkConvert,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync}){
+function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,onBulkConvert,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync,settings}){
   const[tab,setTab]=useState('income');
   const[selected,setSelected]=useState({});
   const fileRef=useRef(null);
@@ -3459,7 +3459,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}
-  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync}/>}
+  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync} settings={settings}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
