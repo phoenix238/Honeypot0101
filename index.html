@@ -76,6 +76,33 @@ const datesClose=(a,b)=>{if(!a||!b)return false;const da=new Date(String(a).slic
 const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
 const mkId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 const PROXY_URL='https://honey-proxy.phoenix-2bc.workers.dev';
+
+// Shared matching engine: finds the closest candidate bank income row for an invoice,
+// or vice versa, by amount (±2p) and date proximity (reuses datesClose's <6-day window).
+// Used by real-time invoice-creation matching, bulk re-match after a bank sync, and
+// manual matching from both the Bank tab and the invoice screen.
+const findBankTxnMatch=(invoice,bankTxns)=>{
+  const candidates=(bankTxns||[]).filter(t=>t.category==='income'&&t.status==='unreviewed'
+    &&Math.abs((t.amount||0)-(invoice.subtotal||0))<0.02&&datesClose(t.date,(invoice.date||'').slice(0,10)));
+  if(!candidates.length)return null;
+  candidates.sort((a,b)=>{
+    const da=Math.abs(new Date(a.date).getTime()-new Date((invoice.date||'').slice(0,10)).getTime());
+    const db=Math.abs(new Date(b.date).getTime()-new Date((invoice.date||'').slice(0,10)).getTime());
+    return da-db;
+  });
+  return candidates[0];
+};
+const findInvoiceMatch=(bankTxn,invoices)=>{
+  const candidates=(invoices||[]).filter(i=>i.status!=='paid'&&i.status!=='void'
+    &&Math.abs((i.subtotal||0)-(bankTxn.amount||0))<0.02&&datesClose((i.date||'').slice(0,10),bankTxn.date));
+  if(!candidates.length)return null;
+  candidates.sort((a,b)=>{
+    const da=Math.abs(new Date((a.date||'').slice(0,10)).getTime()-new Date(bankTxn.date).getTime());
+    const db=Math.abs(new Date((b.date||'').slice(0,10)).getTime()-new Date(bankTxn.date).getTime());
+    return da-db;
+  });
+  return candidates[0];
+};
 const AI_SCAN_MAX_B64=28*1024*1024; // ~28MB of base64 (~21MB raw file) — stays under Anthropic's 32MB request cap with headroom for the prompt
 const aiScanImage=async(dataUrl,isPdf,{model='claude-haiku-4-5-20251001',kind='receipt'}={})=>{
   const base64=dataUrl.split(',')[1]||'';
@@ -1036,6 +1063,73 @@ ${settings.name||''}`;
 })()}
 </Page>);}
 
+// ── BANK ─────────────────────────────────────────────────────────────────────
+function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch}){
+  const[matching,setMatching]=useState(false);
+  const isIncome=txn.category==='income';
+  const isVoided=txn.status==='voided';
+  const isDone=txn.status==='invoiced'||txn.status==='matched';
+  const doneInvoice=isDone?invoices.find(i=>i.id===txn.matchedInvoiceId):null;
+  const candidates=isIncome&&!isDone&&!isVoided?invoices.filter(i=>i.status!=='paid'&&i.status!=='void'):[];
+  return(
+  <div style={{padding:'11px 13px',marginBottom:8,borderRadius:12,background:isVoided?T.bg:T.surface,border:`1px solid ${T.border}`,opacity:isVoided?.55:1}}>
+    <div style={{display:'flex',alignItems:'center',gap:10}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{txn.description}</div>
+        <div style={{fontSize:11,color:T.textMuted}}>{fmtD(txn.date)}{txn.source==='starling'?' · Starling':' · CSV'}{isVoided?' · voided':''}{isDone&&doneInvoice?' · '+doneInvoice.invoiceNum:''}</div>
+      </div>
+      <div style={{fontFamily:"'Geist Mono',monospace",fontSize:14,fontWeight:700,color:isVoided?T.textFaint:isIncome?T.lumpGreen:T.business}}>{isIncome?'+':'−'}{fmt(txn.amount)}</div>
+    </div>
+    {isIncome&&!isVoided&&(
+      <div style={{display:'flex',gap:8,marginTop:9}}>
+        {!isDone&&<Btn small color={T.lumpGreen} onClick={()=>onMakeInvoice(txn.id)}>Make invoice</Btn>}
+        {!isDone&&candidates.length>0&&<Btn small outline color={T.accent} onClick={()=>setMatching(m=>!m)}>Match existing</Btn>}
+        {!isDone&&<Btn small outline color={T.danger} onClick={()=>onVoid(txn.id)}>Void</Btn>}
+        {isVoided&&<Btn small outline color={T.textMuted} onClick={()=>onRestore(txn.id)}>Restore</Btn>}
+      </div>
+    )}
+    {matching&&(
+      <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
+        {candidates.map(inv=>(
+          <button key={inv.id} onClick={()=>{onMatch(txn.id,inv.id);setMatching(false);}} style={{display:'flex',justifyContent:'space-between',width:'100%',background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'7px 10px',marginBottom:6,fontSize:12,cursor:'pointer'}}>
+            <span>{inv.invoiceNum} · {inv.client}</span><span style={{fontWeight:700}}>{fmt(inv.subtotal)}</span>
+          </button>
+        ))}
+      </div>
+    )}
+  </div>);
+}
+function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync}){
+  const[tab,setTab]=useState('income');
+  const fileRef=useRef(null);
+  const rows=bankTxns.filter(t=>t.category===tab).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const totalIncome=bankTxns.filter(t=>t.category==='income'&&t.status!=='voided').reduce((a,t)=>a+t.amount,0);
+  const totalSpending=bankTxns.filter(t=>t.category==='spending'&&t.status!=='voided').reduce((a,t)=>a+t.amount,0);
+  return(<Page>
+    <PgTitle>Bank</PgTitle>
+    <Card style={{marginBottom:14,border:`1px solid ${T.border}`}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted}}>Starling connection</div>
+          <div style={{fontSize:12,color:starlingStatus?.ok?T.lumpGreen:T.textMuted,fontWeight:700}}>
+            {starlingStatus===null?'Not checked yet':starlingStatus.ok?`Connected · ${starlingStatus.accountLabel}`:'Not connected'}
+          </div>
+          {starlingLastSync&&<div style={{fontSize:10,color:T.textFaint}}>Last synced {fmtD(starlingLastSync)}</div>}
+        </div>
+        <Btn small onClick={onSync} disabled={starlingSyncing}>{starlingSyncing?'Syncing…':'Sync now'}</Btn>
+      </div>
+      <button onClick={()=>fileRef.current?.click()} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0}}>Or import a bank CSV instead →</button>
+      <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)onImportCSV(f);e.target.value='';}}/>
+    </Card>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+      <button onClick={()=>setTab('income')} style={{background:tab==='income'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='income'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='income'?T.accent:T.textMuted}}>Income · {fmt(totalIncome)}</button>
+      <button onClick={()=>setTab('spending')} style={{background:tab==='spending'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='spending'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='spending'?T.accent:T.textMuted}}>Spending · {fmt(totalSpending)}</button>
+    </div>
+    {rows.length===0&&<div style={{textAlign:'center',color:T.textMuted,fontSize:13,padding:'30px 0'}}>No {tab} transactions yet — connect Starling or import a CSV above.</div>}
+    {rows.map(txn=><BankTxnRow key={txn.id} txn={txn} invoices={invoices} onMakeInvoice={onMakeInvoice} onVoid={onVoid} onRestore={onRestore} onMatch={onMatch}/>)}
+  </Page>);
+}
+
 // ── REPORTS ──────────────────────────────────────────────────────────────────
 function ReportsView({entries,receipts,invoices,settings={}}){
 const[xlsxBusy,setXlsxBusy]=useState(false);
@@ -1102,7 +1196,7 @@ const exportIncome=()=>{const rows=[['ID','Invoice Ref','Date','Client','Descrip
 
 const exportExpenses=()=>{const rows=[['ID','Date','Description','Type','Category','Amount','Status','Paid By','Owed By','Drive Link']];const allInRange=receipts.filter(r=>inRange(r.date));allInRange.forEach(r=>rows.push([r.id||'',r.date,r.description||'',r.category,r.subcategory?catLabel(r.subcategory):'',(r.amount||0).toFixed(2),r.status||'pending',r.paidBy||'',r.owedBy||'',r.driveUrl||'']));rows.push([],[' ','Business expenses','','',totBiz.toFixed(2)],[' ','Still owed to you','','',totPend.toFixed(2)],[' ','Reimbursed','','',totPaid.toFixed(2)]);dlCSV(rows,`expenses_${rangeLabel().replace(/\s/g,'_')}_${today()}.csv`);};
 
-const exportBackup=()=>{const KEYS=['mhq-entries','mhq-receipts','mhq-invoices','mhq-clients','mhq-settings','mhq-trash'];const keys={};KEYS.forEach(k=>{try{const v=localStorage.getItem(k);if(v!=null)keys[k]=JSON.parse(v);}catch{}});const blob=new Blob([JSON.stringify({app:'money-tracker-backup',v:1,exportedAt:new Date().toISOString(),keys},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`money-backup-${today()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);};
+const exportBackup=()=>{const KEYS=['mhq-entries','mhq-receipts','mhq-invoices','mhq-clients','mhq-settings','mhq-trash','mhq-banktxns'];const keys={};KEYS.forEach(k=>{try{const v=localStorage.getItem(k);if(v!=null)keys[k]=JSON.parse(v);}catch{}});const blob=new Blob([JSON.stringify({app:'money-tracker-backup',v:1,exportedAt:new Date().toISOString(),keys},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`money-backup-${today()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);};
 const importBackup=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='application/json,.json';inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);const keys=j.keys||j.data||j;let n=0;Object.keys(keys).forEach(k=>{if(/^mhq-/.test(k)){localStorage.setItem(k,JSON.stringify(keys[k]));n++;}});if(!n){alert('No Float / Honey data found in that file.');return;}alert('Imported '+n+' data set'+(n>1?'s':'')+'. Honey will now reload.');location.reload();}catch(e){alert('That file is not a valid backup.');}};r.readAsText(f);};inp.click();};
 const exportTaxYear=()=>{
   const year=range==='lastTax'?currentTaxYearStart-1:currentTaxYearStart;
@@ -2564,7 +2658,7 @@ return(<Page><div style={{maxWidth:900}}>
 )}
 </div></Page>);}
 
-const NAV_ITEMS=[['home','home','Home'],['log','list','Log'],['invoice','invoice','Invoice'],['snap','camera','Snap'],['sheets','sheets','Sheets'],['receipts','receipt','Files'],['settings','settings','Settings']];
+const NAV_ITEMS=[['home','home','Home'],['log','list','Log'],['invoice','invoice','Invoice'],['bank','money','Bank'],['snap','camera','Snap'],['sheets','sheets','Sheets'],['receipts','receipt','Files'],['settings','settings','Settings']];
 function NavButton({id,icon,label,active,onClick,vertical}){
 return(<button onClick={onClick} style={vertical?{background:active?'rgba(224,169,46,.1)':'transparent',border:'none',borderRadius:10,padding:'9px 12px',display:'flex',alignItems:'center',gap:12,width:'100%',color:active?T.accent:T.textMuted,marginBottom:2}:{background:'none',border:'none',padding:'9px 1px 7px',display:'flex',flexDirection:'column',alignItems:'center',gap:2,color:active?T.accent:T.textMuted}}>
   <I n={icon} sz={vertical?18:18} c={active?T.accent:T.textMuted}/>
@@ -2597,6 +2691,7 @@ const[entries,setEntries]=useState([]);
 const[receipts,setReceipts]=useState([]);
 const[invoices,setInvoices]=useState([]);
 const[clients,setClients]=useState([]);
+const[bankTxns,setBankTxns]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
@@ -2616,7 +2711,7 @@ useEffect(()=>{
     const url=localSettings?.sheetsUrl||'';
     if(localSettings)setSettings(s=>({...s,...localSettings}));
     // Paint the UI immediately from local data — Sheets sync continues in the background
-    setEntries(LS.get('mhq-entries')||[]);setReceipts(LS.get('mhq-receipts')||[]);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);
+    setEntries(LS.get('mhq-entries')||[]);setReceipts(LS.get('mhq-receipts')||[]);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);setBankTxns(LS.get('mhq-banktxns')||[]);
     setBooted(true);
     if(url){
       Sheets.init(url);setSyncStatus('loading');
@@ -2666,9 +2761,31 @@ useEffect(()=>{
   setSettings(s=>({...s,migratedInvoiceModel:true}));
 },[loaded]);
 
+useEffect(()=>{if(loaded)checkStarlingStatus();},[loaded]);
+
+// Keep bank income rows and invoices reconciled: whenever either list changes, try to
+// auto-match any still-unreviewed bank income row against any still-unmatched invoice.
 useEffect(()=>{
   if(!loaded)return;
-  LS.set('mhq-entries',entries);LS.set('mhq-receipts',receipts);LS.set('mhq-invoices',invoices);LS.set('mhq-clients',clients);LS.set('mhq-settings',settings);
+  const unmatchedInvoices=invoices.filter(i=>i.status!=='paid'&&i.status!=='void'&&!i.matchedBankTxnId);
+  const unreviewed=bankTxns.filter(t=>t.category==='income'&&t.status==='unreviewed');
+  if(!unmatchedInvoices.length||!unreviewed.length)return;
+  let anyMatch=false;
+  const invoiceUpdates={},txnUpdates={};
+  unmatchedInvoices.forEach(inv=>{
+    if(invoiceUpdates[inv.id])return;
+    const candidates=unreviewed.filter(t=>!txnUpdates[t.id]);
+    const match=findBankTxnMatch(inv,candidates);
+    if(match){anyMatch=true;invoiceUpdates[inv.id]=match;txnUpdates[match.id]=inv;}
+  });
+  if(!anyMatch)return;
+  setInvoices(p=>p.map(i=>invoiceUpdates[i.id]?{...i,status:'paid',paidDate:invoiceUpdates[i.id].date,matchedBankTxnId:invoiceUpdates[i.id].id}:i));
+  setBankTxns(p=>p.map(t=>txnUpdates[t.id]?{...t,status:'matched',matchedInvoiceId:txnUpdates[t.id].id}:t));
+},[loaded,invoices,bankTxns]);
+
+useEffect(()=>{
+  if(!loaded)return;
+  LS.set('mhq-entries',entries);LS.set('mhq-receipts',receipts);LS.set('mhq-invoices',invoices);LS.set('mhq-clients',clients);LS.set('mhq-settings',settings);LS.set('mhq-banktxns',bankTxns);
   const url=settings.sheetsUrl;
   if(!url){setSyncStatus('local');return;}
   // Never push an empty state to a sheet we haven't successfully read yet — protects existing sheet data on a fresh device
@@ -2684,7 +2801,7 @@ useEffect(()=>{
     setSyncStatus(ok?'synced':'error');
     isSaving.current=false;
   },2500);
-},[entries,receipts,invoices,clients,settings,loaded]);
+},[entries,receipts,invoices,clients,settings,bankTxns,loaded]);
 
 useEffect(()=>{
   if(!loaded||!settings.sheetsUrl)return;
@@ -2797,6 +2914,58 @@ const parseBankCSV=file=>new Promise((res,rej)=>{
   rd.onerror=()=>rej(new Error('Could not read the file'));
   rd.readAsText(file);
 });
+
+// Bank tab CSV import: unlike parseBankCSV (credits-only, used by the guided-setup bank
+// step), this keeps BOTH income and spending rows, tagged with direction, for the Bank tab's
+// Income/Spending toggle.
+const parseBankCSVFull=file=>new Promise((res,rej)=>{
+  const rd=new FileReader();
+  rd.onload=ev=>{
+    try{
+      const text=ev.target.result;
+      const csvLine=l=>{const f=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"'){if(q&&l[i+1]==='"'){c+='"';i++;}else q=!q;}else if(ch===','&&!q){f.push(c.trim());c='';}else c+=ch;}f.push(c.trim());return f;};
+      const rawLines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+      if(rawLines.length<2){res([]);return;}
+      const hdr=csvLine(rawLines[0]).map(h=>h.replace(/^"|"$/g,'').toLowerCase().replace(/[^a-z0-9]/g,' ').trim());
+      const fi=ps=>hdr.findIndex(h=>ps.some(p=>h===p||h.startsWith(p)));
+      const dateI=fi(['date','transaction date','posted date','value date','trans date']);
+      const descI=fi(['description','narration','name','counter party','payee','reference','memo','details','transaction description','particulars','trans description']);
+      const creditI=fi(['credit amount','money in','credit gbp','credit']);
+      const debitI=fi(['debit amount','money out','debit gbp','debit']);
+      const amtI=fi(['amount gbp','amount','value']);
+      if(dateI<0){rej(new Error("No date column found — check your bank's CSV export format"));return;}
+      const parseDate=s=>{
+        s=(s||'').trim().replace(/^"|"$/g,'');
+        const m1=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m1)return`${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`;
+        const m2=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(m2)return s;
+        const m3=s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);if(m3)return`${m3[3]}-${m3[2].padStart(2,'0')}-${m3[1].padStart(2,'0')}`;
+        const m4=s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);if(m4)return`${m4[3]}-${m4[2]}-${m4[1]}`;
+        const dt=new Date(s);return isNaN(dt)?null:dt.toISOString().slice(0,10);
+      };
+      const num=s=>parseFloat((s||'').replace(/[£$€,\s]/g,''))||0;
+      const rows=[];
+      for(let i=1;i<rawLines.length;i++){
+        const cols=csvLine(rawLines[i]);
+        const date=parseDate(cols[dateI]);
+        if(!date)continue;
+        const desc=descI>=0?(cols[descI]||'').replace(/^"|"$/g,''):'';
+        if(creditI>=0||debitI>=0){
+          const credit=creditI>=0?num(cols[creditI]):0;
+          const debit=debitI>=0?num(cols[debitI]):0;
+          if(credit>0)rows.push({date,description:desc,amount:credit,direction:'IN'});
+          else if(debit>0)rows.push({date,description:desc,amount:debit,direction:'OUT'});
+        }else if(amtI>=0){
+          const amount=num(cols[amtI]);
+          if(amount>0)rows.push({date,description:desc,amount,direction:'IN'});
+          else if(amount<0)rows.push({date,description:desc,amount:Math.abs(amount),direction:'OUT'});
+        }
+      }
+      res(rows);
+    }catch(e){rej(e);}
+  };
+  rd.onerror=()=>rej(new Error('Could not read the file'));
+  rd.readAsText(file);
+});
 const handleBankCSV=async file=>{
   try{
     const rows=await parseBankCSV(file);
@@ -2846,6 +3015,77 @@ const delR=id=>setReceipts(p=>{const v=p.find(r=>r.id===id);if(v)toTrash('receip
 const addI=inv=>setInvoices(p=>[{...inv,id:inv.id||mkId()},...p]);
 const updI=(id,patch)=>setInvoices(p=>p.map(i=>i.id===id?{...i,...patch}:i));
 const delI=id=>setInvoices(p=>{const v=p.find(i=>i.id===id);if(v)toTrash('invoice',[v]);return p.filter(i=>i.id!==id);});
+
+// ── Bank transactions (Starling + CSV) ──────────────────────────────────────
+// Merge new rows into bankTxns, skipping anything already seen (by Starling's own
+// feedItemUid, or by date+amount+direction+description for CSV rows with no such id).
+const addBankTxns=(rows,source)=>{
+  setBankTxns(prev=>{
+    const seenFeedIds=new Set(prev.map(t=>t.feedItemUid).filter(Boolean));
+    const seenShape=new Set(prev.map(t=>`${t.date}|${t.amount}|${t.direction}|${(t.description||'').toLowerCase().trim()}`));
+    const fresh=rows.filter(r=>{
+      if(r.feedItemUid)return!seenFeedIds.has(r.feedItemUid);
+      return!seenShape.has(`${r.date}|${r.amount}|${r.direction}|${(r.description||'').toLowerCase().trim()}`);
+    }).map(r=>({
+      id:mkId(),source,feedItemUid:r.feedItemUid||null,date:r.date,description:r.description||'Bank transaction',
+      amount:r.amount,direction:r.direction,category:r.direction==='IN'?'income':'spending',
+      status:'unreviewed',matchedInvoiceId:null,createdAt:new Date().toISOString()
+    }));
+    return[...fresh,...prev];
+  });
+};
+const voidBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'voided'}:t));
+const restoreBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'unreviewed'}:t));
+// Turn a bank income row directly into an invoice — used when the income wasn't already
+// captured via a log entry / the invoice maker.
+const makeInvoiceFromBankTxn=(bankTxnId,client)=>{
+  const txn=bankTxns.find(t=>t.id===bankTxnId);
+  if(!txn)return;
+  const invId=mkId();
+  const num=`INV-${new Date().getFullYear()}-${String(settings.invoiceCounter||1).padStart(3,'0')}`;
+  addI({id:invId,invoiceNum:num,date:txn.date+'T12:00:00.000Z',client:client||txn.description||'Client',clientEmail:'',
+    subtotal:txn.amount,incomeTotal:txn.amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[],reimbIds:[],
+    docUrl:null,status:'paid',paidDate:txn.date,sourceBankTxnId:txn.id,matchedBankTxnId:txn.id});
+  setSettings(s=>({...s,invoiceCounter:(s.invoiceCounter||1)+1}));
+  setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invId}:t));
+};
+const matchBankTxnToInvoice=(bankTxnId,invoiceId)=>{
+  const txn=bankTxns.find(t=>t.id===bankTxnId);
+  if(!txn)return;
+  updI(invoiceId,{status:'paid',paidDate:txn.date,matchedBankTxnId:bankTxnId});
+  setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invoiceId}:t));
+};
+const[starlingStatus,setStarlingStatus]=useState(null); // {ok,accountLabel|error}
+const[starlingSyncing,setStarlingSyncing]=useState(false);
+const checkStarlingStatus=async()=>{
+  try{
+    const res=await fetch(PROXY_URL+'/starling/status');
+    const data=await res.json();
+    setStarlingStatus(data);
+  }catch(e){setStarlingStatus({ok:false,error:'Could not reach the proxy'});}
+};
+const syncStarling=async()=>{
+  setStarlingSyncing(true);
+  try{
+    const since=settings.starlingLastSync||TAX_YEAR_START;
+    const res=await fetch(`${PROXY_URL}/starling/transactions?since=${since}`);
+    const data=await res.json();
+    if(data.error)throw new Error(data.error);
+    addBankTxns(data.transactions||[],'starling');
+    setSettings(s=>({...s,starlingConnected:true,starlingLastSync:today(),starlingAccountLabel:data.accountLabel||s.starlingAccountLabel}));
+  }catch(e){
+    setSettings(s=>({...s,starlingConnected:false}));
+    alert('Could not sync with Starling: '+e.message);
+  }finally{
+    setStarlingSyncing(false);
+  }
+};
+const importBankCSVFull=file=>{
+  parseBankCSVFull(file).then(rows=>{
+    if(!rows.length){alert('No transactions found in that CSV — check the export format.');return;}
+    addBankTxns(rows,'csv');
+  }).catch(err=>alert('CSV error: '+err.message));
+};
 const addClient=c=>setClients(p=>[{...c,id:mkId()},...p]);
 const delClient=id=>setClients(p=>p.filter(c=>c.id!==id));
 // ── Transfer from the old Freelance Tracker (read-only: never writes ft-* keys) ──
@@ -2877,8 +3117,8 @@ const importOld=(data,allTime)=>{
   }
   return{entries:ne.length,receipts:nr.length,invoices:ni.length,clients:nc.length,settings:gotSettings};
 };
-const exportBackup=()=>{const payload={entries,receipts,invoices,clients,settings,exportedAt:new Date().toISOString()};const a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(payload,null,2));a.download='honey-backup-'+today()+'.json';a.click();};
-const importBackup=file=>{const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);if(!d||typeof d!=='object')throw new Error('bad file');if(!window.confirm('Restore from this backup? This replaces all current entries, receipts, invoices and clients in the app.'))return;if(Array.isArray(d.entries))setEntries(d.entries);if(Array.isArray(d.receipts))setReceipts(d.receipts);if(Array.isArray(d.invoices))setInvoices(d.invoices);if(Array.isArray(d.clients))setClients(d.clients);if(d.settings)setSettings(s=>({...s,...d.settings}));}catch(e){window.alert('Could not read that backup file.');}};reader.readAsText(file);};
+const exportBackup=()=>{const payload={entries,receipts,invoices,clients,bankTxns,settings,exportedAt:new Date().toISOString()};const a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(payload,null,2));a.download='honey-backup-'+today()+'.json';a.click();};
+const importBackup=file=>{const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);if(!d||typeof d!=='object')throw new Error('bad file');if(!window.confirm('Restore from this backup? This replaces all current entries, receipts, invoices and clients in the app.'))return;if(Array.isArray(d.entries))setEntries(d.entries);if(Array.isArray(d.receipts))setReceipts(d.receipts);if(Array.isArray(d.invoices))setInvoices(d.invoices);if(Array.isArray(d.clients))setClients(d.clients);if(Array.isArray(d.bankTxns))setBankTxns(d.bankTxns);if(d.settings)setSettings(s=>({...s,...d.settings}));}catch(e){window.alert('Could not read that backup file.');}};reader.readAsText(file);};
 const clearEntries=()=>{if(window.confirm('Move ALL income entries to Trash? You can restore them for 30 days.')){toTrash('entry',entries);setEntries([]);}};
 const clearReceipts=()=>{if(window.confirm('Move ALL receipts to Trash? You can restore them for 30 days.')){toTrash('receipt',receipts);setReceipts([]);}};
 const clearInvoices=()=>{if(window.confirm('Move ALL invoice records to Trash? You can restore them for 30 days.')){toTrash('invoice',invoices);setInvoices([]);}};
@@ -2897,6 +3137,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl}/>}
+  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={makeInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go}/>}
