@@ -1175,11 +1175,12 @@ ${settings.name||''}`;
 </Page>);}
 
 // ── BANK ─────────────────────────────────────────────────────────────────────
-function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch}){
+function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onToggleTransfer}){
   const[matching,setMatching]=useState(false);
   const isIncome=txn.category==='income';
   const isVoided=txn.status==='voided';
   const isDone=txn.status==='invoiced'||txn.status==='matched';
+  const isTransfer=!!txn.isTransfer;
   const doneInvoice=isDone?invoices.find(i=>i.id===txn.matchedInvoiceId):null;
   const candidates=isIncome&&!isDone&&!isVoided?invoices.filter(i=>i.status!=='paid'&&i.status!=='void'):[];
   return(
@@ -1187,18 +1188,20 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch}){
     <div style={{display:'flex',alignItems:'center',gap:10}}>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{txn.description}</div>
-        <div style={{fontSize:11,color:T.textMuted}}>{fmtD(txn.date)}{txn.source==='starling'?' · Starling':' · CSV'}{isVoided?' · voided':''}{isDone&&doneInvoice?' · '+doneInvoice.invoiceNum:''}</div>
+        <div style={{fontSize:11,color:T.textMuted,display:'flex',alignItems:'center',gap:6}}>
+          <span>{fmtD(txn.date)}{txn.source==='starling'?' · Starling':' · CSV'}{isVoided?' · voided':''}{isDone&&doneInvoice?' · '+doneInvoice.invoiceNum:''}</span>
+          {isTransfer&&<span style={{background:T.accent+'18',color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:6,padding:'1px 6px',fontSize:10,fontWeight:700,flexShrink:0}}>⇄ transfer</span>}
+        </div>
       </div>
       <div style={{fontFamily:"'Geist Mono',monospace",fontSize:14,fontWeight:700,color:isVoided?T.textFaint:isIncome?T.lumpGreen:T.business}}>{isIncome?'+':'−'}{fmt(txn.amount)}</div>
     </div>
-    {isIncome&&!isVoided&&(
-      <div style={{display:'flex',gap:8,marginTop:9}}>
-        {!isDone&&<Btn small color={T.lumpGreen} onClick={()=>onMakeInvoice(txn.id)}>Make invoice</Btn>}
-        {!isDone&&candidates.length>0&&<Btn small outline color={T.accent} onClick={()=>setMatching(m=>!m)}>Match existing</Btn>}
-        {!isDone&&<Btn small outline color={T.danger} onClick={()=>onVoid(txn.id)}>Void</Btn>}
-        {isVoided&&<Btn small outline color={T.textMuted} onClick={()=>onRestore(txn.id)}>Restore</Btn>}
-      </div>
-    )}
+    <div style={{display:'flex',gap:8,marginTop:9,flexWrap:'wrap'}}>
+      {isIncome&&!isDone&&!isVoided&&<Btn small color={T.lumpGreen} onClick={()=>onMakeInvoice(txn.id)}>Make invoice</Btn>}
+      {isIncome&&!isDone&&!isVoided&&candidates.length>0&&<Btn small outline color={T.accent} onClick={()=>setMatching(m=>!m)}>Match existing</Btn>}
+      {isIncome&&!isDone&&!isVoided&&<Btn small outline color={T.danger} onClick={()=>onVoid(txn.id)}>Void</Btn>}
+      {isIncome&&isVoided&&<Btn small outline color={T.textMuted} onClick={()=>onRestore(txn.id)}>Restore</Btn>}
+      {onToggleTransfer&&<Btn small outline color={T.textMuted} onClick={()=>onToggleTransfer(txn.id)}>{isTransfer?'Not a transfer':'Mark as transfer'}</Btn>}
+    </div>
     {matching&&(
       <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
         {candidates.map(inv=>(
@@ -1210,12 +1213,13 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch}){
     )}
   </div>);
 }
-function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync}){
+function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onToggleTransfer,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync}){
   const[tab,setTab]=useState('income');
   const fileRef=useRef(null);
-  const rows=bankTxns.filter(t=>t.category===tab).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const totalIncome=bankTxns.filter(t=>t.category==='income'&&t.status!=='voided').reduce((a,t)=>a+t.amount,0);
-  const totalSpending=bankTxns.filter(t=>t.category==='spending'&&t.status!=='voided').reduce((a,t)=>a+t.amount,0);
+  const transferCount=bankTxns.filter(t=>t.isTransfer).length;
+  const rows=(tab==='transfers'?bankTxns.filter(t=>t.isTransfer):bankTxns.filter(t=>t.category===tab&&!t.isTransfer)).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const totalIncome=bankTxns.filter(t=>t.category==='income'&&t.status!=='voided'&&!t.isTransfer).reduce((a,t)=>a+t.amount,0);
+  const totalSpending=bankTxns.filter(t=>t.category==='spending'&&t.status!=='voided'&&!t.isTransfer).reduce((a,t)=>a+t.amount,0);
   return(<Page>
     <PgTitle>Bank</PgTitle>
     <Card style={{marginBottom:14,border:`1px solid ${T.border}`}}>
@@ -1232,12 +1236,14 @@ function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onIm
       <button onClick={()=>fileRef.current?.click()} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0}}>Or import a bank CSV instead →</button>
       <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)onImportCSV(f);e.target.value='';}}/>
     </Card>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+    <div style={{display:'grid',gridTemplateColumns:transferCount>0?'1fr 1fr 1fr':'1fr 1fr',gap:8,marginBottom:14}}>
       <button onClick={()=>setTab('income')} style={{background:tab==='income'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='income'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='income'?T.accent:T.textMuted}}>Income · {fmt(totalIncome)}</button>
       <button onClick={()=>setTab('spending')} style={{background:tab==='spending'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='spending'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='spending'?T.accent:T.textMuted}}>Spending · {fmt(totalSpending)}</button>
+      {transferCount>0&&<button onClick={()=>setTab('transfers')} style={{background:tab==='transfers'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='transfers'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='transfers'?T.accent:T.textMuted}}>Transfers · {transferCount}</button>}
     </div>
+    {tab==='transfers'&&<div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>Money moved between your own spaces/pots — kept out of income and spending totals.</div>}
     {rows.length===0&&<div style={{textAlign:'center',color:T.textMuted,fontSize:13,padding:'30px 0'}}>No {tab} transactions yet — connect Starling or import a CSV above.</div>}
-    {rows.map(txn=><BankTxnRow key={txn.id} txn={txn} invoices={invoices} onMakeInvoice={onMakeInvoice} onVoid={onVoid} onRestore={onRestore} onMatch={onMatch}/>)}
+    {rows.map(txn=><BankTxnRow key={txn.id} txn={txn} invoices={invoices} onMakeInvoice={onMakeInvoice} onVoid={onVoid} onRestore={onRestore} onMatch={onMatch} onToggleTransfer={onToggleTransfer}/>)}
   </Page>);
 }
 
@@ -3226,6 +3232,7 @@ const addBankTxns=(rows,source)=>{
     }).map(r=>({
       id:mkId(),source,feedItemUid:r.feedItemUid||null,date:r.date,description:r.description||'Bank transaction',
       amount:r.amount,direction:r.direction,category:r.direction==='IN'?'income':'spending',
+      isTransfer:!!r.isTransfer,
       status:'unreviewed',matchedInvoiceId:null,createdAt:new Date().toISOString()
     }));
     return[...fresh,...prev];
@@ -3233,6 +3240,7 @@ const addBankTxns=(rows,source)=>{
 };
 const voidBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'voided'}:t));
 const restoreBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'unreviewed'}:t));
+const toggleBankTxnTransfer=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,isTransfer:!t.isTransfer}:t));
 // Turn a bank income row directly into an invoice — used when the income wasn't already
 // captured via a log entry / the invoice maker.
 const makeInvoiceFromBankTxn=(bankTxnId,client)=>{
@@ -3335,7 +3343,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl}/>}
-  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={makeInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync}/>}
+  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={makeInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onToggleTransfer={toggleBankTxnTransfer} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}

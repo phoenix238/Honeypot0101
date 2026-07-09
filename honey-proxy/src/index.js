@@ -225,6 +225,9 @@ export default {
             description: item.counterPartyName || item.reference || 'Bank transaction',
             amount: Math.round((item.amount?.minorUnits || 0)) / 100,
             direction: item.direction === 'IN' ? 'IN' : 'OUT',
+            // Starling tags moves between the main balance and a Space (savings goal) this way —
+            // they're not real income/spending, just money moving between the user's own pots.
+            isTransfer: item.source === 'INTERNAL_TRANSFER' || item.counterPartyType === 'CATEGORY',
           }))
           .filter(t => t.date && t.amount > 0);
         return new Response(JSON.stringify({ accountLabel: account.name, transactions }), {
