@@ -966,7 +966,7 @@ const[chaseOpen,setChaseOpen]=useState(null);const[chaseSending,setChaseSending]
 const[shareOpen,setShareOpen]=useState(null);const[shareTo,setShareTo]=useState('');const[shareSending,setShareSending]=useState(null);const[shareResult,setShareResult]=useState({});
 // Inline quick-add: log a new day (timed/manual/lump) straight into the invoice being
 // built, without leaving this screen — reuses the exact gross/tax/net formula from AddView.
-const[quickType,setQuickType]=useState('timed');const[quickOpen,setQuickOpen]=useState(true);const[showCalPicker,setShowCalPicker]=useState(false);
+const[quickType,setQuickType]=useState('timed');const[quickOpen,setQuickOpen]=useState(false);const[showCalPicker,setShowCalPicker]=useState(false);
 const[quickForm,setQuickForm]=useState({date:today(),description:'',startTime:'',endTime:'',hours:'',rate:settings.defaultRate||35,amount:''});
 const qf=(k,v)=>setQuickForm(f=>({...f,[k]:v}));
 const quickTimedH=()=>{if(!quickForm.startTime||!quickForm.endTime)return 0;const[sh,sm]=quickForm.startTime.split(':').map(Number);const[eh,em]=quickForm.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};
@@ -1079,14 +1079,16 @@ const printInvoiceRecord=(inv)=>{
 
 if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});setSelR({});setDocUrl(null);setSelectedClientId(null);}}>Build Invoice</PgTitle>
 {selEntries.length>0&&(<><Lbl>Added to this invoice</Lbl><div style={{marginBottom:14}}>{selEntries.map(e=>(<EntryRow key={e.id} e={e} confId={confId} setConfId={setConfId} onDelete={id=>{setSelE(s=>{const c={...s};delete c[id];return c;});onDeleteEntry(id);}}/>))}</div></>)}
-<button onClick={()=>setQuickOpen(o=>!o)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginBottom:10,display:'flex',alignItems:'center',gap:5}}><I n="plus" sz={13} c={T.accent}/> {quickOpen?'Hide log-a-day':'Log a day straight onto this invoice'}</button>
+<div style={{display:'flex',gap:12,marginBottom:10}}>
+<button onClick={()=>setQuickOpen(o=>!o)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,display:'flex',alignItems:'center',gap:5}}><I n="plus" sz={13} c={T.accent}/> {quickOpen?'Hide log-a-day':'Log a day straight onto this invoice'}</button>
+<button onClick={()=>setShowCalPicker(o=>!o)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,display:'flex',alignItems:'center',gap:5}}><I n="clock" sz={13} c={T.accent}/> {showCalPicker?'Hide':'Or select calendar events'}</button>
+</div>
 {quickOpen&&(<Card style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:10}}>
     {[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([v,l,c])=>(
       <button key={v} onClick={()=>setQuickType(v)} style={{background:quickType===v?c+'22':T.bg,border:`1.5px solid ${quickType===v?c:T.border}`,borderRadius:9,padding:'7px 4px',fontSize:11,fontWeight:700,color:quickType===v?c:T.textMuted}}>{l}</button>
     ))}
   </div>
-  <button onClick={()=>setShowCalPicker(true)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginBottom:10,display:'flex',alignItems:'center',gap:5}}><I n="clock" sz={13} c={T.accent}/> Or select calendar events</button>
   {showCalPicker&&<CalendarEventPicker rate={settings.defaultRate||35} onClose={()=>setShowCalPicker(false)} onImport={entries=>{entries.forEach(e=>{onAddEntry(e);setSelE(s=>({...s,[e.id]:true}));});}}/>}
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
     <Field label="Date"><Inp type="date" value={quickForm.date} onChange={e=>qf('date',e.target.value)}/></Field>
