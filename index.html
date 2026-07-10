@@ -945,7 +945,7 @@ return(<Page>
 </Page>);}
 
 // ── INVOICE ──────────────────────────────────────────────────────────────────
-function InvoiceView({entries,receipts,invoices,clients=[],onAddInvoice,onUpdateInvoice,onDeleteInvoice,onUpdateReceipt,onUpdateEntry,onDeleteEntry,onSaveClient,onAddEntry,settings,setSettings,sheetsUrl,seedBankTxn,onConsumeSeedBankTxn,onLinkBankTxn}){
+function InvoiceView({entries,receipts,invoices,clients=[],onAddInvoice,onUpdateInvoice,onDeleteInvoice,onVoidInvoice,onUpdateReceipt,onUpdateEntry,onDeleteEntry,onSaveClient,onAddEntry,settings,setSettings,sheetsUrl,seedBankTxn,onConsumeSeedBankTxn,onLinkBankTxn}){
 const[mode,setMode]=useState('list');const[selE,setSelE]=useState({});const[selR,setSelR]=useState({});const[client,setClient]=useState({name:'',email:'',address:''});const[selectedClientId,setSelectedClientId]=useState(null);const oneMonthFromNow=()=>{const d=new Date();d.setMonth(d.getMonth()+1);return d.toISOString().split('T')[0];};const[dueDate,setDueDate]=useState(oneMonthFromNow());const[notes,setNotes]=useState(settings.bankDetails||'');const[flash,setFlash]=useState(false);const[docUrl,setDocUrl]=useState(null);const[creatingDoc,setCreatingDoc]=useState(false);const[docErr,setDocErr]=useState(null);const[docStatus,setDocStatus]=useState('');const[confInvId,setConfInvId]=useState(null);const[saveClientFlash,setSaveClientFlash]=useState(false);const[deductions,setDeductions]=useState([]);const addDeduction=()=>setDeductions(d=>[...d,{id:Date.now().toString(),description:'',amount:''}]);const updateDeduction=(id,k,v)=>setDeductions(d=>d.map(x=>x.id===id?{...x,[k]:v}:x));const removeDeduction=id=>setDeductions(d=>d.filter(x=>x.id!==id));
 const[linkedBankTxn,setLinkedBankTxn]=useState(null);
 const[confId,setConfId]=useState(null);
@@ -1197,13 +1197,14 @@ ${settings.name||''}`;
     const paid=inv.status==='paid';
     const days=inv.dueDate?Math.floor((today0-new Date(inv.dueDate+'T12:00:00'))/86400000):0;
     return(<Card key={inv.id} style={{marginBottom:10,border:`1.5px solid ${overdue?T.danger:T.border}`,background:overdue?T.danger+'08':T.surface,opacity:paid?0.7:1}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4,opacity:inv.status==='void'?0.5:1,textDecoration:inv.status==='void'?'line-through':'none'}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3,flexWrap:'wrap'}}>
             <div style={{fontFamily:'Geist Mono,monospace',fontSize:12,color:T.accent}}>{inv.invoiceNum}</div>
-            {paid&&<span style={{background:T.lumpGreen+'22',color:T.lumpGreen,border:`1px solid ${T.lumpGreen}44`,borderRadius:6,padding:'1px 7px',fontSize:10,fontWeight:700}}>PAID</span>}
+            {inv.status==='void'&&<span style={{background:T.textMuted+'22',color:T.textMuted,border:`1px solid ${T.textMuted}44`,borderRadius:6,padding:'1px 7px',fontSize:10,fontWeight:700}}>VOID</span>}
+            {paid&&inv.status!=='void'&&<span style={{background:T.lumpGreen+'22',color:T.lumpGreen,border:`1px solid ${T.lumpGreen}44`,borderRadius:6,padding:'1px 7px',fontSize:10,fontWeight:700}}>PAID</span>}
             {overdue&&<span style={{background:T.danger+'22',color:T.danger,border:`1px solid ${T.danger}66`,borderRadius:6,padding:'1px 7px',fontSize:10,fontWeight:700,animation:'pulse 2s ease-in-out infinite'}}>OVERDUE {days}D</span>}
-            {!paid&&!overdue&&inv.dueDate&&<span style={{background:T.pending+'22',color:T.pending,border:`1px solid ${T.pending}44`,borderRadius:6,padding:'1px 7px',fontSize:10,fontWeight:700}}>DUE {fmtD(inv.dueDate)}</span>}
+            {!paid&&!overdue&&inv.dueDate&&inv.status!=='void'&&<span style={{background:T.pending+'22',color:T.pending,border:`1px solid ${T.pending}44`,borderRadius:6,padding:'1px 7px',fontSize:10,fontWeight:700}}>DUE {fmtD(inv.dueDate)}</span>}
           </div>
           <div style={{fontWeight:700}}>{inv.client||'No client'}</div>
           <div style={{fontSize:12,color:T.textMuted}}>{fmtD((inv.date||'').split('T')[0])}</div>
@@ -1211,7 +1212,10 @@ ${settings.name||''}`;
         <div style={{textAlign:'right',flexShrink:0}}>
           <div style={{fontFamily:'Geist Mono,monospace',fontSize:16,fontWeight:700}}>{fmt(inv.subtotal)}</div>
           {(inv.reimbTotal||0)>0&&<div style={{fontSize:11,color:T.reimb}}>incl. {fmt(inv.reimbTotal)} expenses</div>}
-          <button onClick={()=>confInvId===inv.id?onDeleteInvoice(inv.id):setConfInvId(inv.id)} style={{background:confInvId===inv.id?T.dangerBg:'none',border:confInvId===inv.id?`1px solid ${T.danger}44`:'none',borderRadius:6,color:confInvId===inv.id?T.danger:T.textFaint,padding:'2px 7px',fontSize:11,marginTop:4,cursor:'pointer'}}>{confInvId===inv.id?'Sure? Delete':'del'}</button>
+          <div style={{display:'flex',gap:4,marginTop:4}}>
+            {inv.status!=='void'&&onVoidInvoice&&(<button onClick={()=>onVoidInvoice(inv.id)} style={{background:'none',border:'none',color:T.textFaint,padding:'2px 7px',fontSize:11,cursor:'pointer',textDecoration:'underline'}}>void</button>)}
+            <button onClick={()=>confInvId===inv.id?onDeleteInvoice(inv.id):setConfInvId(inv.id)} style={{background:confInvId===inv.id?T.dangerBg:'none',border:confInvId===inv.id?`1px solid ${T.danger}44`:'none',borderRadius:6,color:confInvId===inv.id?T.danger:T.textFaint,padding:'2px 7px',fontSize:11,cursor:'pointer'}}>{confInvId===inv.id?'Sure? Delete':'del'}</button>
+          </div>
         </div>
       </div>
       <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
@@ -3349,6 +3353,13 @@ const delR=id=>setReceipts(p=>{const v=p.find(r=>r.id===id);if(v)toTrash('receip
 const addI=inv=>setInvoices(p=>[{...inv,id:inv.id||mkId()},...p]);
 const updI=(id,patch)=>setInvoices(p=>p.map(i=>i.id===id?{...i,...patch}:i));
 const delI=id=>{setInvoices(p=>{const v=p.find(i=>i.id===id);if(v)toTrash('invoice',[v]);return p.filter(i=>i.id!==id);});setBankTxns(p=>p.map(t=>t.matchedInvoiceId===id?{...t,status:'unreviewed',matchedInvoiceId:null}:t));};
+const voidInvoice=id=>{
+  const inv=invoices.find(i=>i.id===id);
+  if(!inv)return;
+  updI(id,{status:'void'});
+  setBankTxns(p=>p.map(t=>t.matchedInvoiceId===id?{...t,status:'unreviewed',matchedInvoiceId:null}:t));
+  toTrash('invoice',[inv]);
+};
 
 // ── Bank transactions (Starling + CSV) ──────────────────────────────────────
 // Merge new rows into bankTxns, skipping anything already seen (by Starling's own
@@ -3507,7 +3518,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='add'&&<AddView onAdd={addE} settings={settings} initialType={addType} back={()=>setView('home')} onAddInvoice={addI} invoiceCounter={settings.invoiceCounter||1}/>}
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
-  {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}
+  {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onVoidInvoice={voidInvoice} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}
   {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync} settings={settings}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
