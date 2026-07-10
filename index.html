@@ -3303,6 +3303,10 @@ useEffect(()=>{
 const pullBankSync=async(key)=>{
   const k=key||settings.bankSyncKey;
   if(!k)return false;
+  // Refresh invoices from Sheets first, if connected — otherwise the orphan-cleanup effect below
+  // can see a bank txn matched to an invoice that's only missing locally because Sheets hasn't
+  // caught up yet, and wrongly un-match it as if the invoice had been deleted.
+  if(settings.sheetsUrl)await syncFromSheets();
   BankSync.init(k);setBankSyncStatus('loading');
   const d=await BankSync.load();
   if(Array.isArray(d)){
