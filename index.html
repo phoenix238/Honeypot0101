@@ -1312,9 +1312,9 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmat
     )}
   </div>);
 }
-function BankView({bankTxns,cardIncome=[],invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,onBulkConvert,onImportCSV,onSync,onRevolutSync,onAddCardIncome,onVoidCard,onUnvoidCard,starlingStatus,starlingSyncing,starlingLastSync,settings}){
+function BankView({bankTxns,cardIncome=[],invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,onBulkConvert,onImportCSV,onSync,onMonzoSync,onAddCardIncome,onVoidCard,onUnvoidCard,starlingStatus,starlingSyncing,starlingLastSync,settings}){
   const[tab,setTab]=useState('income');
-  const[source,setSource]=useState('starling'); // 'starling' or 'revolut'
+  const[source,setSource]=useState('starling'); // 'starling' or 'monzo'
   const[selected,setSelected]=useState({});
   const[showAddCardForm,setShowAddCardForm]=useState(false);
   const[newCardAmount,setNewCardAmount]=useState('');
@@ -1362,25 +1362,25 @@ function BankView({bankTxns,cardIncome=[],invoices,onMakeInvoice,onVoid,onRestor
               {starlingLastSync&&<div style={{fontSize:10,color:T.textFaint}}>Last synced {fmtD(starlingLastSync)}</div>}
             </>
           )}
-          {source==='revolut'&&(
+          {source==='monzo'&&(
             <>
-              <div style={{fontSize:11,fontWeight:700,color:T.textMuted}}>Revolut card income</div>
-              <div style={{fontSize:12,color:T.lumpGreen,fontWeight:700}}>Connected · Revolut Business</div>
+              <div style={{fontSize:11,fontWeight:700,color:T.textMuted}}>Monzo card income</div>
+              <div style={{fontSize:12,color:T.lumpGreen,fontWeight:700}}>Connected · Monzo Business</div>
             </>
           )}
         </div>
         <div style={{display:'flex',gap:8}}>
           <select value={source} onChange={e=>setSource(e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:'6px 8px',fontSize:12,color:T.text,cursor:'pointer'}}>
             <option value="starling">Starling</option>
-            <option value="revolut">Revolut</option>
+            <option value="monzo">Monzo</option>
           </select>
-          <Btn small onClick={source==='starling'?onSync:onRevolutSync} disabled={starlingSyncing}>{starlingSyncing?'Syncing…':'Sync now'}</Btn>
+          <Btn small onClick={source==='starling'?onSync:onMonzoSync} disabled={starlingSyncing}>{starlingSyncing?'Syncing…':'Sync now'}</Btn>
         </div>
       </div>
       {source==='starling'&&(
         <button onClick={()=>fileRef.current?.click()} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0}}>Or import a bank CSV instead →</button>
       )}
-      {source==='revolut'&&(
+      {source==='monzo'&&(
         <button onClick={()=>setShowAddCardForm(!showAddCardForm)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0}}>+ Add card income manually →</button>
       )}
       <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)onImportCSV(f);e.target.value='';}}/>
@@ -3083,7 +3083,7 @@ const[cardIncome,setCardIncome]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
-const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
+const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false,monzoAccountId:''});
 const[syncStatus,setSyncStatus]=useState('loading');
 const[loaded,setLoaded]=useState(false);
 const[booted,setBooted]=useState(false);
@@ -3099,7 +3099,7 @@ useEffect(()=>{
     const url=localSettings?.sheetsUrl||'';
     if(localSettings)setSettings(s=>({...s,...localSettings}));
     // Paint the UI immediately from local data — Sheets sync continues in the background
-    setEntries(LS.get('mhq-entries')||[]);setReceipts(LS.get('mhq-receipts')||[]);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);setBankTxns(LS.get('mhq-banktxns')||[]);setCardIncome(LS.get('mhq-cardincome')||[]);
+    setEntries(LS.get('mhq-entries')||[]);setReceipts(LS.get('mhq-receipts')||[]);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);setBankTxns(LS.get('mhq-banktxns')||[]);setCardIncome(LS.get('mhq-monzo-income')||[]);
     setBooted(true);
     if(url){
       Sheets.init(url);setSyncStatus('loading');
@@ -3149,7 +3149,7 @@ useEffect(()=>{
   setSettings(s=>({...s,migratedInvoiceModel:true}));
 },[loaded]);
 
-useEffect(()=>{if(loaded){checkStarlingStatus();syncRevolutTransactions();}},[loaded]);
+useEffect(()=>{if(loaded){checkStarlingStatus();syncMonzoTransactions();}},[loaded]);
 
 // Google Calendar OAuth lands back here via a full-page redirect (?googleCalendar=connected|error)
 useEffect(()=>{
@@ -3197,7 +3197,7 @@ useEffect(()=>{
 
 useEffect(()=>{
   if(!loaded)return;
-  LS.set('mhq-entries',entries);LS.set('mhq-receipts',receipts);LS.set('mhq-invoices',invoices);LS.set('mhq-clients',clients);LS.set('mhq-settings',settings);LS.set('mhq-banktxns',bankTxns);LS.set('mhq-cardincome',cardIncome);
+  LS.set('mhq-entries',entries);LS.set('mhq-receipts',receipts);LS.set('mhq-invoices',invoices);LS.set('mhq-clients',clients);LS.set('mhq-settings',settings);LS.set('mhq-banktxns',bankTxns);LS.set('mhq-monzo-income',cardIncome);
   const url=settings.sheetsUrl;
   if(!url){setSyncStatus('local');return;}
   // Never push an empty state to a sheet we haven't successfully read yet — protects existing sheet data on a fresh device
@@ -3465,9 +3465,16 @@ const addCardIncome=(amount,date,client='')=>{
 };
 const voidCardIncome=id=>setCardIncome(p=>p.map(ci=>ci.id===id?{...ci,status:'voided'}:ci));
 const unvoidCardIncome=id=>setCardIncome(p=>p.map(ci=>ci.id===id?{...ci,status:'active'}:ci));
-const syncRevolutTransactions=async()=>{
+const syncMonzoTransactions=async()=>{
   try{
-    const res=await fetch(PROXY_URL+'/revolut/transactions');
+    const accountId=settings.monzoAccountId;
+    if(!accountId){
+      const aid=prompt('Enter your Monzo account ID (from Monzo API settings):');
+      if(!aid)return;
+      setSettings(s=>({...s,monzoAccountId:aid}));
+      return;
+    }
+    const res=await fetch(PROXY_URL+'/monzo/transactions?account_id='+encodeURIComponent(accountId));
     const data=await res.json();
     if(data.transactions){
       setCardIncome(p=>{
@@ -3485,7 +3492,7 @@ const syncRevolutTransactions=async()=>{
         return[...p,...newTxns];
       });
     }
-  }catch(e){console.error('Failed to sync Revolut transactions:',e);}
+  }catch(e){console.error('Failed to sync Monzo transactions:',e);}
 };
 const onLinkBankTxn=(bankTxnId,invoiceId)=>setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invoiceId}:t));
 const matchBankTxnToInvoice=(bankTxnId,invoiceId)=>{
@@ -3612,7 +3619,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}
-  {view==='bank'&&<BankView bankTxns={bankTxns} cardIncome={cardIncome} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} onRevolutSync={syncRevolutTransactions} onAddCardIncome={addCardIncome} onVoidCard={voidCardIncome} onUnvoidCard={unvoidCardIncome} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync} settings={settings}/>}
+  {view==='bank'&&<BankView bankTxns={bankTxns} cardIncome={cardIncome} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} onMonzoSync={syncMonzoTransactions} onAddCardIncome={addCardIncome} onVoidCard={voidCardIncome} onUnvoidCard={unvoidCardIncome} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync} settings={settings}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
