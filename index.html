@@ -3467,7 +3467,7 @@ const voidCardIncome=id=>setCardIncome(p=>p.map(ci=>ci.id===id?{...ci,status:'vo
 const unvoidCardIncome=id=>setCardIncome(p=>p.map(ci=>ci.id===id?{...ci,status:'active'}:ci));
 const syncRevolutTransactions=async()=>{
   try{
-    const res=await fetch('https://honey-proxy.phoenix-2bc.workers.dev/revolut/transactions');
+    const res=await fetch(PROXY_URL+'/revolut/transactions');
     const data=await res.json();
     if(data.transactions){
       setCardIncome(p=>{
