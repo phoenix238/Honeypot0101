@@ -3149,7 +3149,7 @@ useEffect(()=>{
   setSettings(s=>({...s,migratedInvoiceModel:true}));
 },[loaded]);
 
-useEffect(()=>{if(loaded)checkStarlingStatus();},[loaded]);
+useEffect(()=>{if(loaded){checkStarlingStatus();syncRevolutTransactions();}},[loaded]);
 
 // Google Calendar OAuth lands back here via a full-page redirect (?googleCalendar=connected|error)
 useEffect(()=>{
