@@ -2438,7 +2438,7 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 function SettingsRow({label,children}){return(<div style={{display:'grid',gridTemplateColumns:'176px 1fr',gap:16,alignItems:'flex-start',marginBottom:14}}><div style={{fontSize:13,color:T.textMuted,paddingTop:11}}>{label}</div>{children}</div>);}
 function SettingsSection({title,children}){return(<div style={{marginBottom:36}}><Lbl>{title}</Lbl><Hr/><div>{children}</div></div>);}
-function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,bankSyncStatus,onGenerateBankSyncKey,onConnectBankSyncKey,onPullBankSync,onPushBankSync,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onClearBankTxns,onImportOld,onExportBackup,onImportBackup,onOpenSetup,onImportBank}){
+function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,bankSyncStatus,onGenerateBankSyncKey,onConnectBankSyncKey,onPullBankSync,onPushBankSync,onRepairBankMatches,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onClearBankTxns,onImportOld,onExportBackup,onImportBackup,onOpenSetup,onImportBank}){
 const set=(k,v)=>setSettings(s=>({...s,[k]:v}));
 const[showSetup,setShowSetup]=useState(!settings.sheetsUrl);
 const[copied,setCopied]=useState(false);
@@ -2452,8 +2452,10 @@ const[connectingBankKey,setConnectingBankKey]=useState(false);
 const[connectErr,setConnectErr]=useState('');
 const[bankPulling,setBankPulling]=useState(false);
 const[bankPushing,setBankPushing]=useState(false);
+const[repairResult,setRepairResult]=useState(null);
 const copyBankKey=()=>{navigator.clipboard.writeText(settings.bankSyncKey||'').then(()=>{setBankKeyCopied(true);setTimeout(()=>setBankKeyCopied(false),2200);});};
 const handlePushBank=async()=>{setBankPushing(true);await onPushBankSync();setBankPushing(false);};
+const handleRepairBank=()=>{const n=onRepairBankMatches();setRepairResult(n);setTimeout(()=>setRepairResult(null),5000);};
 const handleConnectBankKey=async()=>{
   if(!pasteKey.trim())return;
   setConnectingBankKey(true);setConnectErr('');
@@ -2574,7 +2576,12 @@ return(<Page>
         <button onClick={handlePushBank} disabled={bankPushing} style={{height:40,padding:'0 18px',background:'transparent',border:`1px solid ${T.border}`,borderRadius:10,color:T.textMuted,fontWeight:500,fontSize:13,opacity:bankPushing?.5:1,display:'flex',alignItems:'center',gap:8}}>{bankPushing?<Spinner/>:null}{bankPushing?'Pushing…':'Push this device’s data now'}</button>
       </div>
     </SettingsRow>
-    <div style={{fontSize:12,color:T.textFaint,marginTop:-4}}>Push overwrites the synced copy with what's on this device — use it if the other device ever looks wrong and you know this one is right.</div>
+    <div style={{fontSize:12,color:T.textFaint,marginTop:-4,marginBottom:14}}>Push overwrites the synced copy with what's on this device — use it if the other device ever looks wrong and you know this one is right.</div>
+    <SettingsRow label="">
+      <button onClick={handleRepairBank} style={{height:40,padding:'0 18px',background:'transparent',border:`1px solid ${T.border}`,borderRadius:10,color:T.textMuted,fontWeight:500,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Repair matches from invoices</button>
+    </SettingsRow>
+    {repairResult!==null&&<div style={{fontSize:12,fontWeight:600,color:repairResult>0?T.lumpGreen:T.textFaint,marginTop:-6,marginBottom:8}}>{repairResult>0?`Re-linked ${repairResult} bank row${repairResult===1?'':'s'} to ${repairResult===1?'its':'their'} existing invoice${repairResult===1?'':'s'}.`:'Nothing to fix — every bank row already matches its invoice.'}</div>}
+    <div style={{fontSize:12,color:T.textFaint,marginTop:-4}}>If a bank row shows "Make invoice" but you already invoiced it, this re-links it to the correct invoice exactly (using a link stored on the invoice itself) — safe to run any time, and won't create duplicates.</div>
   </>}
 </SettingsSection>
 
@@ -3348,6 +3355,21 @@ const pushBankSyncNow=async()=>{
   setBankSyncStatus(ok?'synced':'error');
   return ok;
 };
+// Recovery: every invoice created from a bank row stores matchedBankTxnId pointing at the exact
+// originating transaction — set once at invoice-creation time and never touched by bank-side sync
+// resets. So it survives even if a bank txn's own status/matchedInvoiceId gets wrongly reset (e.g.
+// by a sync conflict), and can be used to re-link bank rows to invoices with zero ambiguity —
+// no guessing needed even between recurring clients paying the same amount each time.
+const repairBankMatchesFromInvoices=()=>{
+  const invoiceByTxnId={};
+  invoices.forEach(inv=>{if(inv.matchedBankTxnId)invoiceByTxnId[inv.matchedBankTxnId]=inv.id;});
+  const toFix=bankTxns.filter(t=>invoiceByTxnId[t.id]&&t.status!=='matched'&&t.status!=='invoiced');
+  if(toFix.length){
+    const fixIds=new Set(toFix.map(t=>t.id));
+    setBankTxns(p=>p.map(t=>fixIds.has(t.id)?{...t,status:'matched',matchedInvoiceId:invoiceByTxnId[t.id]}:t));
+  }
+  return toFix.length;
+};
 
 // migration: stamp invoiceId on entries already in saved invoices
 useEffect(()=>{
@@ -3680,7 +3702,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
-  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} bankSyncStatus={bankSyncStatus} onGenerateBankSyncKey={generateBankSyncKey} onConnectBankSyncKey={connectBankSyncKey} onPullBankSync={pullBankSync} onPushBankSync={pushBankSyncNow} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onClearBankTxns={clearBankTxns} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
+  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} bankSyncStatus={bankSyncStatus} onGenerateBankSyncKey={generateBankSyncKey} onConnectBankSyncKey={connectBankSyncKey} onPullBankSync={pullBankSync} onPushBankSync={pushBankSyncNow} onRepairBankMatches={repairBankMatchesFromInvoices} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onClearBankTxns={clearBankTxns} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
   </div>
   </div>
   {ingestMsg&&<div style={{position:'fixed',bottom:84,left:'50%',transform:'translateX(-50%)',background:T.text,color:T.bg,padding:'10px 16px',borderRadius:12,fontSize:13,fontWeight:700,zIndex:300,maxWidth:'88%',textAlign:'center',boxShadow:'0 6px 20px rgba(0,0,0,.22)'}}>{ingestMsg}</div>}
