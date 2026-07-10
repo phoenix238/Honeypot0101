@@ -2434,7 +2434,7 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 function SettingsRow({label,children}){return(<div style={{display:'grid',gridTemplateColumns:'176px 1fr',gap:16,alignItems:'flex-start',marginBottom:14}}><div style={{fontSize:13,color:T.textMuted,paddingTop:11}}>{label}</div>{children}</div>);}
 function SettingsSection({title,children}){return(<div style={{marginBottom:36}}><Lbl>{title}</Lbl><Hr/><div>{children}</div></div>);}
-function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,bankSyncStatus,onGenerateBankSyncKey,onConnectBankSyncKey,onPullBankSync,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onClearBankTxns,onImportOld,onExportBackup,onImportBackup,onOpenSetup,onImportBank}){
+function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,bankSyncStatus,onGenerateBankSyncKey,onConnectBankSyncKey,onPullBankSync,onPushBankSync,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onClearBankTxns,onImportOld,onExportBackup,onImportBackup,onOpenSetup,onImportBank}){
 const set=(k,v)=>setSettings(s=>({...s,[k]:v}));
 const[showSetup,setShowSetup]=useState(!settings.sheetsUrl);
 const[copied,setCopied]=useState(false);
@@ -2447,7 +2447,9 @@ const[pasteKey,setPasteKey]=useState('');
 const[connectingBankKey,setConnectingBankKey]=useState(false);
 const[connectErr,setConnectErr]=useState('');
 const[bankPulling,setBankPulling]=useState(false);
+const[bankPushing,setBankPushing]=useState(false);
 const copyBankKey=()=>{navigator.clipboard.writeText(settings.bankSyncKey||'').then(()=>{setBankKeyCopied(true);setTimeout(()=>setBankKeyCopied(false),2200);});};
+const handlePushBank=async()=>{setBankPushing(true);await onPushBankSync();setBankPushing(false);};
 const handleConnectBankKey=async()=>{
   if(!pasteKey.trim())return;
   setConnectingBankKey(true);setConnectErr('');
@@ -2563,8 +2565,12 @@ return(<Page>
       </div>
     </SettingsRow>
     <SettingsRow label="">
-      <button onClick={handlePullBank} disabled={bankPulling} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,fontWeight:500,fontSize:13,opacity:bankPulling?.5:1,display:'flex',alignItems:'center',gap:8}}>{bankPulling?<Spinner/>:null}{bankPulling?'Pulling…':'Pull latest bank data'}</button>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+        <button onClick={handlePullBank} disabled={bankPulling} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,fontWeight:500,fontSize:13,opacity:bankPulling?.5:1,display:'flex',alignItems:'center',gap:8}}>{bankPulling?<Spinner/>:null}{bankPulling?'Pulling…':'Pull latest bank data'}</button>
+        <button onClick={handlePushBank} disabled={bankPushing} style={{height:40,padding:'0 18px',background:'transparent',border:`1px solid ${T.border}`,borderRadius:10,color:T.textMuted,fontWeight:500,fontSize:13,opacity:bankPushing?.5:1,display:'flex',alignItems:'center',gap:8}}>{bankPushing?<Spinner/>:null}{bankPushing?'Pushing…':'Push this device’s data now'}</button>
+      </div>
     </SettingsRow>
+    <div style={{fontSize:12,color:T.textFaint,marginTop:-4}}>Push overwrites the synced copy with what's on this device — use it if the other device ever looks wrong and you know this one is right.</div>
   </>}
 </SettingsSection>
 
@@ -3327,6 +3333,17 @@ const connectBankSyncKey=async(key)=>{
   setSettings(s=>({...s,bankSyncKey:key}));
   return await pullBankSync(key);
 };
+// Manual override to push this device's current bank data up, overwriting whatever's remote —
+// recovery path if another device ever pushed a stale/incorrect state (e.g. before the invoice-
+// freshness fix above existed).
+const pushBankSyncNow=async()=>{
+  if(!settings.bankSyncKey)return false;
+  BankSync.init(settings.bankSyncKey);setBankSyncStatus('saving');
+  const ok=await BankSync.save(bankTxns);
+  if(ok)setBankSyncLastSynced(new Date());
+  setBankSyncStatus(ok?'synced':'error');
+  return ok;
+};
 
 // migration: stamp invoiceId on entries already in saved invoices
 useEffect(()=>{
@@ -3659,7 +3676,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
-  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} bankSyncStatus={bankSyncStatus} onGenerateBankSyncKey={generateBankSyncKey} onConnectBankSyncKey={connectBankSyncKey} onPullBankSync={pullBankSync} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onClearBankTxns={clearBankTxns} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
+  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} bankSyncStatus={bankSyncStatus} onGenerateBankSyncKey={generateBankSyncKey} onConnectBankSyncKey={connectBankSyncKey} onPullBankSync={pullBankSync} onPushBankSync={pushBankSyncNow} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onClearBankTxns={clearBankTxns} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
   </div>
   </div>
   {ingestMsg&&<div style={{position:'fixed',bottom:84,left:'50%',transform:'translateX(-50%)',background:T.text,color:T.bg,padding:'10px 16px',borderRadius:12,fontSize:13,fontWeight:700,zIndex:300,maxWidth:'88%',textAlign:'center',boxShadow:'0 6px 20px rgba(0,0,0,.22)'}}>{ingestMsg}</div>}
