@@ -1305,7 +1305,11 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmat
   const isVoided=txn.status==='voided';
   const isDone=txn.status==='invoiced'||txn.status==='matched';
   const doneInvoice=isDone?invoices.find(i=>i.id===txn.matchedInvoiceId):null;
-  const candidates=isIncome&&!isDone&&!isVoided?invoices.filter(i=>i.status!=='paid'&&i.status!=='void'):[];
+  // Paid invoices are included too (not just outstanding ones) so a bank row that lost its link —
+  // e.g. after a sync conflict reset it to unreviewed even though its invoice still exists and is
+  // paid — can be manually re-linked without creating a duplicate invoice. matchBankTxnToInvoice
+  // is safe to call on an already-paid invoice: it only updates the link, not any totals.
+  const candidates=isIncome&&!isDone&&!isVoided?invoices.filter(i=>i.status!=='void'):[];
   return(
   <div style={{padding:'11px 13px',marginBottom:8,borderRadius:12,background:isVoided?T.bg:T.surface,border:`1px solid ${T.border}`,opacity:isVoided?.55:1}}>
     <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -1327,9 +1331,9 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmat
     )}
     {matching&&(
       <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
-        {candidates.map(inv=>(
+        {[...candidates].sort((a,b)=>Math.abs((a.subtotal||0)-txn.amount)-Math.abs((b.subtotal||0)-txn.amount)).map(inv=>(
           <button key={inv.id} onClick={()=>{onMatch(txn.id,inv.id);setMatching(false);}} style={{display:'flex',justifyContent:'space-between',width:'100%',background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'7px 10px',marginBottom:6,fontSize:12,cursor:'pointer'}}>
-            <span>{inv.invoiceNum} · {inv.client}</span><span style={{fontWeight:700}}>{fmt(inv.subtotal)}</span>
+            <span>{inv.invoiceNum} · {inv.client}{inv.status==='paid'?' (already paid)':''}</span><span style={{fontWeight:700}}>{fmt(inv.subtotal)}</span>
           </button>
         ))}
       </div>
