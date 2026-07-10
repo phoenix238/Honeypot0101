@@ -3097,9 +3097,10 @@ useEffect(()=>{
     // Paint the UI immediately from local data — Sheets/Cloudflare sync continues in the background
     setEntries(LS.get('mhq-entries')||[]);setReceipts(LS.get('mhq-receipts')||[]);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);setBankTxns(LS.get('mhq-banktxns')||[]);
     setBooted(true);
+    let sd=null;
     if(url){
       Sheets.init(url);setSyncStatus('loading');
-      const sd=await Sheets.load();
+      sd=await Sheets.load();
       if(sd&&Array.isArray(sd.entries)){
         const lr=LS.get('mhq-receipts')||[];
         const merged=(sd.receipts||[]).map(r=>{const l=lr.find(x=>x.id===r.id);return l?.imageData?{...r,imageData:l.imageData}:r;});
@@ -3113,8 +3114,12 @@ useEffect(()=>{
     }else{
       setSyncStatus('local');
     }
-    if(bankKey){
-      BankSync.init(bankKey);setBankSyncStatus('loading');
+    // A bank sync key can arrive two ways: already in local settings, or just pulled down as
+    // part of settings via the Sheets sync above (settings rides through that sync wholesale) —
+    // check both so the very first load after connecting doesn't have to wait on the next poll.
+    const effectiveBankKey=sd?.settings?.bankSyncKey||bankKey;
+    if(effectiveBankKey){
+      BankSync.init(effectiveBankKey);setBankSyncStatus('loading');
       const bd=await BankSync.load();
       if(Array.isArray(bd)){
         setBankTxns(bd);
