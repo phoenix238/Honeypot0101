@@ -200,6 +200,30 @@ const Sheets={
   async getFolderUrl(){if(!this._url)return null;try{const d=await this._jsonp(this._url+'?action=getFolderUrl',10000);return d?.url||null;}catch{return null;}}
 };
 
+// Bank-transaction sync via the honey-proxy Cloudflare Worker's /sync KV route — independent
+// of the Google Sheets sync above, since bankTxns is not part of that payload.
+const BankSync={
+  _key:null,
+  init(key){this._key=key||null;},
+  async load(){
+    if(!this._key)return null;
+    try{
+      const r=await fetch(`${PROXY_URL}/sync?key=${encodeURIComponent(this._key)}`);
+      if(r.status===404)return[]; // key not seeded yet — valid empty state, not an error
+      if(!r.ok)return null;
+      const d=await r.json();
+      return Array.isArray(d)?d:null;
+    }catch{return null;}
+  },
+  async save(data){
+    if(!this._key)return false;
+    try{
+      const r=await fetch(`${PROXY_URL}/sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:this._key,data})});
+      return r.ok;
+    }catch{return false;}
+  }
+};
+
 // UK tax year start (6 April) for the current tax year
 const TAX_YEAR_START=(()=>{const n=new Date();const y=(n.getMonth()<3||(n.getMonth()===3&&n.getDate()<6))?n.getFullYear()-1:n.getFullYear();return `${y}-04-06`;})();
 const compressImg=file=>new Promise(resolve=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{URL.revokeObjectURL(url);const max=800,s=Math.min(max/Math.max(img.width,img.height),1);const c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.68));};img.onerror=()=>resolve(null);img.src=url;});
@@ -2410,7 +2434,7 @@ return(<Card style={{marginBottom:20,border:`1.5px solid ${T.accent}44`}}>
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 function SettingsRow({label,children}){return(<div style={{display:'grid',gridTemplateColumns:'176px 1fr',gap:16,alignItems:'flex-start',marginBottom:14}}><div style={{fontSize:13,color:T.textMuted,paddingTop:11}}>{label}</div>{children}</div>);}
 function SettingsSection({title,children}){return(<div style={{marginBottom:36}}><Lbl>{title}</Lbl><Hr/><div>{children}</div></div>);}
-function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onClearBankTxns,onImportOld,onExportBackup,onImportBackup,onOpenSetup,onImportBank}){
+function SettingsView({settings,setSettings,syncStatus,onTest,onSyncFromSheets,bankSyncStatus,onGenerateBankSyncKey,onConnectBankSyncKey,onPullBankSync,clients=[],onAddClient,onDelClient,onClearEntries,onClearReceipts,onClearInvoices,onClearBankTxns,onImportOld,onExportBackup,onImportBackup,onOpenSetup,onImportBank}){
 const set=(k,v)=>setSettings(s=>({...s,[k]:v}));
 const[showSetup,setShowSetup]=useState(!settings.sheetsUrl);
 const[copied,setCopied]=useState(false);
@@ -2418,6 +2442,20 @@ const[testing,setTesting]=useState(false);
 const[testMsg,setTestMsg]=useState(null);
 const[syncing,setSyncing]=useState(false);
 const[syncResult,setSyncResult]=useState(null);
+const[bankKeyCopied,setBankKeyCopied]=useState(false);
+const[pasteKey,setPasteKey]=useState('');
+const[connectingBankKey,setConnectingBankKey]=useState(false);
+const[connectErr,setConnectErr]=useState('');
+const[bankPulling,setBankPulling]=useState(false);
+const copyBankKey=()=>{navigator.clipboard.writeText(settings.bankSyncKey||'').then(()=>{setBankKeyCopied(true);setTimeout(()=>setBankKeyCopied(false),2200);});};
+const handleConnectBankKey=async()=>{
+  if(!pasteKey.trim())return;
+  setConnectingBankKey(true);setConnectErr('');
+  const ok=await onConnectBankSyncKey(pasteKey.trim());
+  setConnectingBankKey(false);
+  if(ok)setPasteKey(''); else setConnectErr('Could not reach that key — check it was copied in full.');
+};
+const handlePullBank=async()=>{setBankPulling(true);await onPullBankSync();setBankPulling(false);};
 const[clientForm,setClientForm]=useState({name:'',email:''});
 const[confClientId,setConfClientId]=useState(null);
 const importFileRef=useRef();
@@ -2498,6 +2536,36 @@ return(<Page>
       <pre style={{fontSize:9,color:T.textFaint,lineHeight:1.6,maxHeight:220,overflowY:'auto'}}>{GAS}</pre>
     </div>
   </div>}
+</SettingsSection>
+
+<SettingsSection title="Bank sync">
+  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+    <SyncPill status={settings.bankSyncKey?bankSyncStatus:'local'}/>
+  </div>
+  <div style={{fontSize:13,color:T.textFaint,marginBottom:22}}>Syncs the Bank tab across devices via Cloudflare — separate from the Google Sheets sync above, and needed because bank transactions aren't part of that sync.</div>
+  {!settings.bankSyncKey?<>
+    <div style={{fontSize:13,color:T.textMuted,marginBottom:14}}>On your first device, generate a key. On your other device, paste that same key below to connect.</div>
+    <SettingsRow label="">
+      <button onClick={onGenerateBankSyncKey} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,fontWeight:500,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Generate new key</button>
+    </SettingsRow>
+    <SettingsRow label="Or paste a key from another device">
+      <div style={{display:'flex',gap:8}}>
+        <input style={{...iBase,flex:1,fontSize:13,fontFamily:"'Geist Mono',monospace"}} placeholder="Paste sync key…" value={pasteKey} onChange={e=>setPasteKey(e.target.value)}/>
+        <button onClick={handleConnectBankKey} disabled={!pasteKey.trim()||connectingBankKey} style={{height:40,padding:'0 16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.textMuted,fontWeight:600,fontSize:13,flexShrink:0,opacity:!pasteKey.trim()||connectingBankKey?.5:1}}>{connectingBankKey?'…':'Connect'}</button>
+      </div>
+    </SettingsRow>
+    {connectErr&&<SettingsRow label=""><div style={{fontSize:12,fontWeight:600,color:T.danger,lineHeight:1.5,background:T.danger+'10',borderRadius:8,padding:'8px 10px'}}>{connectErr}</div></SettingsRow>}
+  </>:<>
+    <SettingsRow label="Sync key">
+      <div style={{display:'flex',gap:8}}>
+        <input readOnly style={{...iBase,flex:1,fontSize:13,fontFamily:"'Geist Mono',monospace",color:T.textMuted}} value={settings.bankSyncKey}/>
+        <button onClick={copyBankKey} style={{height:40,padding:'0 16px',background:bankKeyCopied?T.lumpGreen+'20':T.surface,border:`1px solid ${bankKeyCopied?T.lumpGreen:T.border}`,borderRadius:10,color:bankKeyCopied?T.lumpGreen:T.textMuted,fontWeight:600,fontSize:13,flexShrink:0}}>{bankKeyCopied?'✓ Copied':'Copy'}</button>
+      </div>
+    </SettingsRow>
+    <SettingsRow label="">
+      <button onClick={handlePullBank} disabled={bankPulling} style={{height:40,padding:'0 18px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,color:T.text,fontWeight:500,fontSize:13,opacity:bankPulling?.5:1,display:'flex',alignItems:'center',gap:8}}>{bankPulling?<Spinner/>:null}{bankPulling?'Pulling…':'Pull latest bank data'}</button>
+    </SettingsRow>
+  </>}
 </SettingsSection>
 
 <SettingsSection title="Google Calendar">
@@ -3005,7 +3073,7 @@ const[bankTxns,setBankTxns]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
-const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
+const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',bankSyncKey:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
 const[syncStatus,setSyncStatus]=useState('loading');
 const[loaded,setLoaded]=useState(false);
 const[booted,setBooted]=useState(false);
@@ -3014,13 +3082,19 @@ const pollTimer=useRef(null);
 const[lastSynced,setLastSynced]=useState(null);
 const isSaving=useRef(false);
 const sheetHydrated=useRef(false); // true once we've successfully READ the sheet — guards against empty-state overwrite
+const[bankSyncStatus,setBankSyncStatus]=useState('local'); // local|loading|saving|synced|error
+const[bankSyncLastSynced,setBankSyncLastSynced]=useState(null);
+const bankSyncTimer=useRef(null);
+const bankSyncHydrated=useRef(false); // mirrors sheetHydrated.current, but for bank data synced via Cloudflare
+const bankIsSaving=useRef(false);
 
 useEffect(()=>{
   (async()=>{
     const localSettings=LS.get('mhq-settings');
     const url=localSettings?.sheetsUrl||'';
+    const bankKey=localSettings?.bankSyncKey||'';
     if(localSettings)setSettings(s=>({...s,...localSettings}));
-    // Paint the UI immediately from local data — Sheets sync continues in the background
+    // Paint the UI immediately from local data — Sheets/Cloudflare sync continues in the background
     setEntries(LS.get('mhq-entries')||[]);setReceipts(LS.get('mhq-receipts')||[]);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);setBankTxns(LS.get('mhq-banktxns')||[]);
     setBooted(true);
     if(url){
@@ -3038,6 +3112,17 @@ useEffect(()=>{
       }
     }else{
       setSyncStatus('local');
+    }
+    if(bankKey){
+      BankSync.init(bankKey);setBankSyncStatus('loading');
+      const bd=await BankSync.load();
+      if(Array.isArray(bd)){
+        setBankTxns(bd);
+        bankSyncHydrated.current=true;
+        setBankSyncStatus('synced');setBankSyncLastSynced(new Date());
+      }else{
+        setBankSyncStatus('error');
+      }
     }
     // First run: nothing local, nothing on the sheet, no legacy app data → open the guided setup
     const finalE=LS.get('mhq-entries')||[],finalR=LS.get('mhq-receipts')||[],finalI=LS.get('mhq-invoices')||[];
@@ -3173,6 +3258,65 @@ const syncFromSheets=async()=>{
     sheetHydrated.current=true;
     setSyncStatus('synced');setLastSynced(new Date());return true;
   }else{setSyncStatus('error');return false;}
+};
+
+// Bank-transaction sync (Cloudflare) — independent of the Google Sheets sync above, since
+// bankTxns never rode along in that payload. Same blunt last-write-wins overwrite on pull as
+// entries/invoices/receipts/clients already use, for consistency.
+useEffect(()=>{
+  if(!loaded||!settings.bankSyncKey)return;
+  if(!bankSyncHydrated.current&&bankTxns.length===0)return; // don't stomp a real remote seed with an empty, not-yet-hydrated local state
+  clearTimeout(bankSyncTimer.current);
+  setBankSyncStatus('saving');
+  bankSyncTimer.current=setTimeout(async()=>{
+    if(bankIsSaving.current)return;
+    bankIsSaving.current=true;
+    BankSync.init(settings.bankSyncKey);
+    const ok=await BankSync.save(bankTxns);
+    if(ok)setBankSyncLastSynced(new Date());
+    setBankSyncStatus(ok?'synced':'error');
+    bankIsSaving.current=false;
+  },2500);
+},[bankTxns,settings.bankSyncKey,loaded]);
+
+useEffect(()=>{
+  if(!loaded||!settings.bankSyncKey)return;
+  const poll=async()=>{
+    if(document.hidden||bankIsSaving.current||bankSyncStatus==='saving')return;
+    BankSync.init(settings.bankSyncKey);
+    const d=await BankSync.load();
+    if(!Array.isArray(d))return;
+    if(d.length===bankTxns.length&&d.every((t,i)=>t.id===bankTxns[i]?.id&&t.status===bankTxns[i]?.status))return;
+    setBankTxns(d);
+    bankSyncHydrated.current=true;
+    setBankSyncLastSynced(new Date());setBankSyncStatus('synced');
+  };
+  const bt=setInterval(poll,60000);
+  return()=>clearInterval(bt);
+},[loaded,settings.bankSyncKey,bankTxns,bankSyncStatus]);
+
+const pullBankSync=async(key)=>{
+  const k=key||settings.bankSyncKey;
+  if(!k)return false;
+  BankSync.init(k);setBankSyncStatus('loading');
+  const d=await BankSync.load();
+  if(Array.isArray(d)){
+    setBankTxns(d);
+    bankSyncHydrated.current=true;
+    setBankSyncStatus('synced');setBankSyncLastSynced(new Date());
+    return true;
+  }
+  setBankSyncStatus('error');
+  return false;
+};
+const generateBankSyncKey=()=>{
+  const k=crypto.randomUUID();
+  bankSyncHydrated.current=true; // brand-new key, nothing to pull yet — local bankTxns becomes the seed
+  setSettings(s=>({...s,bankSyncKey:k}));
+};
+const connectBankSyncKey=async(key)=>{
+  setSettings(s=>({...s,bankSyncKey:key}));
+  return await pullBankSync(key);
 };
 
 // migration: stamp invoiceId on entries already in saved invoices
@@ -3506,7 +3650,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
-  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onClearBankTxns={clearBankTxns} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
+  {view==='settings'&&<SettingsView settings={settings} setSettings={setSettings} syncStatus={syncStatus} onTest={testConn} onSyncFromSheets={syncFromSheets} bankSyncStatus={bankSyncStatus} onGenerateBankSyncKey={generateBankSyncKey} onConnectBankSyncKey={connectBankSyncKey} onPullBankSync={pullBankSync} clients={clients} onAddClient={addClient} onDelClient={delClient} onClearEntries={clearEntries} onClearReceipts={clearReceipts} onClearInvoices={clearInvoices} onClearBankTxns={clearBankTxns} onImportOld={importOld} onExportBackup={exportBackup} onImportBackup={importBackup} onOpenSetup={()=>go('setup')} onImportBank={handleBankCSV}/>}
   </div>
   </div>
   {ingestMsg&&<div style={{position:'fixed',bottom:84,left:'50%',transform:'translateX(-50%)',background:T.text,color:T.bg,padding:'10px 16px',borderRadius:12,fontSize:13,fontWeight:700,zIndex:300,maxWidth:'88%',textAlign:'center',boxShadow:'0 6px 20px rgba(0,0,0,.22)'}}>{ingestMsg}</div>}
