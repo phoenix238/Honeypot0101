@@ -3368,7 +3368,13 @@ const addBankTxns=(rows,source)=>{
     return[...fresh,...prev];
   });
 };
-const voidBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'voided'}:t));
+const voidBankTxn=id=>{
+  const txn=bankTxns.find(t=>t.id===id);
+  if(txn?.matchedInvoiceId){
+    updI(txn.matchedInvoiceId,{matchedBankTxnId:null});
+  }
+  setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'voided'}:t));
+};
 const restoreBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'unreviewed'}:t));
 // Undo a match/invoice link without touching the invoice itself — for when a bank row
 // got linked to an invoice the user didn't mean to create (e.g. navigated away mid-save).
