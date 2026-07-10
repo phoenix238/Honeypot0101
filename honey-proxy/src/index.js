@@ -12,6 +12,9 @@
  *   GET  /google/status            → whether a Google Calendar connection is stored
  *   POST /google/disconnect        → clears the stored Google refresh token
  *   GET  /google/calendar/events?timeMin=&timeMax=  → normalized calendar events in a range
+ *   GET  /revolut/status           → check if Revolut is configured
+ *   POST /revolut/webhook          → receive Revolut payment notifications (webhook endpoint)
+ *   GET  /revolut/transactions?since=YYYY-MM-DD  → fetch recent Revolut card income transactions
  *
  * Secrets:
  *   ANTHROPIC_KEY         — set via: wrangler secret put ANTHROPIC_KEY
@@ -21,6 +24,8 @@
  *   GOOGLE_CLIENT_SECRET  — set via: wrangler secret put GOOGLE_CLIENT_SECRET
  *                           (OAuth Web application client; redirect URI must be
  *                           https://<this-worker>/google/callback)
+ *   REVOLUT_API_KEY       — set via: wrangler secret put REVOLUT_API_KEY
+ *                           (Revolut Business API key with transactions:read access)
  *
  * KV namespace:
  *   HONEY_SYNC      — bound in wrangler.toml; create with:
@@ -340,6 +345,117 @@ export default {
             allDay: !ev.start.dateTime,
           }));
         return new Response(JSON.stringify({ events }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+    }
+
+    // ── Revolut card payments routes ───────────────────────────────────────────
+
+    if (url.pathname === '/revolut/status') {
+      if (request.method !== 'GET') {
+        return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+      }
+      if (!env.REVOLUT_API_KEY) {
+        return new Response(JSON.stringify({ ok: false, error: 'REVOLUT_API_KEY secret not set on Worker' }), {
+          status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, accountLabel: 'Revolut Business' }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    if (url.pathname === '/revolut/webhook') {
+      if (request.method !== 'POST') {
+        return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+      }
+      if (!env.HONEY_SYNC) {
+        return new Response(JSON.stringify({ error: 'HONEY_SYNC KV namespace not bound' }), {
+          status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+      let body;
+      try { body = await request.json(); } catch {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+          status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+      try {
+        if (!body.event_id || !body.transaction_id) {
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const transaction = {
+          txnId: body.transaction_id,
+          amount: body.amount || 0,
+          date: (body.created_at || new Date().toISOString()).slice(0, 10),
+          reference: body.reference || body.description || 'Revolut payment',
+          source: 'revolut',
+          recordedAt: Date.now(),
+        };
+        const income = await env.HONEY_SYNC.get('revolut-card-income') || JSON.stringify([]);
+        const list = JSON.parse(income);
+        if (!list.some(t => t.txnId === body.transaction_id)) {
+          list.push(transaction);
+          await env.HONEY_SYNC.put('revolut-card-income', JSON.stringify(list));
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    if (url.pathname === '/revolut/transactions') {
+      if (request.method !== 'GET') {
+        return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+      }
+      if (!env.HONEY_SYNC) {
+        return new Response(JSON.stringify({ error: 'HONEY_SYNC KV namespace not bound' }), {
+          status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+      if (!env.REVOLUT_API_KEY) {
+        return new Response(JSON.stringify({ error: 'REVOLUT_API_KEY secret not set on Worker' }), {
+          status: 503, headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+      try {
+        const since = url.searchParams.get('since') || new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+        const revRes = await fetch('https://business-api.revolut.com/api/1.0/transactions', {
+          headers: {
+            'Authorization': `Bearer ${env.REVOLUT_API_KEY}`,
+            'Accept': 'application/json',
+          },
+        });
+        if (!revRes.ok) {
+          const text = await revRes.text().catch(() => '');
+          throw new Error(`Revolut API returned ${revRes.status}: ${text.slice(0, 200)}`);
+        }
+        const revData = await revRes.json();
+        const newTxns = (revData.transactions || [])
+          .filter(t => t.state === 'COMPLETED' && t.type === 'PAYMENT_IN')
+          .map(t => ({
+            txnId: t.id,
+            amount: Math.abs(t.amount || 0),
+            date: (t.completed_at || t.created_at || new Date().toISOString()).slice(0, 10),
+            reference: t.description || 'Revolut payment',
+            source: 'revolut',
+            recordedAt: Date.now(),
+          }));
+        const income = await env.HONEY_SYNC.get('revolut-card-income') || JSON.stringify([]);
+        const list = JSON.parse(income);
+        const txnIds = new Set(list.map(t => t.txnId));
+        const added = newTxns.filter(t => !txnIds.has(t.txnId));
+        if (added.length > 0) {
+          await env.HONEY_SYNC.put('revolut-card-income', JSON.stringify([...list, ...added]));
+        }
+        return new Response(JSON.stringify({ transactions: added }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
         });
       } catch (err) {

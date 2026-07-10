@@ -1312,46 +1312,123 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmat
     )}
   </div>);
 }
-function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,onBulkConvert,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync,settings}){
+function BankView({bankTxns,cardIncome=[],invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,onBulkConvert,onImportCSV,onSync,onRevolutSync,onAddCardIncome,onVoidCard,onUnvoidCard,starlingStatus,starlingSyncing,starlingLastSync,settings}){
   const[tab,setTab]=useState('income');
+  const[source,setSource]=useState('starling'); // 'starling' or 'revolut'
   const[selected,setSelected]=useState({});
+  const[showAddCardForm,setShowAddCardForm]=useState(false);
+  const[newCardAmount,setNewCardAmount]=useState('');
+  const[newCardDate,setNewCardDate]=useState(today());
+  const[newCardClient,setNewCardClient]=useState('');
   const fileRef=useRef(null);
-  const rows=bankTxns.filter(t=>t.category===tab).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const totalIncome=bankTxns.filter(t=>t.category==='income'&&t.status!=='voided').reduce((a,t)=>a+t.amount,0);
+
+  const rows=source==='starling'
+    ?bankTxns.filter(t=>t.category===tab).sort((a,b)=>(b.date||'').localeCompare(a.date||''))
+    :cardIncome.filter(ci=>ci.status!=='voided').sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  const totalIncome=source==='starling'
+    ?bankTxns.filter(t=>t.category==='income'&&t.status!=='voided').reduce((a,t)=>a+t.amount,0)
+    :cardIncome.filter(ci=>ci.status!=='voided').reduce((a,ci)=>a+ci.amount,0);
+
   const totalSpending=bankTxns.filter(t=>t.category==='spending'&&t.status!=='voided').reduce((a,t)=>a+t.amount,0);
   const toggleSelect=id=>setSelected(s=>({...s,[id]:!s[id]}));
   const selectedIds=Object.keys(selected).filter(id=>selected[id]);
-  useEffect(()=>{setSelected({});},[tab]);
+  useEffect(()=>{setSelected({});},[tab,source]);
+
   const handleBulkConvert=()=>{
     if(!selectedIds.length)return;
     if(!window.confirm(`Turn ${selectedIds.length} transaction${selectedIds.length>1?'s':''} into ${selectedIds.length>1?'their own invoices':'an invoice'}? Each becomes a separate paid invoice${settings.sheetsUrl?' with an auto-generated Google Doc':''}.`))return;
     onBulkConvert(selectedIds);
     setSelected({});
   };
+
+  const handleAddCardIncome=()=>{
+    if(!newCardAmount||parseFloat(newCardAmount)<=0)return;
+    onAddCardIncome(parseFloat(newCardAmount),newCardDate,newCardClient);
+    setNewCardAmount('');setNewCardDate(today());setNewCardClient('');setShowAddCardForm(false);
+  };
+
   return(<Page>
     <PgTitle>Bank</PgTitle>
     <Card style={{marginBottom:14,border:`1px solid ${T.border}`}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:T.textMuted}}>Starling connection</div>
-          <div style={{fontSize:12,color:starlingStatus?.ok?T.lumpGreen:T.textMuted,fontWeight:700}}>
-            {starlingStatus===null?'Not checked yet':starlingStatus.ok?`Connected · ${starlingStatus.accountLabel}`:'Not connected'}
-          </div>
-          {starlingLastSync&&<div style={{fontSize:10,color:T.textFaint}}>Last synced {fmtD(starlingLastSync)}</div>}
+        <div style={{flex:1}}>
+          {source==='starling'&&(
+            <>
+              <div style={{fontSize:11,fontWeight:700,color:T.textMuted}}>Starling connection</div>
+              <div style={{fontSize:12,color:starlingStatus?.ok?T.lumpGreen:T.textMuted,fontWeight:700}}>
+                {starlingStatus===null?'Not checked yet':starlingStatus.ok?`Connected · ${starlingStatus.accountLabel}`:'Not connected'}
+              </div>
+              {starlingLastSync&&<div style={{fontSize:10,color:T.textFaint}}>Last synced {fmtD(starlingLastSync)}</div>}
+            </>
+          )}
+          {source==='revolut'&&(
+            <>
+              <div style={{fontSize:11,fontWeight:700,color:T.textMuted}}>Revolut card income</div>
+              <div style={{fontSize:12,color:T.lumpGreen,fontWeight:700}}>Connected · Revolut Business</div>
+            </>
+          )}
         </div>
-        <Btn small onClick={onSync} disabled={starlingSyncing}>{starlingSyncing?'Syncing…':'Sync now'}</Btn>
+        <div style={{display:'flex',gap:8}}>
+          <select value={source} onChange={e=>setSource(e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:'6px 8px',fontSize:12,color:T.text,cursor:'pointer'}}>
+            <option value="starling">Starling</option>
+            <option value="revolut">Revolut</option>
+          </select>
+          <Btn small onClick={source==='starling'?onSync:onRevolutSync} disabled={starlingSyncing}>{starlingSyncing?'Syncing…':'Sync now'}</Btn>
+        </div>
       </div>
-      <button onClick={()=>fileRef.current?.click()} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0}}>Or import a bank CSV instead →</button>
+      {source==='starling'&&(
+        <button onClick={()=>fileRef.current?.click()} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0}}>Or import a bank CSV instead →</button>
+      )}
+      {source==='revolut'&&(
+        <button onClick={()=>setShowAddCardForm(!showAddCardForm)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0}}>+ Add card income manually →</button>
+      )}
       <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)onImportCSV(f);e.target.value='';}}/>
+      {showAddCardForm&&(
+        <div style={{marginTop:10,padding:10,background:T.surface,borderRadius:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+            <div><label style={{fontSize:11,color:T.textMuted}}>Amount</label><Inp type="number" value={newCardAmount} onChange={e=>setNewCardAmount(e.target.value)} placeholder="0.00" step="0.01"/></div>
+            <div><label style={{fontSize:11,color:T.textMuted}}>Date</label><Inp type="date" value={newCardDate} onChange={e=>setNewCardDate(e.target.value)}/></div>
+            <div><label style={{fontSize:11,color:T.textMuted}}>Client (opt.)</label><Inp value={newCardClient} onChange={e=>setNewCardClient(e.target.value)} placeholder="Client name"/></div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <Btn small color={T.lumpGreen} onClick={handleAddCardIncome}>Add</Btn>
+            <Btn small onClick={()=>{setShowAddCardForm(false);setNewCardAmount('');setNewCardDate(today());setNewCardClient('');}}>Cancel</Btn>
+          </div>
+        </div>
+      )}
     </Card>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
-      <button onClick={()=>setTab('income')} style={{background:tab==='income'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='income'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='income'?T.accent:T.textMuted}}>Income · {fmt(totalIncome)}</button>
-      <button onClick={()=>setTab('spending')} style={{background:tab==='spending'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='spending'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='spending'?T.accent:T.textMuted}}>Spending · {fmt(totalSpending)}</button>
-    </div>
-    {rows.length===0&&<div style={{textAlign:'center',color:T.textMuted,fontSize:13,padding:'30px 0'}}>No {tab} transactions yet — connect Starling or import a CSV above.</div>}
-    {rows.map(txn=><BankTxnRow key={txn.id} txn={txn} invoices={invoices} onMakeInvoice={onMakeInvoice} onVoid={onVoid} onRestore={onRestore} onMatch={onMatch} onUnmatch={onUnmatch}
-      selectable={tab==='income'&&txn.status==='unreviewed'} selected={!!selected[txn.id]} onToggleSelect={toggleSelect}/>)}
-    {selectedIds.length>0&&(
+    {source==='starling'&&(
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+        <button onClick={()=>setTab('income')} style={{background:tab==='income'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='income'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='income'?T.accent:T.textMuted}}>Income · {fmt(totalIncome)}</button>
+        <button onClick={()=>setTab('spending')} style={{background:tab==='spending'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='spending'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='spending'?T.accent:T.textMuted}}>Spending · {fmt(totalSpending)}</button>
+      </div>
+    )}
+    {rows.length===0&&<div style={{textAlign:'center',color:T.textMuted,fontSize:13,padding:'30px 0'}}>No {source==='starling'?tab:''} transactions yet{source==='starling'?' — connect Starling or import a CSV above.':' — add one using the form above.'}</div>}
+    {source==='starling'?
+      rows.map(txn=><BankTxnRow key={txn.id} txn={txn} invoices={invoices} onMakeInvoice={onMakeInvoice} onVoid={onVoid} onRestore={onRestore} onMatch={onMatch} onUnmatch={onUnmatch}
+        selectable={tab==='income'&&txn.status==='unreviewed'} selected={!!selected[txn.id]} onToggleSelect={toggleSelect}/>)
+    :
+      rows.map(ci=>(
+        <Card key={ci.id} style={{marginBottom:8,border:`1px solid ${T.border}`,opacity:ci.status==='voided'?0.45:1}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'start'}}>
+            <div style={{flex:1}}>
+              <div style={{fontFamily:'Geist Mono,monospace',fontSize:16,fontWeight:700,color:T.accent}}>{fmt(ci.amount)}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>{fmtD(ci.date)}{ci.client?' · '+ci.client:''}</div>
+              <div style={{fontSize:10,color:T.textFaint}}>Tax stash: {fmt(ci.tax)}</div>
+            </div>
+            <div style={{display:'flex',gap:6}}>
+              {ci.status==='voided'?
+                <Btn small color={T.lumpGreen} onClick={()=>onUnvoidCard(ci.id)}>Unvoid</Btn>
+              :
+                <Btn small color={T.danger} onClick={()=>onVoidCard(ci.id)}>Void</Btn>
+              }
+            </div>
+          </div>
+        </Card>
+      ))
+    }
+    {source==='starling'&&selectedIds.length>0&&(
       <div style={{position:'sticky',bottom:80,marginTop:10,zIndex:5}}>
         <Btn full color={T.lumpGreen} onClick={handleBulkConvert}>Make {selectedIds.length} Docs Invoice{selectedIds.length>1?'s':''}</Btn>
       </div>
@@ -3002,6 +3079,7 @@ const[receipts,setReceipts]=useState([]);
 const[invoices,setInvoices]=useState([]);
 const[clients,setClients]=useState([]);
 const[bankTxns,setBankTxns]=useState([]);
+const[cardIncome,setCardIncome]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
@@ -3021,7 +3099,7 @@ useEffect(()=>{
     const url=localSettings?.sheetsUrl||'';
     if(localSettings)setSettings(s=>({...s,...localSettings}));
     // Paint the UI immediately from local data — Sheets sync continues in the background
-    setEntries(LS.get('mhq-entries')||[]);setReceipts(LS.get('mhq-receipts')||[]);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);setBankTxns(LS.get('mhq-banktxns')||[]);
+    setEntries(LS.get('mhq-entries')||[]);setReceipts(LS.get('mhq-receipts')||[]);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);setBankTxns(LS.get('mhq-banktxns')||[]);setCardIncome(LS.get('mhq-cardincome')||[]);
     setBooted(true);
     if(url){
       Sheets.init(url);setSyncStatus('loading');
@@ -3119,7 +3197,7 @@ useEffect(()=>{
 
 useEffect(()=>{
   if(!loaded)return;
-  LS.set('mhq-entries',entries);LS.set('mhq-receipts',receipts);LS.set('mhq-invoices',invoices);LS.set('mhq-clients',clients);LS.set('mhq-settings',settings);LS.set('mhq-banktxns',bankTxns);
+  LS.set('mhq-entries',entries);LS.set('mhq-receipts',receipts);LS.set('mhq-invoices',invoices);LS.set('mhq-clients',clients);LS.set('mhq-settings',settings);LS.set('mhq-banktxns',bankTxns);LS.set('mhq-cardincome',cardIncome);
   const url=settings.sheetsUrl;
   if(!url){setSyncStatus('local');return;}
   // Never push an empty state to a sheet we haven't successfully read yet — protects existing sheet data on a fresh device
@@ -3135,7 +3213,7 @@ useEffect(()=>{
     setSyncStatus(ok?'synced':'error');
     isSaving.current=false;
   },2500);
-},[entries,receipts,invoices,clients,settings,bankTxns,loaded]);
+},[entries,receipts,invoices,clients,settings,bankTxns,cardIncome,loaded]);
 
 useEffect(()=>{
   if(!loaded||!settings.sheetsUrl)return;
@@ -3378,6 +3456,37 @@ const unmatchBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'unrevie
 // Doc-creation/save path as a manually-built invoice.
 const[bankTxnForInvoice,setBankTxnForInvoice]=useState(null);
 const startInvoiceFromBankTxn=id=>{const txn=bankTxns.find(t=>t.id===id);if(!txn)return;setBankTxnForInvoice(txn);go('invoice');};
+
+// Card income (Revolut) handlers
+const addCardIncome=(amount,date,client='')=>{
+  const id='ci-'+Date.now();
+  const tax=amount*TAX;
+  setCardIncome(p=>[...p,{id,amount,date,client,txnId:'',tax,status:'active',recordedAt:Date.now()}]);
+};
+const voidCardIncome=id=>setCardIncome(p=>p.map(ci=>ci.id===id?{...ci,status:'voided'}:ci));
+const unvoidCardIncome=id=>setCardIncome(p=>p.map(ci=>ci.id===id?{...ci,status:'active'}:ci));
+const syncRevolutTransactions=async()=>{
+  try{
+    const res=await fetch('https://honey-proxy.phoenix-2bc.workers.dev/revolut/transactions');
+    const data=await res.json();
+    if(data.transactions){
+      setCardIncome(p=>{
+        const existing=new Set(p.map(ci=>ci.txnId));
+        const newTxns=data.transactions.filter(t=>!existing.has(t.txnId)).map(t=>({
+          id:'ci-'+Date.now()+Math.random(),
+          amount:t.amount,
+          date:t.date,
+          client:t.reference||'',
+          txnId:t.txnId,
+          tax:t.amount*TAX,
+          status:'active',
+          recordedAt:Date.now()
+        }));
+        return[...p,...newTxns];
+      });
+    }
+  }catch(e){console.error('Failed to sync Revolut transactions:',e);}
+};
 const onLinkBankTxn=(bankTxnId,invoiceId)=>setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invoiceId}:t));
 const matchBankTxnToInvoice=(bankTxnId,invoiceId)=>{
   const txn=bankTxns.find(t=>t.id===bankTxnId);
@@ -3487,6 +3596,7 @@ const clearEntries=()=>{if(window.confirm('Move ALL income entries to Trash? You
 const clearReceipts=()=>{if(window.confirm('Move ALL receipts to Trash? You can restore them for 30 days.')){toTrash('receipt',receipts);setReceipts([]);}};
 const clearInvoices=()=>{if(window.confirm('Move ALL invoice records to Trash? You can restore them for 30 days.')){toTrash('invoice',invoices);const clearedIds=new Set(invoices.map(i=>i.id));setBankTxns(p=>p.map(t=>clearedIds.has(t.matchedInvoiceId)?{...t,status:'unreviewed',matchedInvoiceId:null}:t));setInvoices([]);}};
 const clearBankTxns=()=>{if(window.confirm('Delete ALL bank transactions (Starling + CSV imports)? This is not soft-deleted — there is no trash for these. Your invoices are not affected, but any "matched" link back to a bank row will be cleared.')){setBankTxns([]);}};
+const clearCardIncome=()=>{if(window.confirm('Delete ALL card income records (Revolut)? This cannot be undone.')){setCardIncome([]);}};
 const restoreTrash=tid=>{const v=trash.find(x=>x.tid===tid);if(!v)return;if(v.kind==='entry')setEntries(p=>p.some(e=>e.id===v.item.id)?p:[v.item,...p]);else if(v.kind==='receipt')setReceipts(p=>p.some(r=>r.id===v.item.id)?p:[v.item,...p]);else if(v.kind==='invoice')setInvoices(p=>p.some(i=>i.id===v.item.id)?p:[v.item,...p]);setTrash(p=>p.filter(x=>x.tid!==tid));};
 const purgeTrashItem=tid=>setTrash(p=>p.filter(x=>x.tid!==tid));
 const emptyTrash=()=>{if(window.confirm('Permanently delete everything in Trash? This cannot be undone.'))setTrash([]);};
@@ -3502,7 +3612,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}
-  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync} settings={settings}/>}
+  {view==='bank'&&<BankView bankTxns={bankTxns} cardIncome={cardIncome} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} onRevolutSync={syncRevolutTransactions} onAddCardIncome={addCardIncome} onVoidCard={voidCardIncome} onUnvoidCard={unvoidCardIncome} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync} settings={settings}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}
