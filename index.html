@@ -769,7 +769,7 @@ if(mode==='view'&&viewing){
   if(!r){setMode('list');return null;}
   const driveFileId=(r.driveUrl||'').match(/\/d\/([^\/]+)\//)?.[1]||(r.driveUrl||'').match(/id=([^&]+)/)?.[1]||'';
   const handleConfirmDelete=async()=>{
-    if(!window.confirm('Delete this receipt? This will also move the email back to Tracker/Receipts and trash the Drive image.'))return;
+    if(!window.confirm('Delete this receipt? This will also move the email back to Tracker/Receipts and move the Drive image to the Trash folder.'))return;
     if(sheetsUrl&&(r.threadId||r.gmailUrl)&&driveFileId){
       Sheets.init(sheetsUrl);
       const tid=r.threadId||(r.gmailUrl||'').split('/').pop()||'';
@@ -1861,6 +1861,7 @@ function getMasterFolder(){ return getOrCreateFolder('Honey'); }
 function getInvoiceFolder(){ return getSubFolder(getMasterFolder(),'Invoices'); }
 function getBusinessReceiptFolder(){ return getSubFolder(getMasterFolder(),'Business Expenses'); }
 function getReimbursableReceiptFolder(){ return getSubFolder(getMasterFolder(),'Reimbursable Expenses'); }
+function getTrashFolder(){ return getSubFolder(getMasterFolder(),'Trash'); }
 function extractDriveId(url){var s=String(url||'');var m=s.match(/[/]d[/]([^/?]+)/);if(m)return m[1];m=s.match(/[?&]id=([^&]+)/);if(m)return m[1];return '';}
 function scanFolders(seenCsv){
   var ss=SpreadsheetApp.getActiveSpreadsheet();
@@ -1894,7 +1895,7 @@ function setupFolders(ss){
   if(props.getProperty('mhq_folders_v1')==='1')return;
   try{
     var master=getMasterFolder();
-    getSubFolder(master,'Invoices');getSubFolder(master,'Business Expenses');getSubFolder(master,'Reimbursable Expenses');getSubFolder(master,'Gmail Receipts');
+    getSubFolder(master,'Invoices');getSubFolder(master,'Business Expenses');getSubFolder(master,'Reimbursable Expenses');getSubFolder(master,'Gmail Receipts');getSubFolder(master,'Trash');
     var ssFile=DriveApp.getFileById(ss.getId());var parents=ssFile.getParents();var inM=false;
     while(parents.hasNext()){if(parents.next().getId()===master.getId()){inM=true;break;}}
     if(!inM){master.addFile(ssFile);try{DriveApp.getRootFolder().removeFile(ssFile);}catch(e2){}}
@@ -2096,7 +2097,12 @@ function deleteReceiptFiles(threadId, driveFileId) {
   } catch(e) { Logger.log('deleteReceiptFiles label error: ' + e); }
   try {
     if (driveFileId) {
-      DriveApp.getFileById(driveFileId).setTrashed(true);
+      var file = DriveApp.getFileById(driveFileId);
+      var parents = file.getParents();
+      var parentList = [];
+      while (parents.hasNext()) parentList.push(parents.next());
+      parentList.forEach(function(p){ try { p.removeFile(file); } catch(e) {} });
+      getTrashFolder().addFile(file);
       deleted = 1;
     }
   } catch(e) { Logger.log('deleteReceiptFiles drive error: ' + e); }
