@@ -78,6 +78,8 @@ if(!localStorage.getItem(GATE_KEY)){
 const{useState,useEffect,useRef}=React;
 const T={bg:'#16140F',surface:'#211E17',border:'#322D23',text:'#F2EEE3',textMuted:'#8A8576',textFaint:'#5C574B',accent:'#E0A92E',accentBright:'#F2C14E',timed:'#3F6FB0',manual:'#7E62C0',lumpGreen:'#5BBF8A',business:'#B07A12',reimb:'#6E86D0',drive:'#3FA672',danger:'#B8392F',dangerBg:'rgba(184,57,47,.15)',paid:'#5BBF8A',pending:'#E0A92E'};
 const TAX=0.20;
+// User-configurable tax set-aside rate (Settings → "Tax set-aside"); falls back to 20%.
+const taxRate=s=>((s&&s.taxPercent!=null&&s.taxPercent!==''?parseFloat(s.taxPercent)||0:20))/100;
 const EXPENSE_CATS=[
   ['office','Office supplies'],
   ['software','Software & subscriptions'],
@@ -245,10 +247,11 @@ const buildYearWorkbook=async({year,period,biz,summary,income,expenses,catTotals
     [xCell(`UK Tax Year ${year}/${(year+1)%100}`,{color:XW.sub,border:false}),xCell('',{border:false})],
     [xCell(period,{italic:true,color:XW.sub,border:false}),xCell('',{border:false})],
     [xCell('',{border:false}),xCell('',{border:false})],
-    [xCell('Gross income',{color:XW.sub}),xCell(summary.gross,{bold:true})],
+    [xCell('Gross income (received — cash basis)',{color:XW.sub}),xCell(summary.gross,{bold:true})],
+    [xCell('Reimbursements (excluded, non-taxable)',{color:XW.sub}),xCell(summary.reimb||0,{bold:true,color:XW.rust})],
     [xCell('Allowable business expenses',{color:XW.sub}),xCell(summary.expenses,{bold:true,color:XW.rust})],
     [xCell('Taxable profit',{bold:true}),xCell(summary.profit,{bold:true})],
-    [xCell('Estimated tax to set aside (20%)',{color:XW.sub}),xCell(summary.taxStash,{bold:true,color:XW.green})],
+    [xCell(`Estimated tax to set aside (${summary.taxPct??20}%)`,{color:XW.sub}),xCell(summary.taxStash,{bold:true,color:XW.green})],
   ];
   const ws1=XLSX.utils.aoa_to_sheet(sRows);
   ws1['!cols']=[{wch:38},{wch:16}];
@@ -350,19 +353,24 @@ const[homeMenu,setHomeMenu]=useState(false);
 const now=new Date();
 const today0=new Date();today0.setHours(0,0,0,0);
 const activeE=entries.filter(e=>e.status!=='Void');
-// Gross Earned is invoice-based: only work that's actually been invoiced counts as income.
-const liveInvoices=invoices.filter(i=>i.status!=='void');
+// Cash-basis figures, scoped to the current UK tax year: taxable profit counts only
+// money actually received (paid invoices, by the date paid), minus the reimbursement
+// portion (a pass-through that nets to zero tax effect) and business expenses.
+// Invoiced-but-unpaid stays visible for chasing but isn't taxable yet.
+const liveInvoices=invoices.filter(i=>i.status!=='void'&&(i.date||'').slice(0,10)>=TAX_YEAR_START);
 const allG=liveInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
-const confirmedG=liveInvoices.filter(i=>i.status==='paid').reduce((a,i)=>a+(i.subtotal||0),0);
+const receivedInvoices=invoices.filter(i=>i.status==='paid'&&((i.paidDate||i.date||'').slice(0,10)>=TAX_YEAR_START));
+const receivedG=receivedInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
+const receivedReimb=receivedInvoices.reduce((a,i)=>a+(i.reimbTotal||0),0);
+const outstandingG=liveInvoices.filter(i=>i.status!=='paid').reduce((a,i)=>a+(i.subtotal||0),0);
 const unbilledG=activeE.filter(e=>!e.invoiceId).reduce((a,e)=>a+(e.subtotal||0),0);
-const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void').reduce((a,r)=>a+(r.amount||0),0);
-const taxableProfit=Math.max(0,allG-bizCosts);
-const taxReserve=taxableProfit*TAX;
+const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void'&&(r.date||'')>=TAX_YEAR_START).reduce((a,r)=>a+(r.amount||0),0);
+const taxableProfit=Math.max(0,receivedG-receivedReimb-bizCosts);
+const taxReserve=taxableProfit*taxRate(settings);
 const trueNet=taxableProfit-taxReserve;
 const mon=activeE.filter(e=>{const d=new Date(e.date+'T12:00:00');return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
 const monG=mon.reduce((a,e)=>a+(e.subtotal||0),0);
 const monN=mon.reduce((a,e)=>a+(e.net||0),0);
-const pendAmt=receipts.filter(r=>r.category==='reimbursable'&&r.status==='pending').reduce((a,r)=>a+(r.amount||0),0);
 const unpaid=activeE.filter(e=>e.status==='Pending');
 const unpaidAmt=unpaid.reduce((a,e)=>a+(e.subtotal||0),0);
 const overdueInvoices=invoices.filter(inv=>inv.status!=='paid'&&inv.dueDate&&new Date(inv.dueDate+'T12:00:00')<today0);
@@ -419,11 +427,11 @@ return(<Page>
 )}
 <Card style={{marginBottom:10,background:`linear-gradient(135deg,${T.surface} 0%,${T.bg} 100%)`,border:`1px solid ${T.border}`}}>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Gross Earned</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.text}}>{fmt(allG)}</div><div style={{fontSize:11,color:T.lumpGreen,marginTop:3,fontWeight:600}}>{fmt(confirmedG)} confirmed</div></div>
+    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Received</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.text}}>{fmt(receivedG)}</div><div style={{fontSize:11,color:T.lumpGreen,marginTop:3,fontWeight:600}}>{fmt(allG)} invoiced this tax year</div></div>
     <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Business Costs</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.business}}>{fmt(bizCosts)}</div></div>
   </div>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Tax Stash</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div><div style={{fontSize:9,color:T.textMuted}}>20% of profit</div></div>
+    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Tax Stash</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div><div style={{fontSize:9,color:T.textMuted}}>{settings.taxPercent??20}% of profit</div></div>
     <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Take Home</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.accentBright}}>{fmt(trueNet)}</div></div>
   </div>
   <Hr/>
@@ -432,12 +440,23 @@ return(<Page>
     {entries.filter(e=>e.status==='Void').length>0&&<span style={{color:T.textFaint}}>{entries.filter(e=>e.status==='Void').length} voided</span>}
     <span style={{color:T.pending}}>{unpaid.length} pending {fmt(unpaidAmt)}</span>
   </div>
-  {unbilledG>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{fmt(unbilledG)} logged but not yet invoiced — doesn't count toward Gross Earned until it's on an invoice</div>}
+  {unbilledG>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{fmt(unbilledG)} logged but not yet invoiced — doesn't count toward income until it's on an invoice</div>}
   <button onClick={()=>setShowTaxGuide(s=>!s)} style={{background:'none',border:'none',color:T.accent,fontSize:11,fontWeight:700,padding:0,marginTop:10,display:'flex',alignItems:'center',gap:4}}>
-    <I n="bulb" sz={11} c={T.accent}/> {showTaxGuide?'Hide':'What is the Tax Stash?'}
+    <I n="bulb" sz={11} c={T.accent}/> {showTaxGuide?'Hide':'How is the Tax Stash worked out?'}
   </button>
   {showTaxGuide&&(
     <div style={{marginTop:10,padding:'12px 14px',background:T.bg,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,lineHeight:1.6}}>
+      <div style={{fontWeight:700,color:T.text,marginBottom:6}}>This tax year (from {fmtD(TAX_YEAR_START)}) — cash basis: money counts when it's actually received</div>
+      {(()=>{const row=(l,v,c,b)=>(<div style={{display:'flex',justifyContent:'space-between',gap:10,marginBottom:3,fontWeight:b?700:400,color:b?T.text:T.textMuted,borderTop:b?`1px solid ${T.border}`:'none',paddingTop:b?5:0}}><span>{l}</span><span style={{fontFamily:'Geist Mono,monospace',color:c||'inherit',whiteSpace:'nowrap'}}>{v}</span></div>);
+      return(<div style={{marginBottom:10}}>
+        {row('Money received (paid invoices)',fmt(receivedG))}
+        {row('− Reimbursements (pass-through, not income)','−'+fmt(receivedReimb),T.reimb)}
+        {row('− Business expenses (deductible)','−'+fmt(bizCosts),T.business)}
+        {row('= Taxable profit',fmt(taxableProfit),null,true)}
+        {row(`Tax Stash (${settings.taxPercent??20}% of profit)`,fmt(taxReserve),T.danger)}
+        {row('= Take home',fmt(trueNet),T.accentBright,true)}
+        {outstandingG>0&&<div style={{fontSize:11,color:T.textFaint,marginTop:6}}>{fmt(outstandingG)} invoiced but not yet paid — becomes taxable when the money arrives.</div>}
+      </div>);})()}
       <div style={{fontWeight:700,color:T.text,marginBottom:6}}>Money set aside for self-assessment</div>
       <div style={{marginBottom:8}}>UK self-employed pay Income Tax plus Class 4 NI on profit (gross minus allowable expenses), after the £12,570 personal allowance.</div>
       <div style={{fontWeight:700,color:T.accent,marginBottom:4}}>Rough guide for stashing:</div>
@@ -464,16 +483,11 @@ return(<Page>
     </div>)}
   </Card>
 )}
-<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:20}}>
+<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:20}}>
   <Card style={{border:`1px solid ${T.border}`}}>
     <Lbl>This month</Lbl>
     <div style={{fontFamily:'Geist Mono,monospace',fontSize:16,color:T.lumpGreen}}>{fmt(monN)}</div>
     <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{fmt(monG)} gross</div>
-  </Card>
-  <Card style={{border:`1px solid ${T.border}`,cursor:'pointer'}} onClick={()=>setView('receipts')}>
-    <Lbl>Reimbursable</Lbl>
-    <div style={{fontFamily:'Geist Mono,monospace',fontSize:16,color:pendAmt>0?T.reimb:T.textMuted}}>{fmt(pendAmt)}</div>
-    <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>owed to you</div>
   </Card>
   <Card style={{border:`1px solid ${T.border}`,cursor:'pointer'}} onClick={()=>setView('receipts')}>
     <Lbl>Biz Costs</Lbl>
@@ -1102,7 +1116,8 @@ const printInvoiceRecord=(inv)=>{
   if(rows.length===0)rows.push([fmtD((inv.date||'').split('T')[0]),'Services',fmt(inv.incomeTotal||inv.subtotal)]);
   const rowHtml=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td class="r">${r[2]}</td></tr>`).join('');
   const isPaid=inv.status==='paid';
-  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7;white-space:pre-line}</style></head><body onload="window.print()"><div class="hd"><div><h1>Invoice</h1><div class="num">${inv.invoiceNum}</div>${isPaid?'<div class="paidtag">PAID — thank you</div>':''}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:''}${settings.payRef?`<div><strong>Ref: ${(settings.payRef||'').replace(/^PAYMENT\s+REF[:\s]*/i,'').trim()||settings.payRef} · ${inv.invoiceNum}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">Bill To</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${settings.paymentLink&&!isPaid?`<div style="margin-top:16px;text-align:right"><a href="${settings.paymentLink}" style="display:inline-block;background:#6b7d6a;color:#ffffff;padding:10px 22px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Pay online &#8594;</a><div style="font-size:10px;color:#aaaaaa;margin-top:6px">Please use reference ${inv.invoiceNum}</div></div>`:''}${settings.bankDetails&&!isPaid?`<div class="foot">${settings.bankDetails}</div>`:''}</body></html>`;
+  const docTitle=inv.kind==='receipt'?'Receipt':'Invoice';
+  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7;white-space:pre-line}</style></head><body onload="window.print()"><div class="hd"><div><h1>${docTitle}</h1><div class="num">${inv.invoiceNum}</div>${isPaid?'<div class="paidtag">PAID — thank you</div>':''}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:''}${settings.payRef?`<div><strong>Ref: ${(settings.payRef||'').replace(/^PAYMENT\s+REF[:\s]*/i,'').trim()||settings.payRef} · ${inv.invoiceNum}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">Bill To</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${settings.paymentLink&&!isPaid?`<div style="margin-top:16px;text-align:right"><a href="${settings.paymentLink}" style="display:inline-block;background:#6b7d6a;color:#ffffff;padding:10px 22px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Pay online &#8594;</a><div style="font-size:10px;color:#aaaaaa;margin-top:6px">Please use reference ${inv.invoiceNum}</div></div>`:''}${settings.bankDetails&&!isPaid?`<div class="foot">${settings.bankDetails}</div>`:''}</body></html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();
 };
 
@@ -1299,7 +1314,7 @@ ${settings.name||''}`;
 </Page>);}
 
 // ── BANK ─────────────────────────────────────────────────────────────────────
-function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,selectable,selected,onToggleSelect}){
+function BankTxnRow({txn,invoices,onMakeInvoice,onMakeReceipt,onVoid,onRestore,onMatch,onUnmatch,selectable,selected,onToggleSelect}){
   const[matching,setMatching]=useState(false);
   const isIncome=txn.category==='income';
   const isVoided=txn.status==='voided';
@@ -1322,7 +1337,8 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmat
     </div>
     {isIncome&&(
       <div style={{display:'flex',gap:8,marginTop:9,flexWrap:'wrap'}}>
-        {!isDone&&!isVoided&&<Btn small color={T.lumpGreen} onClick={()=>onMakeInvoice(txn.id)}>Make invoice</Btn>}
+        {!isDone&&!isVoided&&<Btn small color={T.lumpGreen} onClick={()=>onMakeReceipt(txn.id)}>Make receipt</Btn>}
+        {!isDone&&!isVoided&&<Btn small outline color={T.lumpGreen} onClick={()=>onMakeInvoice(txn.id)}>Make invoice</Btn>}
         {!isDone&&!isVoided&&candidates.length>0&&<Btn small outline color={T.accent} onClick={()=>setMatching(m=>!m)}>Match existing</Btn>}
         {!isDone&&!isVoided&&<Btn small outline color={T.danger} onClick={()=>{if(window.confirm('Void this transaction? You can restore it later.'))onVoid(txn.id);}}>Void</Btn>}
         {isVoided&&<Btn small outline color={T.textMuted} onClick={()=>onRestore(txn.id)}>Restore</Btn>}
@@ -1340,7 +1356,7 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmat
     )}
   </div>);
 }
-function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmatch,onBulkConvert,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync,settings}){
+function BankView({bankTxns,invoices,onMakeInvoice,onMakeReceipt,onVoid,onRestore,onMatch,onUnmatch,onBulkConvert,onImportCSV,onSync,starlingStatus,starlingSyncing,starlingLastSync,settings}){
   const[tab,setTab]=useState('income');
   const[selected,setSelected]=useState({});
   const fileRef=useRef(null);
@@ -1377,7 +1393,7 @@ function BankView({bankTxns,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUn
       <button onClick={()=>setTab('spending')} style={{background:tab==='spending'?T.accent+'22':T.surface,border:`1.5px solid ${tab==='spending'?T.accent:T.border}`,borderRadius:10,padding:'10px 6px',fontSize:13,fontWeight:700,color:tab==='spending'?T.accent:T.textMuted}}>Spending · {fmt(totalSpending)}</button>
     </div>
     {rows.length===0&&<div style={{textAlign:'center',color:T.textMuted,fontSize:13,padding:'30px 0'}}>No {tab} transactions yet — connect Starling or import a CSV above.</div>}
-    {rows.map(txn=><BankTxnRow key={txn.id} txn={txn} invoices={invoices} onMakeInvoice={onMakeInvoice} onVoid={onVoid} onRestore={onRestore} onMatch={onMatch} onUnmatch={onUnmatch}
+    {rows.map(txn=><BankTxnRow key={txn.id} txn={txn} invoices={invoices} onMakeInvoice={onMakeInvoice} onMakeReceipt={onMakeReceipt} onVoid={onVoid} onRestore={onRestore} onMatch={onMatch} onUnmatch={onUnmatch}
       selectable={tab==='income'&&txn.status==='unreviewed'} selected={!!selected[txn.id]} onToggleSelect={toggleSelect}/>)}
     {selectedIds.length>0&&(
       <div style={{position:'sticky',bottom:80,marginTop:10,zIndex:5}}>
@@ -1412,12 +1428,17 @@ const activeE=entries.filter(e=>e.status!=='Void'&&inRange(e.date));
 const bizExp=receipts.filter(r=>r.category==='business'&&r.status!=='void'&&inRange(r.date));
 const pending=receipts.filter(r=>r.category==='reimbursable'&&r.status==='pending'&&inRange(r.date));
 const reimbursed=receipts.filter(r=>r.category==='reimbursable'&&r.status==='reimbursed'&&inRange(r.date));
-// Gross income is invoice-based, matching Home — only invoiced work counts.
+// Cash basis, matching Home: taxable figures count only money actually received
+// (paid invoices, by the date paid), minus the reimbursement pass-through portion.
+// The invoiced total stays visible alongside for chasing what's outstanding.
 const liveInvoices=invoices.filter(i=>i.status!=='void'&&inRange((i.date||'').slice(0,10)));
 const totG=liveInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
+const recInvoices=invoices.filter(i=>i.status==='paid'&&inRange(((i.paidDate||i.date||'').slice(0,10))));
+const totRec=recInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
+const totRecReimb=recInvoices.reduce((a,i)=>a+(i.reimbTotal||0),0);
 const totBiz=bizExp.reduce((a,r)=>a+(r.amount||0),0);
-const taxableP=Math.max(0,totG-totBiz);
-const totTax=taxableP*TAX;
+const taxableP=Math.max(0,totRec-totRecReimb-totBiz);
+const totTax=taxableP*taxRate(settings);
 const totN=taxableP-totTax;
 const totPend=pending.reduce((a,r)=>a+(r.amount||0),0);
 const totPaid=reimbursed.reduce((a,r)=>a+(r.amount||0),0);
@@ -1433,11 +1454,12 @@ bizExp.forEach(r=>{const k=r.subcategory||'other';byCat[k]=(byCat[k]||0)+(r.amou
 const catRows=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
 const maxCat=catRows[0]?catRows[0][1]:1;
 
-// Monthly P&L
+// Monthly P&L — cash basis: income lands in the month the money was received,
+// with the reimbursement pass-through netted out of profit.
 const months={};
-liveInvoices.forEach(i=>{const k=(i.date||'').substring(0,7);if(k){months[k]=months[k]||{income:0,expenses:0};months[k].income+=(i.subtotal||0);}});
-bizExp.forEach(r=>{const k=(r.date||'').substring(0,7);if(k){months[k]=months[k]||{income:0,expenses:0};months[k].expenses+=(r.amount||0);}});
-const monthRows=Object.entries(months).sort().map(([k,v])=>({month:k,income:v.income,expenses:v.expenses,profit:v.income-v.expenses}));
+recInvoices.forEach(i=>{const k=(i.paidDate||i.date||'').substring(0,7);if(k){months[k]=months[k]||{income:0,expenses:0,reimb:0};months[k].income+=(i.subtotal||0);months[k].reimb+=(i.reimbTotal||0);}});
+bizExp.forEach(r=>{const k=(r.date||'').substring(0,7);if(k){months[k]=months[k]||{income:0,expenses:0,reimb:0};months[k].expenses+=(r.amount||0);}});
+const monthRows=Object.entries(months).sort().map(([k,v])=>({month:k,income:v.income,expenses:v.expenses,profit:v.income-(v.reimb||0)-v.expenses}));
 const maxMonth=monthRows.reduce((m,r)=>Math.max(m,r.income,r.expenses),0)||1;
 
 const rangeLabel=()=>{
@@ -1460,19 +1482,27 @@ const exportTaxYear=()=>{
   const b=taxYearBounds(year);
   const tyEntries=entries.filter(e=>e.status!=='Void'&&e.date>=b.from&&e.date<=b.to);
   const tyInvoices=invoices.filter(i=>i.status!=='void'&&(i.date||'').slice(0,10)>=b.from&&(i.date||'').slice(0,10)<=b.to);
+  // Cash basis: received income counts by the date the money arrived (paidDate).
+  const tyReceived=invoices.filter(i=>i.status==='paid'&&(i.paidDate||i.date||'').slice(0,10)>=b.from&&(i.paidDate||i.date||'').slice(0,10)<=b.to);
   const tyExp=receipts.filter(r=>r.category==='business'&&r.status!=='void'&&r.date>=b.from&&r.date<=b.to);
-  const ge=tyInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
+  const ge=tyReceived.reduce((a,i)=>a+(i.subtotal||0),0);
+  const geReimb=tyReceived.reduce((a,i)=>a+(i.reimbTotal||0),0);
+  const geInvoiced=tyInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
   const be=tyExp.reduce((a,r)=>a+(r.amount||0),0);
-  const profit=Math.max(0,ge-be);
+  const profit=Math.max(0,ge-geReimb-be);
+  const pct=settings.taxPercent??20;
   const rows=[
     [`UK Tax Year ${year}/${(year+1)%100} Report`],
     [`Period: ${fmtD(b.from)} to ${fmtD(b.to)}`],
+    ['Basis: cash (income counted when received)'],
     [],
     ['SUMMARY'],
-    ['Gross Income (invoiced)',ge.toFixed(2)],
+    ['Gross Income (received)',ge.toFixed(2)],
+    ['Reimbursements (excluded, non-taxable pass-through)',geReimb.toFixed(2)],
     ['Allowable Business Expenses',be.toFixed(2)],
     ['Taxable Profit',profit.toFixed(2)],
-    ['Estimated Tax Stash (20%)',(profit*0.20).toFixed(2)],
+    [`Estimated Tax Stash (${pct}%)`,(profit*taxRate(settings)).toFixed(2)],
+    ['Invoiced in period (info — unpaid portion not yet taxable)',geInvoiced.toFixed(2)],
     [],
     ['INVOICES'],
     ['Date','Client','Invoice No','Gross','Status'],
@@ -1500,17 +1530,18 @@ const exportYearWorkbook=async()=>{
     const year=range==='lastTax'?currentTaxYearStart-1:currentTaxYearStart;
     const b=taxYearBounds(year);
     const tyEntries=entries.filter(e=>e.status!=='Void'&&e.date>=b.from&&e.date<=b.to).sort((a,x)=>(a.date||'').localeCompare(x.date||''));
-    const tyInvoices=invoices.filter(i=>i.status!=='void'&&(i.date||'').slice(0,10)>=b.from&&(i.date||'').slice(0,10)<=b.to);
+    const tyReceived=invoices.filter(i=>i.status==='paid'&&(i.paidDate||i.date||'').slice(0,10)>=b.from&&(i.paidDate||i.date||'').slice(0,10)<=b.to);
     const tyExp=receipts.filter(r=>r.category==='business'&&r.status!=='void'&&r.date>=b.from&&r.date<=b.to).sort((a,x)=>(a.date||'').localeCompare(x.date||''));
-    const ge=tyInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
+    const ge=tyReceived.reduce((a,i)=>a+(i.subtotal||0),0);
+    const geReimb=tyReceived.reduce((a,i)=>a+(i.reimbTotal||0),0);
     const be=tyExp.reduce((a,r)=>a+(r.amount||0),0);
-    const profit=Math.max(0,ge-be);
+    const profit=Math.max(0,ge-geReimb-be);
     const catTotals=Object.entries(tyExp.reduce((acc,r)=>{const k=catLabel(r.subcategory||'other');acc[k]=(acc[k]||0)+(r.amount||0);return acc;},{})).sort((a,x)=>x[1]-a[1]).map(([k,v])=>[k,v]);
     await buildYearWorkbook({
       year,
       period:`${fmtD(b.from)} to ${fmtD(b.to)}`,
       biz:settings.business||settings.name||'Year-End Summary',
-      summary:{gross:ge,expenses:be,profit,taxStash:profit*0.20},
+      summary:{gross:ge,reimb:geReimb,expenses:be,profit,taxStash:profit*taxRate(settings),taxPct:settings.taxPercent??20},
       income:tyEntries.map(e=>({date:e.date,client:e.client||'',invoiceRef:e.invoiceRef||'',description:e.description||'',hours:e.hours||0,rate:e.rate||0,gross:e.subtotal||0,status:e.status||'Pending'})),
       expenses:tyExp.map(r=>({date:r.date,description:r.description||'',category:catLabel(r.subcategory||'other'),amount:r.amount||0,link:r.driveUrl||''})),
       catTotals,
@@ -1539,8 +1570,9 @@ return(<Page>
 <Lbl>Profit & Loss</Lbl>
 <Card style={{marginBottom:16,border:`1px solid ${T.border}`}}>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-    {[['Gross Income',fmt(totG),T.text],['Business Costs',fmt(totBiz),T.business],['Taxable Profit',fmt(taxableP),T.accent],['Tax Stash (20%)',fmt(totTax),T.danger]].map(([l,v,c])=>(<div key={l} style={{background:'#fbfaf5',borderRadius:10,padding:'10px 8px',textAlign:'center'}}><div style={{fontSize:9,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>{l}</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:14,fontWeight:700,color:c}}>{v}</div></div>))}
+    {[['Received',fmt(totRec),T.text],['Invoiced',fmt(totG),T.textMuted],['Reimb excluded','−'+fmt(totRecReimb),T.reimb],['Business Costs','−'+fmt(totBiz),T.business],['Taxable Profit',fmt(taxableP),T.accent],[`Tax Stash (${settings.taxPercent??20}%)`,fmt(totTax),T.danger]].map(([l,v,c])=>(<div key={l} style={{background:'#fbfaf5',borderRadius:10,padding:'10px 8px',textAlign:'center'}}><div style={{fontSize:9,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>{l}</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:14,fontWeight:700,color:c}}>{v}</div></div>))}
   </div>
+  <div style={{fontSize:10,color:T.textFaint,marginBottom:10}}>Cash basis: only money actually received counts toward taxable profit. Reimbursements pass through invoices but aren't income.</div>
   <div style={{background:T.lumpGreen+'12',borderRadius:10,padding:'12px 14px',border:`1px solid ${T.lumpGreen}33`}}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
       <div style={{fontSize:11,color:T.textMuted,textTransform:'uppercase',letterSpacing:1}}>Take Home (after stash)</div>
@@ -2770,13 +2802,17 @@ const confirmReceipts=()=>{
 };
 
 // Step 5 — the same figures Home shows, so what's confirmed here is what Home will say
+// (cash basis, current tax year: received income minus reimbursements minus expenses)
 const activeE=entries.filter(e=>e.status!=='Void');
-const liveInvoices=invoices.filter(i=>i.status!=='void');
+const liveInvoices=invoices.filter(i=>i.status!=='void'&&(i.date||'').slice(0,10)>=TAX_YEAR_START);
 const allG=liveInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
+const receivedInvoices=invoices.filter(i=>i.status==='paid'&&(i.paidDate||i.date||'').slice(0,10)>=TAX_YEAR_START);
+const receivedG=receivedInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
+const receivedReimb=receivedInvoices.reduce((a,i)=>a+(i.reimbTotal||0),0);
 const unbilledG=activeE.filter(e=>!e.invoiceId).reduce((a,e)=>a+(e.subtotal||0),0);
-const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void').reduce((a,r)=>a+(r.amount||0),0);
-const taxableProfit=Math.max(0,allG-bizCosts);
-const taxReserve=taxableProfit*TAX;
+const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void'&&(r.date||'')>=TAX_YEAR_START).reduce((a,r)=>a+(r.amount||0),0);
+const taxableProfit=Math.max(0,receivedG-receivedReimb-bizCosts);
+const taxReserve=taxableProfit*taxRate(settings);
 const trueNet=taxableProfit-taxReserve;
 const dupEntryIds=new Set();
 activeE.forEach((e,i)=>{for(let j=i+1;j<activeE.length;j++){const f=activeE[j];if(Math.abs((e.subtotal||0)-(f.subtotal||0))<0.02&&datesClose(e.date,f.date)&&(e.client||'').toLowerCase().trim()===(f.client||'').toLowerCase().trim()){dupEntryIds.add(e.id);dupEntryIds.add(f.id);}}});
@@ -2846,7 +2882,7 @@ return(<Page>
     </div>)}
     {bankSummary&&typeof bankSummary.matched==='number'&&(<Card style={{marginTop:14,border:`1.5px solid ${T.lumpGreen}55`,background:T.lumpGreen+'0d'}}>
       <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>✓ Statement imported</div>
-      <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>{bankSummary.matched} invoice{bankSummary.matched===1?'':'s'} marked paid · {bankSummary.added} new income entr{bankSummary.added===1?'y':'ies'} · {fmt(bankSummary.total)} total</div>
+      <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>{bankSummary.matched} invoice{bankSummary.matched===1?'':'s'} marked paid · {bankSummary.added} unmatched payment{bankSummary.added===1?'':'s'} sent to the Bank tab to sort · {fmt(bankSummary.total)} total</div>
       <button onClick={()=>{setBankSummary(null);csvRef.current&&csvRef.current.click();}} style={{...secBtn,marginTop:10}}>Import another statement</button>
     </Card>)}
   </div>)}
@@ -2914,12 +2950,13 @@ return(<Page>
   {step===4&&(<div>
     <Card style={{marginBottom:14,background:`linear-gradient(135deg,${T.surface} 0%,${T.bg} 100%)`}}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <div><Lbl>Gross earned</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700}}>{fmt(allG)}</div></div>
+        <div><Lbl>Received</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700}}>{fmt(receivedG)}</div></div>
         <div><Lbl>Business costs</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.business}}>{fmt(bizCosts)}</div></div>
         <div><Lbl>Tax stash</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div></div>
         <div><Lbl>Take home</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.accentBright}}>{fmt(trueNet)}</div></div>
       </div>
-      {unbilledG>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>{fmt(unbilledG)} logged but not yet invoiced — doesn't count toward Gross Earned until it's on an invoice.</div>}
+      {allG>receivedG&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>{fmt(allG)} invoiced this tax year — the unpaid part becomes taxable when the money arrives.</div>}
+      {unbilledG>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{fmt(unbilledG)} logged but not yet invoiced — doesn't count toward income until it's on an invoice.</div>}
       <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>These are exactly the numbers Home will show. Fix anything below and they update live.</div>
     </Card>
     {(()=>{
@@ -3192,12 +3229,16 @@ useEffect(()=>{
   window.history.replaceState({},'',clean);
 },[]);
 
+// A bank txn being turned into an invoice via the Build Invoice screen is reserved for
+// the whole build, so the auto-match effect below can't grab it for a different invoice
+// mid-build and leave two 'paid' invoices for one real payment.
+const[reservedBankTxnId,setReservedBankTxnId]=useState(null);
 // Keep bank income rows and invoices reconciled: whenever either list changes, try to
 // auto-match any still-unreviewed bank income row against any still-unmatched invoice.
 useEffect(()=>{
   if(!loaded)return;
   const unmatchedInvoices=invoices.filter(i=>i.status!=='paid'&&i.status!=='void'&&!i.matchedBankTxnId);
-  const unreviewed=bankTxns.filter(t=>t.category==='income'&&t.status==='unreviewed');
+  const unreviewed=bankTxns.filter(t=>t.category==='income'&&t.status==='unreviewed'&&t.id!==reservedBankTxnId);
   if(!unmatchedInvoices.length||!unreviewed.length)return;
   let anyMatch=false;
   const invoiceUpdates={},txnUpdates={};
@@ -3210,7 +3251,7 @@ useEffect(()=>{
   if(!anyMatch)return;
   setInvoices(p=>p.map(i=>invoiceUpdates[i.id]?{...i,status:'paid',paidDate:invoiceUpdates[i.id].date,matchedBankTxnId:invoiceUpdates[i.id].id}:i));
   setBankTxns(p=>p.map(t=>txnUpdates[t.id]?{...t,status:'matched',matchedInvoiceId:txnUpdates[t.id].id}:t));
-},[loaded,invoices,bankTxns]);
+},[loaded,invoices,bankTxns,reservedBankTxnId]);
 
 // Self-healing: if a bank row is marked matched/invoiced but the invoice it points to no
 // longer exists (deleted before this check existed, or by some other path), free it up
@@ -3516,14 +3557,22 @@ const handleBankCSV=async file=>{
   }
 };
 const confirmBankIngest=rows=>{
+  const unmatched=[];
   rows.forEach(row=>{
     if(row.inv){
       updI(row.inv.id,{status:'paid',paidDate:row.date});
       (row.inv.entryIds||[]).forEach(eid=>updE(eid,{status:'Paid'}));
     }else{
-      addE({type:'lump',date:row.date,client:row.description||'Bank income',description:row.description||'',rate:null,hours:null,subtotal:row.amount,tax:row.amount*TAX,net:row.amount*(1-TAX),status:'Paid'});
+      // No invoice matched — never silently create income. The row goes to the Bank tab
+      // to be triaged by hand: match to an invoice, make a receipt, or void it.
+      unmatched.push({date:row.date,description:row.description||'Bank income',amount:row.amount,direction:'IN'});
     }
   });
+  if(unmatched.length){
+    addBankTxns(unmatched,'csv');
+    setIngestMsg(`${unmatched.length} payment${unmatched.length>1?'s':''} didn't match an invoice — sort ${unmatched.length>1?'them':'it'} in the Bank tab (match, make a receipt, or void).`);
+    setTimeout(()=>setIngestMsg(''),8000);
+  }
   setBankPending(null);
 };
 
@@ -3544,7 +3593,18 @@ const updR=(id,patch)=>setReceipts(p=>p.map(r=>r.id===id?{...r,...patch}:r));
 const delR=id=>setReceipts(p=>{const v=p.find(r=>r.id===id);if(v)toTrash('receipt',[v]);return p.filter(r=>r.id!==id);});
 const addI=inv=>setInvoices(p=>[{...inv,id:inv.id||mkId()},...p]);
 const updI=(id,patch)=>setInvoices(p=>p.map(i=>i.id===id?{...i,...patch}:i));
-const delI=id=>{setInvoices(p=>{const v=p.find(i=>i.id===id);if(v)toTrash('invoice',[v]);return p.filter(i=>i.id!==id);});setBankTxns(p=>p.map(t=>t.matchedInvoiceId===id?{...t,status:'unreviewed',matchedInvoiceId:null}:t));};
+const delI=id=>{
+  // Free everything the invoice was built from, so nothing silently vanishes from the
+  // totals: entries go back to unbilled (re-invoiceable), reimbursable receipts back to
+  // pending (still owed), and the matched bank row back to unreviewed.
+  const inv=invoices.find(i=>i.id===id);
+  if(inv){
+    (inv.entryIds||[]).forEach(eid=>updE(eid,{invoiceId:null}));
+    (inv.reimbIds||[]).forEach(rid=>updR(rid,{status:'pending'}));
+  }
+  setInvoices(p=>{const v=p.find(i=>i.id===id);if(v)toTrash('invoice',[v]);return p.filter(i=>i.id!==id);});
+  setBankTxns(p=>p.map(t=>t.matchedInvoiceId===id?{...t,status:'unreviewed',matchedInvoiceId:null}:t));
+};
 
 // ── Bank transactions (Starling + CSV) ──────────────────────────────────────
 // Merge new rows into bankTxns, skipping anything already seen (by Starling's own
@@ -3573,13 +3633,30 @@ const unmatchBankTxn=id=>setBankTxns(p=>p.map(t=>t.id===id?{...t,status:'unrevie
 // pre-seeded with the transaction as a draft line item — so it goes through the same
 // Doc-creation/save path as a manually-built invoice.
 const[bankTxnForInvoice,setBankTxnForInvoice]=useState(null);
-const startInvoiceFromBankTxn=id=>{const txn=bankTxns.find(t=>t.id===id);if(!txn)return;setBankTxnForInvoice(txn);go('invoice');};
-const onLinkBankTxn=(bankTxnId,invoiceId)=>setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invoiceId}:t));
+const startInvoiceFromBankTxn=id=>{const txn=bankTxns.find(t=>t.id===id);if(!txn)return;setBankTxnForInvoice(txn);setReservedBankTxnId(id);go('invoice');};
+const onLinkBankTxn=(bankTxnId,invoiceId)=>{setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invoiceId}:t));setReservedBankTxnId(r=>r===bankTxnId?null:r);};
+// Abandoning the build (navigating off the Invoice tab without saving) releases the
+// reservation — saving never changes `view`, only InvoiceView's internal mode.
+useEffect(()=>{if(view!=='invoice')setReservedBankTxnId(null);},[view]);
 const matchBankTxnToInvoice=(bankTxnId,invoiceId)=>{
   const txn=bankTxns.find(t=>t.id===bankTxnId);
   if(!txn)return;
   updI(invoiceId,{status:'paid',paidDate:txn.date,matchedBankTxnId:bankTxnId});
   setBankTxns(p=>p.map(t=>t.id===bankTxnId?{...t,status:'matched',matchedInvoiceId:invoiceId}:t));
+};
+// Paid-first money: one tap turns a bank income row into a paid record (kind:'receipt')
+// with no Build-Invoice detour — the money already arrived, so what the payer gets is a
+// receipt (proof of payment), not an invoice asking for it. Counts as received income.
+const makeReceiptFromBankTxn=id=>{
+  const txn=bankTxns.find(t=>t.id===id);
+  if(!txn||txn.category!=='income'||txn.status!=='unreviewed')return;
+  const eid=mkId(),iid=mkId();
+  const counter=settings.invoiceCounter||1;
+  const num=`RCT-${new Date().getFullYear()}-${String(counter).padStart(3,'0')}`;
+  addE({id:eid,type:'lump',date:txn.date,client:txn.description||'',description:txn.description||'',rate:null,hours:null,subtotal:txn.amount,tax:0,net:txn.amount,status:'Paid',invoiceId:iid});
+  addI({id:iid,kind:'receipt',invoiceNum:num,date:new Date().toISOString(),client:txn.description||'',clientEmail:'',subtotal:txn.amount,incomeTotal:txn.amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:txn.date,entryIds:[eid],reimbIds:[],docUrl:null,status:'paid',paidDate:txn.date,sourceBankTxnId:txn.id,matchedBankTxnId:txn.id});
+  onLinkBankTxn(txn.id,iid);
+  setSettings(s=>({...s,invoiceCounter:counter+1}));
 };
 // Turn several bank income rows into their own invoices in one go. Advances the invoice counter
 // from a local variable to avoid duplicate numbers, then generates Google Docs in background.
@@ -3698,7 +3775,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}
-  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync} settings={settings}/>}
+  {view==='bank'&&<BankView bankTxns={bankTxns} invoices={invoices} onMakeInvoice={startInvoiceFromBankTxn} onMakeReceipt={makeReceiptFromBankTxn} onVoid={voidBankTxn} onRestore={restoreBankTxn} onMatch={matchBankTxnToInvoice} onUnmatch={unmatchBankTxn} onBulkConvert={bulkConvertBankTxnsToInvoices} onImportCSV={importBankCSVFull} onSync={syncStarling} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} starlingLastSync={settings.starlingLastSync} settings={settings}/>}
   {view==='reports'&&<ReportsView entries={entries} receipts={receipts} invoices={invoices} settings={settings}/>}
   {view==='sheets'&&<SheetsView entries={entries} invoices={invoices} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets}/>}
   {view==='setup'&&<SetupView entries={entries} receipts={receipts} invoices={invoices} bankTxns={bankTxns} settings={settings} setSettings={setSettings} onImportBank={handleBankCSV} bankPending={bankPending} setBankPending={setBankPending} onConfirmBank={confirmBankIngest} isDupDoc={isDupDoc} addE={addE} updE={updE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} addR={addR} updR={updR} delR={delR} addI={addI} updI={updI} go={go} starlingStatus={starlingStatus} starlingSyncing={starlingSyncing} onSyncStarling={syncStarling}/>}

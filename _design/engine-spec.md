@@ -197,7 +197,7 @@ Default object (the exact shape a new install starts with):
   payRef:'PAYMENT REF: PTF',
   invoiceCounter:1,        // next invoice number; incremented after each invoice save
   anthropicKey:'',         // client-side enable flag for AI scanning (snap + guided setup)
-  taxPercent:20,           // DISPLAY-ONLY (TaxSavingsCard). Core math ignores it.
+  taxPercent:20,           // WIRED INTO CORE MATH via taxRate(settings) — Tax Stash % (see §8.2/§8.3)
   holidayPayPercent:12.07, // DISPLAY-ONLY (TaxSavingsCard). Core math ignores it.
   setupDone:false,         // guided setup finished/skipped — suppresses first-run auto-launch
   setupStep:0              // guided setup progress (0-4); >0 shows the Home "Resume" banner
@@ -205,7 +205,7 @@ Default object (the exact shape a new install starts with):
 ```
 Also referenced but not in default (set elsewhere / by old-app import): `paymentLink` (used in printInvoiceRecord, line 855).
 
-**Critical quirk:** `taxPercent` / `holidayPayPercent` are read in exactly one place — `TaxSavingsCard` (lines 1972–1979) — purely to render an educational "set aside £X" card. **All real money math uses the hardcoded `TAX=0.20`** (line 36). If a new UI wires these settings into the actual tax computation, behavior diverges from current app. Keep them display-only to preserve the engine.
+**UPDATED:** `taxPercent` is now wired into the real tax math via the `taxRate(settings)` helper (falls back to 20% when unset) — used by every Tax Stash / taxable-profit calculation (Home, Reports, both year-end exports, guided setup step 5). The hardcoded `TAX=0.20` constant remains only for per-entry `tax`/`net` preview fields, which are informational and outside the profit chain. `holidayPayPercent` is still display-only (TaxSavingsCard).
 
 ### 2.7 Non-persisted App state (UI/sync orchestration)
 `view` (2182), `addType` (2183), `pendingFile` (2185), `ingesting/ingestMsg/ingestFound` (2187-2189), `syncStatus` (2198), `loaded`/`booted` (2199-2200), refs `camGlobalRef/syncTimer/pollTimer/isSaving/sheetHydrated` (2184,2201-2205), `lastSynced` (2203), `aligning/alignResult` (2206-2207). These are engine-orchestration, not persisted data, but the sync flags (`isSaving`, `sheetHydrated`, `loaded`) are essential to replicate (see §4).
@@ -403,42 +403,68 @@ once they're actually on an invoice. This was a deliberate change from the origi
 entries-based math (kept below for history) because the old model let "Gross Earned"
 diverge from what was actually invoiced/paid — logging work and marking it "Paid" counted
 it as income even with zero invoices involved.
+**UPDATED AGAIN: cash basis, current-tax-year, reimbursements excluded.** The owner's
+workflow is frequently paid-first (money arrives, then a receipt is issued as proof;
+an invoice is only raised when *asking* for money). Matching how UK sole traders
+actually file (cash basis), taxable figures now count only money actually **received** —
+paid invoices, by the date the money arrived — scoped to the current tax year, with the
+reimbursement portion excluded (a reimbursed client expense passes through the invoice
+but nets to zero tax effect: it's turnover in and an equal allowable expense out).
+
 ```
-activeE      = entries where status !== 'Void'
-liveInvoices = invoices where status !== 'void'
-allG         = Σ liveInvoices.subtotal                    // "Gross Earned"
-confirmedG   = Σ subtotal of liveInvoices where status==='paid'   // "X confirmed"
-unbilledG    = Σ subtotal of activeE where !invoiceId      // "logged but not yet invoiced" — informational only, NOT part of allG
-bizCosts     = Σ amount of receipts where category==='business' && status!=='void'
-taxableProfit= max(0, allG - bizCosts)
-taxReserve   = taxableProfit * TAX            // "Tax Stash" (20% of profit)
-trueNet      = taxableProfit - taxReserve     // "Take Home"
-monG/monN    = Σ subtotal / Σ net for entries in current calendar month  // still entry-based, informational "this month" tile only
-pendAmt      = Σ amount of reimbursable receipts with status==='pending'  // "owed to you"
-unpaidAmt    = Σ subtotal of activeE with status==='Pending'
-overdueAmt   = Σ subtotal of invoices where status!=='paid' && dueDate < today
+activeE          = entries where status !== 'Void'
+liveInvoices     = invoices where status!=='void' && date >= TAX_YEAR_START   // invoiced this tax year
+allG             = Σ liveInvoices.subtotal                 // "invoiced this tax year" (info/chasing)
+receivedInvoices = invoices where status==='paid' && (paidDate||date) >= TAX_YEAR_START
+receivedG        = Σ receivedInvoices.subtotal             // "Received" — the taxable base
+receivedReimb    = Σ receivedInvoices.reimbTotal           // pass-through, excluded from profit
+outstandingG     = Σ subtotal of liveInvoices where status!=='paid'  // invoiced, not yet taxable
+unbilledG        = Σ subtotal of activeE where !invoiceId  // informational only
+bizCosts         = Σ amount of receipts where category==='business' && status!=='void' && date >= TAX_YEAR_START
+taxableProfit    = max(0, receivedG - receivedReimb - bizCosts)
+taxReserve       = taxableProfit * taxRate(settings)       // "Tax Stash" — settings.taxPercent, default 20%
+trueNet          = taxableProfit - taxReserve              // "Take Home"
+monG/monN        = Σ subtotal / Σ net for entries in current calendar month  // still entry-based, informational tile only
+unpaidAmt        = Σ subtotal of activeE with status==='Pending'
+overdueAmt       = Σ subtotal of invoices where status!=='paid' && dueDate < today
 ```
 Key distinctions:
-- **Gross Earned** (`allG`) = all non-void **invoices**, regardless of paid/matched status. An entry that's never been put on an invoice does NOT count, however "Paid" its own status is.
-- **Confirmed** (`confirmedG`) = invoices with `status==='paid'` (this now includes invoices matched to a real bank transaction — see §9 below — as well as ones marked paid manually).
-- **Unbilled** (`unbilledG`) = logged work with no `invoiceId` yet — shown as a separate line so work done isn't invisible, but it is deliberately excluded from `allG`.
-- **Take Home** (`trueNet`) = profit after expenses minus the 20% reserve — NOT the sum of per-entry `net` (which ignores expenses).
-- A one-time migration (gated on `settings.migratedInvoiceModel`) backfills a synthetic invoice for any pre-existing entry that was `status==='Paid'` but never wrapped in a real invoice, so this change didn't crater historical Gross Earned figures for existing data.
+- **Received** (`receivedG`) = paid invoices only, dated by `paidDate` (when the money arrived), not the invoice date. Unpaid invoices are shown (`allG`, `outstandingG`) but are NOT taxable yet.
+- **Reimbursements** (`receivedReimb`) are excluded from taxable profit but NOT from `receivedG`/`allG` display totals — the gross figures reflect what actually lands in the bank; the exclusion happens in the profit line and is itemised in the Home "How is the Tax Stash worked out?" breakdown.
+- **Tax rate** comes from `settings.taxPercent` via `taxRate(settings)` (default 20%). The `TAX=0.20` constant remains only for per-entry `tax`/`net` preview fields, which are not part of the profit chain.
+- **Unbilled** (`unbilledG`) = logged work with no `invoiceId` yet — deliberately excluded from income.
+- Deleting an invoice (`delI`) now frees its sources: linked entries get `invoiceId:null` (back to unbilled) and linked reimbursable receipts revert to `status:'pending'`, so income/expense records never silently vanish.
+- A one-time migration (gated on `settings.migratedInvoiceModel`) backfills a synthetic invoice for any pre-existing entry that was `status==='Paid'` but never wrapped in a real invoice, so the invoice-model change didn't crater historical figures for existing data.
+- GuidedSetup step 5 mirrors these formulas exactly (it previews "what Home will say").
 
-### 8.3 Reports / year-end (UPDATED: also invoice-based)
-`ReportsView`'s P&L card, `exportTaxYear`, and `exportYearWorkbook` all compute their headline
-"Gross Income"/`ge` from invoices within the date range (`liveInvoices`/`tyInvoices`), the same
-as Home — kept deliberately consistent so switching screens never shows two different "gross"
-numbers again. The entry-level CSV/workbook exports still list individual logged entries as
-a detail/audit trail (useful for HMRC record-keeping), but their own totals are computed
-independently from what's actually listed, not from the invoice-based headline figure.
+### 8.3 Reports / year-end (UPDATED: cash basis, matching Home)
+`ReportsView`'s P&L card, `exportTaxYear`, and `exportYearWorkbook` all compute taxable
+figures from **paid invoices dated by `paidDate||date` within the range** — kept deliberately
+consistent with Home so switching screens never shows two different numbers. The invoiced
+total is still shown/exported alongside as an informational figure for chasing. The
+Monthly P&L buckets income by the month the money was received and nets the reimbursement
+portion out of each month's profit. The entry-level CSV/workbook exports still list
+individual logged entries as a detail/audit trail, with independent totals.
 ```
-ge     = Σ subtotal of non-void invoices within tax-year bounds
-be     = Σ amount of business receipts (status!=='void') within bounds
-profit = max(0, ge - be)
-taxStash = profit * 0.20
+ge       = Σ subtotal of paid invoices with (paidDate||date) within tax-year bounds
+geReimb  = Σ reimbTotal of those same paid invoices     // excluded, itemised in exports
+be       = Σ amount of business receipts (status!=='void') within bounds
+profit   = max(0, ge - geReimb - be)
+taxStash = profit * taxRate(settings)                   // settings.taxPercent, default 20%
 ```
-(Hardcoded 0.20 again — `taxPercent` setting unused here.)
+Both exports carry explicit rows: "Reimbursements (excluded, non-taxable pass-through)"
+and (CSV) "Invoiced in period (info — unpaid portion not yet taxable)".
+
+### 8.3.1 Known limitations (deliberately deferred)
+- **Expense categories are deducted at 100% regardless of type.** `EXPENSE_CATS` has no
+  apportionment logic: mileage is whatever amount was typed (no per-mile rate), mixed
+  personal/business costs (utilities, workspace & rent) get no business-portion split,
+  and nothing blocks client entertaining — which the app's own in-app tips correctly say
+  is NOT deductible — from being logged under `meals`/`other` as a full deduction. The
+  in-app guidance and the math disagree; a future pass should add per-category warnings
+  or apportionment at entry time.
+- **Invoice `deductions`** remain free-text lines that reduce the saved `subtotal` with no
+  substantiation trail; they are treated as billing discounts rather than expenses.
 
 ### 8.3a Bank transactions, matching engine & Starling/Google Calendar integrations (NEW)
 - New atom **`bankTxns`** (`mhq-banktxns`), local-only (not pushed through the Google Sheets
@@ -450,10 +476,30 @@ taxStash = profit * 0.20
   `undefined|'unpaid'|'paid'` values, with a matched invoice simply being `status:'paid'`
   plus `matchedBankTxnId` set.
 - **Bank tab** (`BankView`/`BankTxnRow`, nav id `'bank'`): Income/Spending toggle. Income rows
-  get "Make invoice" (creates an invoice directly from the row) and "Void" (excluded from
-  income permanently). CSV import extended via a new `parseBankCSVFull` (keeps both credit
+  are triaged into exactly one of three outcomes — nothing auto-counts silently:
+  1. **Make receipt** (`makeReceiptFromBankTxn`) — the paid-first path: one tap creates a
+     `status:'paid'` record with `kind:'receipt'` and an `RCT-`-prefixed number (counts as
+     received income under the cash basis); `printInvoiceRecord` titles its document
+     "Receipt" instead of "Invoice", since the money already arrived and the payer gets
+     proof of payment, not a request for it.
+  2. **Make invoice** / **Match existing** — the asking-first path (Build Invoice screen or
+     link to an existing invoice).
+  3. **Void** — not business income; excluded everywhere, restorable.
+  CSV import extended via a new `parseBankCSVFull` (keeps both credit
   AND debit rows, unlike the original credits-only `parseBankCSV` still used by the guided
   setup's legacy bank-CSV path).
+- **`confirmBankIngest` no longer creates orphan income entries.** Previously an unmatched
+  CSV credit became a free-floating `status:'Paid'` entry — invisible to the invoice-based
+  income math, so real bank income escaped the Tax Stash entirely. Now unmatched rows are
+  routed into `bankTxns` as `'unreviewed'` (via `addBankTxns`, which dedupes) for triage in
+  the Bank tab; only the invoice-matched branch acts immediately. The guided setup's bank
+  step shares this path (`onConfirmBank={confirmBankIngest}`).
+- **Reservation guard against duplicate paid invoices**: `reservedBankTxnId` in `App()` marks
+  a txn being manually built into an invoice (`startInvoiceFromBankTxn`); the auto-match
+  effect skips it until the build is saved (`onLinkBankTxn` clears it) or abandoned
+  (navigating off the invoice view clears it). Without this, the background matcher could
+  pair the txn with a different similar-amount invoice mid-build, ending with two 'paid'
+  invoices for one real payment.
 - **Matching engine**: `findBankTxnMatch`/`findInvoiceMatch` (amount ±2p + `datesClose`
   date-proximity) plus an always-on `useEffect` in `App()` that reconciles unmatched invoices
   against unreviewed bank income rows on every change to either list. Manual matching is also
@@ -486,7 +532,7 @@ Only surfaced in `TaxSavingsCard` (1973, 1977) as an informational "set aside 12
 
 ## 9. Implementer checklist / risk summary
 
-1. **Keep `TAX=0.20` hardcoded everywhere it's used.** `settings.taxPercent`/`holidayPayPercent` are display-only (TaxSavingsCard). Wiring them into real math changes results.
+1. **Tax rate:** headline math uses `taxRate(settings)` (`settings.taxPercent`, default 20%); the `TAX=0.20` constant survives only in per-entry `tax`/`net` preview fields. `holidayPayPercent` is display-only (TaxSavingsCard).
 2. **Status casing differs by entity** — entries `'Pending'|'Paid'|'Void'` (capitalized); invoices `'paid'|'unpaid'|undefined` (lowercase, may be missing); receipts `'logged'|'pending'|'invoiced'|'void'` (lowercase). Do not normalize across them.
 3. **`subtotal` is the canonical total** on both entries (gross) and invoices (grandTotal). `net`/`tax`/`incomeTotal`/`reimbTotal` are derived/secondary.
 4. **Invoice `status` is often `undefined`** for standard invoices until marked paid; overdue/confirmed logic treats `!=='paid'` as unpaid.
