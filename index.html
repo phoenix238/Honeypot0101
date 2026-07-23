@@ -358,6 +358,9 @@ const unbilledG=activeE.filter(e=>!e.invoiceId).reduce((a,e)=>a+(e.subtotal||0),
 const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void').reduce((a,r)=>a+(r.amount||0),0);
 const taxableProfit=Math.max(0,allG-bizCosts);
 const taxReserve=taxableProfit*TAX;
+// Safe Stash: 20% of ALL gross, ignoring business costs — the amount to hold back
+// in case some expenses turn out to be disallowed/wrong at self-assessment.
+const safeReserve=allG*TAX;
 const trueNet=taxableProfit-taxReserve;
 const mon=activeE.filter(e=>{const d=new Date(e.date+'T12:00:00');return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
 const monG=mon.reduce((a,e)=>a+(e.subtotal||0),0);
@@ -423,8 +426,20 @@ return(<Page>
     <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Business Costs</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.business}}>{fmt(bizCosts)}</div></div>
   </div>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Tax Stash</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div><div style={{fontSize:9,color:T.textMuted}}>20% of profit</div></div>
+    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Tax Stash</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div><div style={{fontSize:9,color:T.textMuted}}>20% after costs</div></div>
     <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Take Home</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.accentBright}}>{fmt(trueNet)}</div></div>
+  </div>
+  <div style={{marginBottom:8,padding:'11px 13px',background:T.accent+'0f',borderRadius:10,border:`1px solid ${T.accent}44`}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+      <div>
+        <div style={{fontSize:9,fontWeight:700,color:T.accent,textTransform:'uppercase',letterSpacing:1.2,marginBottom:3}}>Safe Stash</div>
+        <div style={{fontSize:11,color:T.textMuted,lineHeight:1.4}}>If none of your costs are allowed — 20% of all gross</div>
+      </div>
+      <div style={{textAlign:'right'}}>
+        <div style={{fontFamily:'Geist Mono,monospace',fontSize:22,fontWeight:700,color:T.accent}}>{fmt(safeReserve)}</div>
+        {safeReserve-taxReserve>0.005&&<div style={{fontSize:10,color:T.textMuted}}>{fmt(safeReserve-taxReserve)} extra buffer</div>}
+      </div>
+    </div>
   </div>
   <Hr/>
   <div style={{display:'flex',gap:18,fontSize:12,color:T.textMuted}}>
@@ -440,6 +455,9 @@ return(<Page>
     <div style={{marginTop:10,padding:'12px 14px',background:T.bg,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.textMuted,lineHeight:1.6}}>
       <div style={{fontWeight:700,color:T.text,marginBottom:6}}>Money set aside for self-assessment</div>
       <div style={{marginBottom:8}}>UK self-employed pay Income Tax plus Class 4 NI on profit (gross minus allowable expenses), after the £12,570 personal allowance.</div>
+      <div style={{fontWeight:700,color:T.accent,marginBottom:4}}>Two numbers, on purpose:</div>
+      <div style={{marginBottom:3}}>· <b>Tax Stash</b> — 20% of profit <i>after</i> your business costs. The realistic figure if every expense is allowed.</div>
+      <div style={{marginBottom:8}}>· <b>Safe Stash</b> — 20% of <i>all</i> your gross, as if none of your costs counted. Hold back this larger amount and you're covered even if some expenses turn out to be wrong or disallowed. The gap between the two is the extra buffer.</div>
       <div style={{fontWeight:700,color:T.accent,marginBottom:4}}>Rough guide for stashing:</div>
       <div style={{marginBottom:3}}>· Profit under £20k: 10 to 15%</div>
       <div style={{marginBottom:3}}>· £20k to £50k: 20 to 25%</div>
@@ -1418,6 +1436,7 @@ const totG=liveInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
 const totBiz=bizExp.reduce((a,r)=>a+(r.amount||0),0);
 const taxableP=Math.max(0,totG-totBiz);
 const totTax=taxableP*TAX;
+const safeTax=totG*TAX; // 20% of gross, ignoring costs — safe amount if expenses are disallowed
 const totN=taxableP-totTax;
 const totPend=pending.reduce((a,r)=>a+(r.amount||0),0);
 const totPaid=reimbursed.reduce((a,r)=>a+(r.amount||0),0);
@@ -1539,7 +1558,16 @@ return(<Page>
 <Lbl>Profit & Loss</Lbl>
 <Card style={{marginBottom:16,border:`1px solid ${T.border}`}}>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-    {[['Gross Income',fmt(totG),T.text],['Business Costs',fmt(totBiz),T.business],['Taxable Profit',fmt(taxableP),T.accent],['Tax Stash (20%)',fmt(totTax),T.danger]].map(([l,v,c])=>(<div key={l} style={{background:'#fbfaf5',borderRadius:10,padding:'10px 8px',textAlign:'center'}}><div style={{fontSize:9,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>{l}</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:14,fontWeight:700,color:c}}>{v}</div></div>))}
+    {[['Gross Income',fmt(totG),T.text],['Business Costs',fmt(totBiz),T.business],['Taxable Profit',fmt(taxableP),T.accent],['Tax Stash · after costs',fmt(totTax),T.danger]].map(([l,v,c])=>(<div key={l} style={{background:'#fbfaf5',borderRadius:10,padding:'10px 8px',textAlign:'center'}}><div style={{fontSize:9,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>{l}</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:14,fontWeight:700,color:c}}>{v}</div></div>))}
+  </div>
+  <div style={{background:T.accent+'0f',borderRadius:10,padding:'12px 14px',border:`1px solid ${T.accent}44`,marginBottom:10}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+      <div>
+        <div style={{fontSize:11,color:T.accent,textTransform:'uppercase',letterSpacing:1,fontWeight:700}}>Safe Stash · if costs disallowed</div>
+        <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>20% of all gross — hold this back to be fully covered{safeTax-totTax>0.005?`, ${fmt(safeTax-totTax)} more than the stash above`:''}</div>
+      </div>
+      <div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.accent}}>{fmt(safeTax)}</div>
+    </div>
   </div>
   <div style={{background:T.lumpGreen+'12',borderRadius:10,padding:'12px 14px',border:`1px solid ${T.lumpGreen}33`}}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -2777,6 +2805,7 @@ const unbilledG=activeE.filter(e=>!e.invoiceId).reduce((a,e)=>a+(e.subtotal||0),
 const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void').reduce((a,r)=>a+(r.amount||0),0);
 const taxableProfit=Math.max(0,allG-bizCosts);
 const taxReserve=taxableProfit*TAX;
+const safeReserve=allG*TAX; // 20% of all gross, ignoring costs — the "in case expenses are disallowed" number
 const trueNet=taxableProfit-taxReserve;
 const dupEntryIds=new Set();
 activeE.forEach((e,i)=>{for(let j=i+1;j<activeE.length;j++){const f=activeE[j];if(Math.abs((e.subtotal||0)-(f.subtotal||0))<0.02&&datesClose(e.date,f.date)&&(e.client||'').toLowerCase().trim()===(f.client||'').toLowerCase().trim()){dupEntryIds.add(e.id);dupEntryIds.add(f.id);}}});
@@ -2916,7 +2945,8 @@ return(<Page>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <div><Lbl>Gross earned</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700}}>{fmt(allG)}</div></div>
         <div><Lbl>Business costs</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.business}}>{fmt(bizCosts)}</div></div>
-        <div><Lbl>Tax stash</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div></div>
+        <div><Lbl>Tax stash</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div><div style={{fontSize:10,color:T.textMuted}}>after costs</div></div>
+        <div><Lbl>Safe stash</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.accent}}>{fmt(safeReserve)}</div><div style={{fontSize:10,color:T.textMuted}}>if costs disallowed</div></div>
         <div><Lbl>Take home</Lbl><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,color:T.accentBright}}>{fmt(trueNet)}</div></div>
       </div>
       {unbilledG>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>{fmt(unbilledG)} logged but not yet invoiced — doesn't count toward Gross Earned until it's on an invoice.</div>}
