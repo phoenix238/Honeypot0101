@@ -196,7 +196,7 @@ const Sheets={
   async labelProcessed(ids){if(!this._url||!ids||!ids.length)return;try{await this._jsonp(this._url+'?action=labelProcessed&ids='+ids.join(','),15000);}catch{}},
   async deleteReceiptFiles(threadId,driveFileId){if(!this._url)return;try{return await this._jsonp(this._url+'?action=deleteReceiptFiles&threadId='+encodeURIComponent(threadId||'')+'&driveFileId='+encodeURIComponent(driveFileId||''),15000);}catch{return null;}},
   async moveToFolder(fileId,category){if(!this._url||!fileId)return;try{return await this._jsonp(this._url+'?action=moveToFolder&fileId='+encodeURIComponent(fileId)+'&category='+encodeURIComponent(category),10000);}catch{return null;}},
-  async sendEmail(to,subject,body,docUrl){if(!this._url||!to)return{ok:false};try{const u=this._url+'?action=sendInvoice&to='+encodeURIComponent(to)+'&subject='+encodeURIComponent(subject||'')+'&body='+encodeURIComponent(body||'')+'&docUrl='+encodeURIComponent(docUrl||'');return await this._jsonp(u,15000);}catch(e){return{ok:false,error:e.message};}},
+  async sendEmail(to,subject,body,docUrl){if(!this._url||!to)return{ok:false};try{const u=this._url+'?action=sendInvoice&to='+encodeURIComponent(to)+'&subject='+encodeURIComponent(subject||'')+'&body='+encodeURIComponent(body||'')+'&docUrl='+encodeURIComponent(docUrl||'');/* Doc→PDF export + Drive permission change + send can run well past 15s server-side; a short timeout made the UI report "Failed" while the email actually went out. */return await this._jsonp(u,45000);}catch(e){return{ok:false,error:e.message};}},
   async getFolderUrl(){if(!this._url)return null;try{const d=await this._jsonp(this._url+'?action=getFolderUrl',10000);return d?.url||null;}catch{return null;}}
 };
 
