@@ -255,6 +255,20 @@ const payLinkProblem=settings=>{
   return 'That is not a full link. Include the site as well as your name — like monzo.me/yourname.';
 };
 /**
+ * A softer warning for a link that will scan fine but that Honey cannot safely reuse:
+ * anything outside Monzo.me/Revolut.me/PayPal.me is shown exactly as saved, every
+ * time, with no amount or reference swapped in. Business "payment link" tools (Monzo
+ * Business's included) mint one link per amount — paste one of those here and every
+ * client sees whatever amount that link was made for, not what they actually owe.
+ */
+const payLinkCaution=settings=>{
+  const raw=((settings&&settings.paymentLink)||'').trim();
+  if(!raw||!payUrl(settings,1,''))return ''; // empty, or already a hard error
+  const host=raw.replace(/^https?:\/\//i,'').replace(/\s+/g,'').split(/[?#/]/)[0].toLowerCase();
+  if(/(^|\.)(monzo|paypal|revolut)\.me$/.test(host))return '';
+  return 'This isn’t a Monzo.me, Revolut.me or PayPal.me link, so Honey can’t swap in the amount or reference — it shows exactly what you saved, for every payment. Make sure it isn’t fixed to one specific amount, or use your bank details instead.';
+};
+/**
  * A link to this app's own pay.html showing the bank details, used when there is no
  * provider link. Any phone can open a web address; a QR holding plain text is refused
  * outright by many of them. The details ride in the fragment, which is never sent to
@@ -2919,6 +2933,8 @@ return(<Page>
       <Inp placeholder="monzo.me/yourname" value={settings.paymentLink||''} onChange={e=>set('paymentLink',e.target.value)}/>
       {payLinkProblem(settings)
         ?<div style={{fontSize:11,color:T.danger,marginTop:6,lineHeight:1.55}}><strong>This won't scan.</strong> {payLinkProblem(settings)}</div>
+        :payLinkCaution(settings)
+        ?<div style={{fontSize:11,color:T.pending,marginTop:6,lineHeight:1.55}}><strong>Careful —</strong> {payLinkCaution(settings)}</div>
         :<div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.55}}>Optional. Include the site, not just your name — <strong>monzo.me/yourname</strong>, revolut.me/yourname or paypal.me/yourname. No amount; Honey adds that and the reference itself. Monzo and Revolut links pay by bank transfer, so no card fee. Leave this empty and the QR shows your bank details instead.</div>}
     </div>
   </SettingsRow>
