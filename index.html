@@ -230,7 +230,9 @@ const payUrl=(settings,amount,reference)=>{
   const raw=((settings&&settings.paymentLink)||'').trim();
   if(!raw)return '';
   const amt=(amount||0)>0?(Math.round(amount*100)/100).toFixed(2):'';
-  const u=raw.replace(/^https?:\/\//i,'').replace(/\s+/g,'').replace(/\/+$/,'');
+  // drop scheme, and any query/hash — a link shared from a banking app carries the
+  // amount and note it was made for, which we replace with this payment's own
+  const u=raw.replace(/^https?:\/\//i,'').replace(/\s+/g,'').split(/[?#]/)[0].replace(/\/+$/,'');
   const host=u.split('/')[0].toLowerCase();
   if(!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host))return ''; // not a hostname at all
   const seg=u.slice(host.length).split('/').filter(Boolean);
