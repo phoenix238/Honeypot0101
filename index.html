@@ -610,16 +610,8 @@ const CatTag=({cat})=>{const[c,l]=cat==='business'?[T.business,'Business']:[T.re
 const StatusTag=({status})=>{const c=status==='Paid'?T.paid:T.pending;return <span style={{background:c+'22',color:c,border:`1px solid ${c}44`,borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700}}>{status||'Pending'}</span>;};
 function SyncPill({status}){const map={loading:{c:T.textMuted,label:'Loading…'},synced:{c:T.lumpGreen,label:'Synced'},saving:{c:T.accent,label:'Syncing…'},local:{c:T.manual,label:'Local only'},error:{c:T.danger,label:'Sync error'}};const{c,label}=map[status]||{c:T.textMuted,label:''};return(<div style={{display:'flex',alignItems:'center',gap:5,fontSize:10,color:c,fontWeight:700,letterSpacing:.8}}><div style={{width:6,height:6,borderRadius:'50%',background:c,flexShrink:0,...(status==='saving'?{animation:'spin 1s linear infinite'}:{})}}/>{label}</div>);}
 
-/** The amounts this person actually charges — from their own history, plus their rate. */
-const quickAmounts=(entries,settings)=>{
-  const counts={};
-  (entries||[]).filter(e=>e&&e.status!=='Void'&&(e.subtotal||0)>0).slice(0,120)
-    .forEach(e=>{const v=Math.round(e.subtotal*100)/100;counts[v]=(counts[v]||0)+1;});
-  const top=Object.keys(counts).map(Number).sort((a,b)=>counts[b]-counts[a]||b-a).slice(0,4);
-  const dr=Math.round((Number(settings&&settings.defaultRate)||0)*100)/100;
-  if(dr>0&&top.indexOf(dr)<0)top.push(dr);
-  return top.sort((a,b)=>a-b).slice(0,5);
-};
+/** Quick-tap amount chips: £30–£80 in steps of £5, the session's own pricing range. */
+const QUICK_AMOUNTS=[30,35,40,45,50,55,60,65,70,75,80];
 
 /**
  * Take a payment on the spot — no work logged, no invoice raised. Type the amount,
@@ -638,7 +630,7 @@ function TakePaymentView({settings,entries,clients,onAdd,onAddInvoice,invoiceCou
   const d=today();
   const tail=[(who||'').trim().split(' ')[0],d.slice(8,10)+d.slice(5,7)].filter(Boolean).join(' ');
   const reference=payReference(settings,tail);
-  const quick=quickAmounts(entries,settings);
+  const quick=QUICK_AMOUNTS;
   const names=Array.from(new Set([].concat((clients||[]).map(c=>c&&c.name),(entries||[]).map(e=>e&&e.client)).filter(Boolean))).slice(0,40);
 
   const record=docType=>{
