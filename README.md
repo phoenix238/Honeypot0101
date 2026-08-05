@@ -1,11 +1,37 @@
 # Honeypot0101 — Honey
 
-A freelance finance tracker: log work, watch your take-home + tax pot, raise invoices,
-snap receipts, browse a live spreadsheet view, and optionally sync to Google Sheets.
-Single-file React app, dark theme, responsive from phone to desktop (sidebar nav on
-wide screens, bottom dock on mobile).
+A freelance finance tracker: log work, watch your take-home + tax pot, take payment by
+QR at the end of a session, raise invoices and receipts, snap receipts, browse a live
+spreadsheet view, and optionally sync to Google Sheets. Single-file React app, dark
+theme, responsive from phone to desktop (sidebar nav on wide screens, bottom dock on
+mobile).
 
 **Live:** https://phoenix238.github.io/Honeypot0101/
+
+## Getting paid
+Set a **Payment link** and **Bank details** under Settings → Your Profile. A monzo.me,
+revolut.me or paypal.me handle is enough — save just the base link and Honey adds the
+amount and reference itself.
+
+Log the session and hit **Show payment QR** while the client is still in the room. They
+scan it, their banking app opens with the amount already filled in, and because it
+settles as a bank transfer there is no card fee. If their bank will not follow the link,
+the **Bank details** tab shows a scannable, copyable version of your sort code, account
+number and reference instead. The same QR is printed on any unpaid invoice PDF, so it
+still works when you send the paperwork later.
+
+Every payment carries a reference (`PTF Sarah 0508`, or the invoice number) — that is
+what the bank-CSV and Starling matching key off when the money lands.
+
+When it does land, mark the invoice paid and Honey offers a **receipt** rather than
+another invoice: a distinct document that confirms the money is already in, with no
+amount due, no pay button and no late-payment notice. Logging an entry as Paid lets you
+pick Receipt, Invoice or Neither per entry. Receipts are only ever produced for records
+that are genuinely paid; an unpaid one falls back to the invoice layout so it keeps its
+pay QR. Generated documents are yours to send — Honey does not email them for you.
+
+QR codes are generated in-page with no external library or network call, so they also
+render inside the printed document.
 
 ## Security
 The app is locked behind a numeric PIN. On first open you set a 4-digit PIN; only a

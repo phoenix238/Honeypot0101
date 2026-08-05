@@ -107,6 +107,210 @@ const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric
 const mkId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 const PROXY_URL='https://honey-proxy.phoenix-2bc.workers.dev';
 
+// ---- QR encoder — byte mode, ECC level M, versions 1-20. Self-contained so it also
+// works inside the printed invoice/receipt window, which has no scripts of its own.
+const QRE=(()=>{
+  const EXP=new Uint8Array(512),LOG=new Uint8Array(256);
+  {let x=1;for(let i=0;i<255;i++){EXP[i]=x;LOG[x]=i;x<<=1;if(x&0x100)x^=0x11d;}for(let i=255;i<512;i++)EXP[i]=EXP[i-255];}
+  const mul=(a,b)=>(a&&b)?EXP[LOG[a]+LOG[b]]:0;
+  const genPoly=n=>{let p=[1];for(let i=0;i<n;i++){const q=new Array(p.length+1).fill(0);for(let j=0;j<p.length;j++){q[j]^=p[j];q[j+1]^=mul(p[j],EXP[i]);}p=q;}return p;};
+  const rsEnc=(data,ecLen)=>{const g=genPoly(ecLen),res=new Uint8Array(data.length+ecLen);res.set(data);
+    for(let i=0;i<data.length;i++){const f=res[i];if(f)for(let j=1;j<g.length;j++)res[i+j]^=mul(g[j],f);}
+    return res.slice(data.length);};
+  // per version: [ecCodewordsPerBlock, group1Blocks, group1Data, group2Blocks, group2Data] at ECC level M
+  const BLK=[null,[10,1,16,0,0],[16,1,28,0,0],[26,1,44,0,0],[18,2,32,0,0],[24,2,43,0,0],[16,4,27,0,0],[18,4,31,0,0],[22,2,38,2,39],[22,3,36,2,37],[26,4,43,1,44],[30,1,50,4,51],[22,6,36,2,37],[22,8,37,1,38],[24,4,40,5,41],[24,5,41,5,42],[28,7,45,3,46],[28,10,46,1,47],[26,9,43,4,44],[26,3,44,11,45],[26,3,41,13,42]];
+  const ALIGN=[null,[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90]];
+  const dataCw=v=>{const b=BLK[v];return b[1]*b[2]+b[3]*b[4];};
+  const gbit=(x,i)=>(x>>>i)&1;
+  function build(text){
+    const bytes=Array.from(new TextEncoder().encode(text));
+    let ver=0;
+    for(let v=1;v<=20;v++){const cnt=v<10?8:16;if(dataCw(v)*8>=4+cnt+8*bytes.length){ver=v;break;}}
+    if(!ver)throw new Error('QR: content too long');
+    const cap=dataCw(ver)*8,bits=[];
+    const put=(val,n)=>{for(let i=n-1;i>=0;i--)bits.push((val>>>i)&1);};
+    put(4,4);put(bytes.length,ver<10?8:16);bytes.forEach(b=>put(b,8));
+    for(let i=0;i<4&&bits.length<cap;i++)bits.push(0);
+    while(bits.length%8)bits.push(0);
+    for(let p=0;bits.length<cap;p^=1)put(p?0x11:0xEC,8);
+    const cw=new Uint8Array(bits.length/8);
+    for(let i=0;i<bits.length;i++)if(bits[i])cw[i>>3]|=0x80>>(i&7);
+    const b0=BLK[ver],ecLen=b0[0],n1=b0[1],d1=b0[2],n2=b0[3],d2=b0[4];
+    const blocks=[],eccs=[];let off=0;
+    for(let i=0;i<n1+n2;i++){const len=i<n1?d1:d2;const b=cw.slice(off,off+len);off+=len;blocks.push(b);eccs.push(rsEnc(b,ecLen));}
+    const out=[];
+    for(let i=0;i<Math.max(d1,d2);i++)blocks.forEach(b=>{if(i<b.length)out.push(b[i]);});
+    for(let i=0;i<ecLen;i++)eccs.forEach(e=>out.push(e[i]));
+    const final=Uint8Array.from(out);
+    const size=17+4*ver,mod=[],fn=[];
+    for(let y=0;y<size;y++){mod.push(new Array(size).fill(0));fn.push(new Array(size).fill(0));}
+    const setFn=(x,y,d)=>{if(x<0||y<0||x>=size||y>=size)return;mod[y][x]=d?1:0;fn[y][x]=1;};
+    // timing first — the finder patterns overwrite the stretch running through them
+    for(let i=0;i<size;i++){setFn(6,i,i%2===0);setFn(i,6,i%2===0);}
+    const corners=[[3,3],[size-4,3],[3,size-4]];
+    for(let c=0;c<3;c++){const fx=corners[c][0],fy=corners[c][1];
+      for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const d=Math.max(Math.abs(dx),Math.abs(dy));setFn(fx+dx,fy+dy,d!==2&&d!==4);}}
+    const ap=ALIGN[ver],na=ap.length;
+    for(let i=0;i<na;i++)for(let j=0;j<na;j++){
+      if((i===0&&j===0)||(i===0&&j===na-1)||(i===na-1&&j===0))continue;
+      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)setFn(ap[i]+dx,ap[j]+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1);
+    }
+    if(ver>=7){let rem=ver;for(let i=0;i<12;i++)rem=(rem<<1)^((rem>>>11)*0x1F25);
+      const vb=(ver<<12)|rem;
+      for(let i=0;i<18;i++){const b=gbit(vb,i),a=size-11+i%3,c=Math.floor(i/3);setFn(a,c,b);setFn(c,a,b);}}
+    const fmtBits=m=>{const d=(0<<3)|m;let rem=d;for(let i=0;i<10;i++)rem=(rem<<1)^((rem>>>9)*0x537);return((d<<10)|rem)^0x5412;};
+    const placeFmt=(set,m)=>{const b=fmtBits(m);
+      for(let i=0;i<=5;i++)set(8,i,gbit(b,i));
+      set(8,7,gbit(b,6));set(8,8,gbit(b,7));set(7,8,gbit(b,8));
+      for(let i=9;i<15;i++)set(14-i,8,gbit(b,i));
+      for(let i=0;i<8;i++)set(size-1-i,8,gbit(b,i));
+      for(let i=8;i<15;i++)set(8,size-15+i,gbit(b,i));
+      set(8,size-8,1);};
+    placeFmt(setFn,0); // reserve the format areas before laying out data
+    let bi=0;
+    for(let right=size-1;right>=1;right-=2){
+      if(right===6)right=5;
+      for(let vert=0;vert<size;vert++)for(let j=0;j<2;j++){
+        const x=right-j,up=((right+1)&2)===0,y=up?size-1-vert:vert;
+        if(!fn[y][x]&&bi<final.length*8){mod[y][x]=gbit(final[bi>>>3],7-(bi&7));bi++;}
+      }
+    }
+    const maskAt=(m,x,y)=>{
+      if(m===0)return(x+y)%2===0; if(m===1)return y%2===0; if(m===2)return x%3===0;
+      if(m===3)return(x+y)%3===0; if(m===4)return(Math.floor(x/3)+Math.floor(y/2))%2===0;
+      if(m===5)return(x*y)%2+(x*y)%3===0; if(m===6)return((x*y)%2+(x*y)%3)%2===0;
+      return((x+y)%2+(x*y)%3)%2===0;};
+    const FIND=[1,0,1,1,1,0,1,0,0,0,0],FINR=[0,0,0,0,1,0,1,1,1,0,1];
+    const penalty=g=>{
+      let p=0;
+      const run=line=>{let s=0,c=line[0],len=1;
+        for(let i=1;i<line.length;i++){if(line[i]===c)len++;else{if(len>=5)s+=3+(len-5);c=line[i];len=1;}}
+        if(len>=5)s+=3+(len-5);return s;};
+      const hasAt=(line,i,pat)=>{for(let k=0;k<11;k++)if(line[i+k]!==pat[k])return false;return true;};
+      for(let y=0;y<size;y++){const row=g[y];p+=run(row);
+        for(let i=0;i+11<=size;i++)if(hasAt(row,i,FIND)||hasAt(row,i,FINR))p+=40;}
+      for(let x=0;x<size;x++){const col=[];for(let y=0;y<size;y++)col.push(g[y][x]);p+=run(col);
+        for(let i=0;i+11<=size;i++)if(hasAt(col,i,FIND)||hasAt(col,i,FINR))p+=40;}
+      for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){const v=g[y][x];if(v===g[y][x+1]&&v===g[y+1][x]&&v===g[y+1][x+1])p+=3;}
+      let dark=0;for(let y=0;y<size;y++)for(let x=0;x<size;x++)dark+=g[y][x];
+      return p+10*Math.floor(Math.abs(dark*100/(size*size)-50)/5);};
+    let best=null,bestP=Infinity;
+    for(let m=0;m<8;m++){
+      const g=mod.map(r=>r.slice());
+      for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(!fn[y][x]&&maskAt(m,x,y))g[y][x]^=1;
+      placeFmt((x,y,v)=>{g[y][x]=v?1:0;},m);
+      const p=penalty(g);
+      if(p<bestP){bestP=p;best=g;}
+    }
+    return best;
+  }
+  /** SVG markup for `text`. `px` is the rendered size of the whole square. */
+  const svg=(text,o)=>{
+    o=o||{};
+    const px=o.px||200,quiet=o.quiet==null?3:o.quiet,dark=o.dark||'#16140F',light=o.light||'#FFFFFF';
+    const m=build(text),n=m.length,total=n+quiet*2;
+    let d='';
+    for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(m[y][x])d+='M'+(x+quiet)+' '+(y+quiet)+'h1v1h-1z';
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="'+px+'" height="'+px+'" viewBox="0 0 '+total+' '+total+'" shape-rendering="crispEdges"><rect width="'+total+'" height="'+total+'" fill="'+light+'"/><path d="'+d+'" fill="'+dark+'"/></svg>';
+  };
+  return{build:build,svg:svg};
+})();
+
+// ---- Payment links, references and the scannable payload
+const cleanRef=s=>(s||'').replace(/^PAYMENT\s+REF[:\s]*/i,'').trim();
+/** The reference the client should quote — what bank-feed matching keys off. */
+const payReference=(settings,extra)=>[cleanRef(settings&&settings.payRef),extra||''].filter(Boolean).join(' ').trim();
+/** Turn the saved handle into a real pay link with the amount and reference baked in. */
+const payUrl=(settings,amount,reference)=>{
+  const raw=((settings&&settings.paymentLink)||'').trim();
+  if(!raw)return '';
+  const amt=(amount||0)>0?(Math.round(amount*100)/100).toFixed(2):'';
+  const u=raw.replace(/^https?:\/\//i,'').replace(/\/+$/,'');
+  const host=u.split('/')[0].toLowerCase();
+  const seg=u.slice(host.length).split('/').filter(Boolean);
+  // tolerate a handle that was pasted with an amount already on the end
+  if(seg.length>1&&/^(gbp)?[\d.]+(gbp)?$/i.test(seg[seg.length-1]))seg.pop();
+  const path=seg.join('/');
+  if(/(^|\.)monzo\.me$/.test(host))return 'https://monzo.me/'+path+(amt?'/'+amt:'')+(reference?'?d='+encodeURIComponent(reference):'');
+  if(/(^|\.)paypal\.me$/.test(host))return 'https://paypal.me/'+path+(amt?'/'+amt+'GBP':'');
+  if(/(^|\.)revolut\.me$/.test(host))return 'https://revolut.me/'+path+(amt?'/gbp'+amt:'');
+  return 'https://'+u; // any other provider: use exactly what was saved
+};
+/** Plain-text fallback — scannable by any camera, readable by any bank app. */
+const bankPayText=(settings,amount,reference)=>{
+  const L=[];
+  if(settings&&settings.name)L.push('Pay '+settings.name);
+  if(settings&&settings.bankDetails)L.push(settings.bankDetails);
+  if((amount||0)>0)L.push('Amount: '+fmt(amount));
+  if(reference)L.push('Reference: '+reference);
+  return L.join('\n');
+};
+
+/** White-backed QR block. Falls back to a readable note if the payload is too long. */
+function QRBox({value,px=200,pad=12}){
+  if(!value)return null;
+  let markup=null;
+  try{markup=QRE.svg(value,{px:px,quiet:2});}catch(e){markup=null;}
+  if(!markup)return(<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:16,fontSize:12,color:T.textMuted,maxWidth:px}}>Too long to fit in a QR code.</div>);
+  return(<div style={{background:'#fff',padding:pad,borderRadius:14,display:'inline-block',lineHeight:0}} dangerouslySetInnerHTML={{__html:markup}}/>);
+}
+
+/** A small copy-to-clipboard row. */
+function CopyLine({label,value,mono}){
+  const[done,setDone]=useState(false);
+  if(!value)return null;
+  const copy=()=>{navigator.clipboard.writeText(value).then(()=>{setDone(true);setTimeout(()=>setDone(false),1800);},()=>{});};
+  return(<button onClick={copy} style={{display:'flex',alignItems:'center',gap:10,width:'100%',textAlign:'left',background:T.bg,border:`1px solid ${done?T.lumpGreen+'66':T.border}`,borderRadius:10,padding:'9px 12px',marginBottom:7,cursor:'pointer'}}>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:10,color:T.textFaint,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:2}}>{label}</div>
+      <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:mono?"'Geist Mono',monospace":'inherit',wordBreak:'break-word'}}>{value}</div>
+    </div>
+    <span style={{fontSize:11,fontWeight:700,color:done?T.lumpGreen:T.textMuted,flexShrink:0}}>{done?'Copied':'Copy'}</span>
+  </button>);
+}
+
+/**
+ * The screen you hold up at the end of a session. Defaults to the pay link (their
+ * banking app opens with the amount already filled in) and falls back to the raw
+ * bank details for anyone whose bank will not follow the link.
+ */
+function PayQR({open,onClose,amount,reference,client,settings,title}){
+  const link=payUrl(settings,amount,reference);
+  const[tab,setTab]=useState(link?'link':'bank');
+  useEffect(()=>{setTab(link?'link':'bank');},[link,open]);
+  if(!open)return null;
+  const text=bankPayText(settings,amount,reference);
+  const payload=tab==='link'?link:text;
+  const sortAcc=(settings&&settings.bankDetails)||'';
+  return(<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.72)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:20,padding:'22px 20px 24px',width:'100%',maxWidth:400,maxHeight:'92vh',overflowY:'auto',border:`1px solid ${T.border}`}}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom:14}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontFamily:"'Bricolage Grotesque',serif",fontWeight:800,fontSize:19,letterSpacing:'-.01em'}}>{title||'Scan to pay'}</div>
+          {client&&<div style={{fontSize:13,color:T.textMuted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client}</div>}
+        </div>
+        <button onClick={onClose} style={{background:'none',border:'none',color:T.textMuted,fontSize:24,lineHeight:1,padding:'0 2px'}}>×</button>
+      </div>
+      {(amount||0)>0&&<div style={{fontFamily:"'Geist Mono',monospace",fontSize:34,fontWeight:700,color:T.accent,marginBottom:16,letterSpacing:'-.02em'}}>{fmt(amount)}</div>}
+      {link&&(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
+        {[['link','Pay link'],['bank','Bank details']].map(t=>(
+          <button key={t[0]} onClick={()=>setTab(t[0])} style={{background:tab===t[0]?T.accent+'22':T.bg,border:`1.5px solid ${tab===t[0]?T.accent:T.border}`,borderRadius:10,padding:'8px 4px',fontSize:12,fontWeight:700,color:tab===t[0]?T.accent:T.textMuted}}>{t[1]}</button>))}
+      </div>)}
+      <div style={{textAlign:'center',marginBottom:14}}><QRBox value={payload} px={224}/></div>
+      <div style={{fontSize:12,color:T.textMuted,textAlign:'center',lineHeight:1.55,marginBottom:16}}>
+        {tab==='link'
+          ?'Point a camera at this — it opens their banking app with the amount already filled in.'
+          :(sortAcc?'Scan or copy these details into any banking app.':'Add your bank details in Settings so they show here.')}
+      </div>
+      {reference&&<CopyLine label="Reference — ask them to include this" value={reference} mono/>}
+      {tab==='bank'&&<CopyLine label="Bank details" value={sortAcc} mono/>}
+      {tab==='link'&&<CopyLine label="Pay link" value={link}/>}
+      {!link&&!sortAcc&&(<div style={{fontSize:12,color:T.pending,background:T.pending+'14',border:`1px solid ${T.pending}44`,borderRadius:10,padding:'10px 12px'}}>Add a payment link or bank details in Settings → Your Profile to use this.</div>)}
+      <Btn full onClick={onClose} outline style={{marginTop:10}}>Done</Btn>
+    </div>
+  </div>);
+}
+
 // Shared matching engine: finds the closest candidate bank income row for an invoice,
 // or vice versa, by amount (±2p) and date proximity (reuses datesClose's <6-day window).
 // Used by real-time invoice-creation matching, bulk re-match after a bank sync, and
@@ -575,10 +779,24 @@ function CalendarEventPicker({rate,onImport,onClose}){
     </div>
   </div>);
 }
-function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[showCalPicker,setShowCalPicker]=useState(false);const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[createInv,setCreateInv]=useState(true);const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*TAX,net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null;if(form.status==='Paid'&&createInv&&onAddInvoice){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');const invNum='INV-'+yr+'-'+num;const inv={invoiceNum:invNum,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};onAddInvoice(inv);invId=invNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div>
+function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[showCalPicker,setShowCalPicker]=useState(false);const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[docType,setDocType]=useState('receipt');const[qrFor,setQrFor]=useState(null);const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*TAX,net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null,docNum='';const wantDoc=form.status==='Paid'&&docType!=='none'&&onAddInvoice;if(wantDoc){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');docNum=(docType==='receipt'?'RCT-':'INV-')+yr+'-'+num;const inv={invoiceNum:docNum,docType:docType,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};onAddInvoice(inv);invId=docNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});if(form.status!=='Paid'){const tail=docNum||[(form.client||'').split(' ')[0],form.date?form.date.slice(8,10)+form.date.slice(5,7):''].filter(Boolean).join(' ');setQrFor({client:form.client||'',amount:gross,reference:payReference(settings,tail)});}setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div>
 <button onClick={()=>setShowCalPicker(true)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginBottom:16,display:'flex',alignItems:'center',gap:5}}><I n="clock" sz={13} c={T.accent}/> Select calendar events instead</button>
 {showCalPicker&&<CalendarEventPicker rate={settings.defaultRate||35} onClose={()=>setShowCalPicker(false)} onImport={entries=>entries.forEach(e=>onAdd(e))}/>}
-<Field label="Date"><Inp type="date" value={form.date} onChange={e=>set('date',e.target.value)}/></Field><Field label="Client"><Inp placeholder="Client name" value={form.client} onChange={e=>set('client',e.target.value)}/></Field><Field label="Description"><Inp placeholder="What did you do?" value={form.description} onChange={e=>set('description',e.target.value)}/></Field>{type==='timed'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}><Field label="Start"><Inp type="time" value={form.startTime} onChange={e=>set('startTime',e.target.value)}/></Field><Field label="End"><Inp type="time" value={form.endTime} onChange={e=>set('endTime',e.target.value)}/></Field></div>}{type==='manual'&&<Field label="Hours"><Inp type="number" step="0.5" min="0" placeholder="2.5" value={form.hours} onChange={e=>set('hours',e.target.value)}/></Field>}{type!=='lump'&&<Field label="Hourly Rate (£)"><Inp type="number" step="1" min="0" value={form.rate} onChange={e=>set('rate',e.target.value)}/></Field>}{type==='lump'&&<Field label="Amount (£)"><Inp type="number" step="0.01" min="0" placeholder="500.00" value={form.amount} onChange={e=>set('amount',e.target.value)}/></Field>}<Field label="Status"><Sel value={form.status} onChange={e=>set('status',e.target.value)}><option value="Pending">Pending</option><option value="Paid">Paid</option></Sel></Field>{form.status==='Paid'&&onAddInvoice&&(<label style={{display:'flex',alignItems:'center',gap:10,fontSize:13,color:T.textMuted,padding:'10px 14px',background:T.lumpGreen+'10',borderRadius:12,border:'1px solid '+T.lumpGreen+'33',marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={createInv} onChange={e=>setCreateInv(e.target.checked)} style={{accentColor:T.lumpGreen,width:17,height:17}}/><span><strong style={{color:T.lumpGreen}}>Create invoice now</strong><span style={{display:'block',fontSize:11,marginTop:2}}>Auto-generates a paid invoice for HMRC records</span></span></label>)}{gross>0&&(<Card style={{marginTop:6,marginBottom:16,border:`1px solid ${tc}44`}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.textMuted}}>{type==='timed'?`${timedH().toFixed(2)}h @ £${form.rate}/hr`:type==='manual'?`${form.hours}h @ £${form.rate}/hr`:'Lump sum'}</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(gross)}</span></div><div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}><span style={{fontSize:13,color:T.textMuted}}>Tax Stash (20%)</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.danger}}>{fmt(tax)}</span></div><Hr/><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700}}>Take home</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:tc}}>{fmt(net)}</span></div></Card>)}<Btn full onClick={handleAdd} disabled={gross<=0} color={flash?T.lumpGreen:tc}>{flash?<><I n="check" sz={17} c={T.bg}/> Saved!</>:'Add Entry'}</Btn></Page>);}
+<Field label="Date"><Inp type="date" value={form.date} onChange={e=>set('date',e.target.value)}/></Field><Field label="Client"><Inp placeholder="Client name" value={form.client} onChange={e=>set('client',e.target.value)}/></Field><Field label="Description"><Inp placeholder="What did you do?" value={form.description} onChange={e=>set('description',e.target.value)}/></Field>{type==='timed'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}><Field label="Start"><Inp type="time" value={form.startTime} onChange={e=>set('startTime',e.target.value)}/></Field><Field label="End"><Inp type="time" value={form.endTime} onChange={e=>set('endTime',e.target.value)}/></Field></div>}{type==='manual'&&<Field label="Hours"><Inp type="number" step="0.5" min="0" placeholder="2.5" value={form.hours} onChange={e=>set('hours',e.target.value)}/></Field>}{type!=='lump'&&<Field label="Hourly Rate (£)"><Inp type="number" step="1" min="0" value={form.rate} onChange={e=>set('rate',e.target.value)}/></Field>}{type==='lump'&&<Field label="Amount (£)"><Inp type="number" step="0.01" min="0" placeholder="500.00" value={form.amount} onChange={e=>set('amount',e.target.value)}/></Field>}<Field label="Status"><Sel value={form.status} onChange={e=>set('status',e.target.value)}><option value="Pending">Pending</option><option value="Paid">Paid</option></Sel></Field>{form.status==='Paid'&&onAddInvoice&&(<div style={{padding:'11px 14px',background:T.lumpGreen+'10',borderRadius:12,border:'1px solid '+T.lumpGreen+'33',marginBottom:8}}>
+  <div style={{fontSize:13,fontWeight:700,color:T.lumpGreen,marginBottom:8}}>Paperwork for this one</div>
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7}}>
+    {[['receipt','Receipt'],['invoice','Invoice'],['none','Neither']].map(o=>(
+      <button key={o[0]} onClick={()=>setDocType(o[0])} style={{background:docType===o[0]?T.lumpGreen+'26':T.bg,border:`1.5px solid ${docType===o[0]?T.lumpGreen:T.border}`,borderRadius:10,padding:'7px 4px',fontSize:12,fontWeight:700,color:docType===o[0]?T.lumpGreen:T.textMuted}}>{o[1]}</button>))}
+  </div>
+  <div style={{fontSize:11,color:T.textMuted,marginTop:8,lineHeight:1.5}}>
+    {docType==='receipt'?'Confirms money already received — the right thing to send after a bank transfer lands.'
+      :docType==='invoice'?'A request for payment, marked paid. Use if they need one for their own records.'
+      :'Logs the income only. Nothing to send.'}
+  </div>
+</div>)}
+{form.status!=='Paid'&&gross>0&&(<button onClick={()=>setQrFor({client:form.client||'',amount:gross,reference:payReference(settings,[(form.client||'').split(' ')[0],form.date?form.date.slice(8,10)+form.date.slice(5,7):''].filter(Boolean).join(' '))})} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,width:'100%',background:T.accent+'14',border:`1.5px solid ${T.accent}44`,borderRadius:12,padding:'11px 14px',color:T.accent,fontWeight:700,fontSize:13,marginBottom:8,cursor:'pointer'}}><I n="scan" sz={16} c={T.accent}/> Show payment QR</button>)}{gross>0&&(<Card style={{marginTop:6,marginBottom:16,border:`1px solid ${tc}44`}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.textMuted}}>{type==='timed'?`${timedH().toFixed(2)}h @ £${form.rate}/hr`:type==='manual'?`${form.hours}h @ £${form.rate}/hr`:'Lump sum'}</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(gross)}</span></div><div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}><span style={{fontSize:13,color:T.textMuted}}>Tax Stash (20%)</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.danger}}>{fmt(tax)}</span></div><Hr/><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700}}>Take home</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:tc}}>{fmt(net)}</span></div></Card>)}<Btn full onClick={handleAdd} disabled={gross<=0} color={flash?T.lumpGreen:tc}>{flash?<><I n="check" sz={17} c={T.bg}/> Saved!</>:'Add Entry'}</Btn>
+<PayQR open={!!qrFor} onClose={()=>setQrFor(null)} client={qrFor&&qrFor.client} amount={qrFor&&qrFor.amount} reference={qrFor&&qrFor.reference} settings={settings}/>
+</Page>);}
 
 // ── LOG ──────────────────────────────────────────────────────────────────────
 function LogView({entries,invoices=[],onDelete,onToggleStatus,onToggleVoid,onAdd}){const[confId,setConfId]=useState(null);const[filter,setFilter]=useState('all');const invoicedMap={};invoices.forEach(inv=>(inv.entryIds||[]).forEach(eid=>{if(!invoicedMap[eid])invoicedMap[eid]=inv.invoiceNum||'INV';}));const getInvNum=eid=>invoicedMap[eid]||null;const[logAgainFlash,setLogAgainFlash]=useState(null);useEffect(()=>{if(confId){const t=setTimeout(()=>setConfId(null),3000);return()=>clearTimeout(t);}},[confId]);const filtered=filter==='all'?entries:filter==='uninvoiced'?entries.filter(e=>!e.invoiceId&&!invoicedMap[e.id]):entries.filter(e=>(e.status||'Pending')===filter);const tot=filtered.reduce((a,e)=>({g:a.g+(e.subtotal||0),n:a.n+(e.net||0)}),{g:0,n:0});const handleLogAgain=onAdd?e=>{onAdd({type:e.type==='timed'?'lump':e.type,date:today(),client:e.client||'',description:e.description||'',rate:e.rate,hours:e.type==='timed'?null:e.hours,startTime:null,endTime:null,subtotal:e.subtotal,tax:e.tax,net:e.net,status:'Pending'});setLogAgainFlash(e.id);setTimeout(()=>setLogAgainFlash(null),1600);}:null;return(<Page><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,marginBottom:4}}>Entry Log</div><div style={{fontSize:13,color:T.textMuted,marginBottom:14}}>{filtered.length} entries · {fmt(tot.g)} gross · {fmt(tot.n)} take home</div>{logAgainFlash&&<div style={{background:T.lumpGreen+'18',border:`1px solid ${T.lumpGreen}44`,borderRadius:10,padding:'9px 14px',marginBottom:10,fontSize:12,color:T.lumpGreen,fontWeight:700,display:'flex',alignItems:'center',gap:6}}><I n="check" sz={14} c={T.lumpGreen}/>Logged again — dated today, status Pending</div>}<div style={{display:'flex',gap:8,marginBottom:16}}>{[['all','All'],['uninvoiced','Uninvoiced'],['Pending','Pending'],['Paid','Paid']].map(([v,l])=>(<button key={v} onClick={()=>setFilter(v)} style={{background:filter===v?T.accent+'22':T.surface,border:`1.5px solid ${filter===v?T.accent:T.border}`,borderRadius:10,padding:'6px 14px',fontSize:12,fontWeight:700,color:filter===v?T.accent:T.textMuted}}>{l}</button>))}</div>{filtered.length===0?<div style={{textAlign:'center',padding:'60px 20px',color:T.textMuted}}>No entries</div>:filtered.map(e=><EntryRow key={e.id} e={e} onDelete={onDelete} onToggleStatus={onToggleStatus} onToggleVoid={onToggleVoid} confId={confId} setConfId={setConfId} onLogAgain={handleLogAgain} invoiceNum={getInvNum(e.id)}/>)}</Page>);}
@@ -1004,7 +1222,7 @@ useEffect(()=>{
   // eslint-disable-next-line
 },[seedBankTxn]);
 const sc=(k,v)=>setClient(c=>({...c,[k]:v}));const pickClient=c=>{setClient({name:c.name,email:c.email||'',address:c.address||''});setSelectedClientId(c.id);};const handleSaveClient=()=>{if(!client.name)return;onSaveClient({name:client.name,email:client.email||'',address:client.address||''});setSaveClientFlash(true);setTimeout(()=>setSaveClientFlash(false),1800);};
-const[chaseOpen,setChaseOpen]=useState(null);const[chaseSending,setChaseSending]=useState(null);const[chaseResult,setChaseResult]=useState({});
+const[qrInv,setQrInv]=useState(null);const[justPaid,setJustPaid]=useState(null);const[chaseOpen,setChaseOpen]=useState(null);const[chaseSending,setChaseSending]=useState(null);const[chaseResult,setChaseResult]=useState({});
 const[shareOpen,setShareOpen]=useState(null);const[shareTo,setShareTo]=useState('');const[shareSending,setShareSending]=useState(null);const[shareResult,setShareResult]=useState({});const[shareBody,setShareBody]=useState('');const[editingShareBody,setEditingShareBody]=useState({});
 // Inline quick-add: log a new day (timed/manual/lump) straight into the invoice being
 // built, without leaving this screen — reuses the exact gross/tax/net formula from AddView.
@@ -1025,7 +1243,7 @@ const handleQuickAdd=()=>{
   setSelE(s=>({...s,[id]:true}));
   setQuickForm(f=>({...f,description:'',startTime:'',endTime:'',hours:'',amount:''}));
 };
-const handleMarkPaid=(inv)=>{onUpdateInvoice(inv.id,{status:'paid',paidDate:new Date().toISOString(),potted:'skipped'});};
+const handleMarkPaid=(inv)=>{onUpdateInvoice(inv.id,{status:'paid',paidDate:new Date().toISOString(),potted:'skipped'});setQrInv(null);setJustPaid(inv.id);};
 // Google's export URL serves the Doc as an actual PDF, rather than opening the
 // interactive Doc editor the way inv.docUrl itself does — used only as a fallback
 // link for the plain "Mail app" option, since mailto: can't carry a real attachment.
@@ -1110,7 +1328,7 @@ const handleSaveOnly=()=>{
 };
 
 // Print/PDF any saved invoice record (incl. ones made from a payment) — no Google needed
-const printInvoiceRecord=(inv)=>{
+const printInvoiceRecord=(inv,asType)=>{
   const es=(inv.entryIds||[]).map(id=>entries.find(e=>e.id===id)).filter(Boolean);
   const rs=(inv.reimbIds||[]).map(id=>receipts.find(r=>r.id===id)).filter(Boolean);
   const rows=[
@@ -1120,7 +1338,21 @@ const printInvoiceRecord=(inv)=>{
   if(rows.length===0)rows.push([fmtD((inv.date||'').split('T')[0]),'Services',fmt(inv.incomeTotal||inv.subtotal)]);
   const rowHtml=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td class="r">${r[2]}</td></tr>`).join('');
   const isPaid=inv.status==='paid';
-  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7;white-space:pre-line}</style></head><body onload="window.print()"><div class="hd"><div><h1>Invoice</h1><div class="num">${inv.invoiceNum}</div>${isPaid?'<div class="paidtag">PAID — thank you</div>':''}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:''}${settings.payRef?`<div><strong>Ref: ${(settings.payRef||'').replace(/^PAYMENT\s+REF[:\s]*/i,'').trim()||settings.payRef} · ${inv.invoiceNum}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">Bill To</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${settings.paymentLink&&!isPaid?`<div style="margin-top:16px;text-align:right"><a href="${settings.paymentLink}" style="display:inline-block;background:#6b7d6a;color:#ffffff;padding:10px 22px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Pay online &#8594;</a><div style="font-size:10px;color:#aaaaaa;margin-top:6px">Please use reference ${inv.invoiceNum}</div></div>`:''}${settings.bankDetails&&!isPaid?`<div class="foot">${settings.bankDetails}</div>`:''}</body></html>`;
+  // Receipts confirm money already in; invoices ask for it. Only ever render a receipt
+  // for a record that is actually paid — an unpaid one falls back to the invoice
+  // layout so it still carries the pay QR. Older records have no docType and stay
+  // invoices unless the caller asks otherwise.
+  const isReceipt=isPaid&&(asType||inv.docType||'invoice')==='receipt';
+  const docTitle=isReceipt?'Receipt':'Invoice';
+  const payRefFull=payReference(settings,inv.invoiceNum);
+  const link=payUrl(settings,inv.subtotal,payRefFull);
+  let qrMarkup='';
+  if(!isReceipt&&!isPaid){
+    const payload=link||bankPayText(settings,inv.subtotal,payRefFull);
+    if(payload){try{qrMarkup=QRE.svg(payload,{px:128,quiet:2});}catch(e){qrMarkup='';}}
+  }
+  const paidOn=inv.paidDate?fmtD(String(inv.paidDate).split('T')[0]):'';
+  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7;white-space:pre-line}.paidnote{margin-top:24px;padding-top:18px;border-top:1px solid #eeeeee;font-size:12px;color:#888888;line-height:1.7}.paybox{margin-top:26px;padding:20px;border:1px solid #e8e8e8;border-radius:10px;display:flex;gap:20px;align-items:flex-start;page-break-inside:avoid}.payqr{flex-shrink:0;line-height:0}.paymeta{flex:1;min-width:0}.paylbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc}.paybtn{display:inline-block;background:#6b7d6a;color:#ffffff;padding:9px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600}.payhint{font-size:11px;color:#999999;line-height:1.6;margin-bottom:8px}.payref{font-size:12px;color:#555555;margin-top:6px}.paybank{font-size:12px;color:#888888;line-height:1.7;margin-top:6px;white-space:pre-line}</style></head><body onload="window.print()"><div class="hd"><div><h1>${docTitle}</h1><div class="num">${inv.invoiceNum}</div>${isReceipt?`<div class="paidtag">PAID IN FULL — thank you</div>`:(isPaid?'<div class="paidtag">PAID — thank you</div>':'')}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${isReceipt?(paidOn?`<div>Paid ${paidOn}</div>`:''):(inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:'')}${payRefFull?`<div><strong>Ref: ${payRefFull}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">${isReceipt?'Received From':'Bill To'}</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid||isReceipt?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${isReceipt?`<div class="paidnote">Paid by bank transfer${paidOn?` on ${paidOn}`:''}. No payment is outstanding — this receipt is for your records.</div>`:''}${!isReceipt&&!isPaid&&(qrMarkup||link)?`<div class="paybox"><div class="payqr">${qrMarkup}</div><div class="paymeta"><div class="paylbl">Pay by bank transfer</div>${link?`<div style="margin:8px 0"><a class="paybtn" href="${link}">Pay online &#8594;</a></div>`:''}<div class="payhint">${qrMarkup?'Scan the code with your phone camera to open your banking app with the amount filled in.':''}</div><div class="payref">Reference: <strong>${payRefFull||inv.invoiceNum}</strong></div>${settings.bankDetails?`<div class="paybank">${settings.bankDetails}</div>`:''}</div></div>`:''}${settings.bankDetails&&!isReceipt&&!isPaid&&!qrMarkup&&!link?`<div class="foot">${settings.bankDetails}</div>`:''}</body></html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();
 };
 
@@ -1259,6 +1491,14 @@ ${settings.name||''}`;
       <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
         {inv.docUrl&&(<a href={inv.docUrl} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:6,background:T.drive+'18',borderRadius:10,padding:'6px 10px',color:T.drive,fontWeight:700,fontSize:12,textDecoration:'none'}}><I n="link" sz={13} c={T.drive}/> Open Doc</a>)}
         <button onClick={()=>printInvoiceRecord(inv)} style={{display:'flex',alignItems:'center',gap:6,background:T.timed+'14',border:`1.5px solid ${T.timed}44`,borderRadius:10,padding:'5px 10px',color:T.timed,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="print" sz={13} c={T.timed}/> PDF</button>
+        {!paid&&(<button onClick={()=>setQrInv(inv.id)} style={{display:'flex',alignItems:'center',gap:6,background:T.accent+'14',border:`1.5px solid ${T.accent}44`,borderRadius:10,padding:'5px 10px',color:T.accent,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="scan" sz={13} c={T.accent}/> Payment QR</button>)}
+        {paid&&(<button onClick={()=>printInvoiceRecord(inv,'receipt')} style={{display:'flex',alignItems:'center',gap:6,background:T.lumpGreen+'14',border:`1.5px solid ${T.lumpGreen}44`,borderRadius:10,padding:'5px 10px',color:T.lumpGreen,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="receipt" sz={13} c={T.lumpGreen}/> Receipt</button>)}
+        {qrInv===inv.id&&<PayQR open onClose={()=>setQrInv(null)} client={inv.client} amount={inv.subtotal} reference={payReference(settings,inv.invoiceNum)} settings={settings}/>}
+        {justPaid===inv.id&&paid&&(<div style={{flexBasis:'100%',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:T.lumpGreen+'12',border:`1px solid ${T.lumpGreen}44`,borderRadius:10,padding:'9px 12px',marginTop:2}}>
+          <div style={{flex:'1 1 150px',fontSize:12,color:T.lumpGreen,fontWeight:700}}>Payment in — send them a receipt?</div>
+          <button onClick={()=>printInvoiceRecord(inv,'receipt')} style={{background:T.lumpGreen,border:'none',borderRadius:8,padding:'6px 12px',color:T.bg,fontWeight:700,fontSize:12,cursor:'pointer'}}>Generate receipt</button>
+          <button onClick={()=>setJustPaid(null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'6px 10px',color:T.textMuted,fontWeight:700,fontSize:12,cursor:'pointer'}}>Not now</button>
+        </div>)}
         <button onClick={()=>handleShare(inv)} style={{display:'flex',alignItems:'center',gap:6,background:shareOpen===inv.id?T.accent+'28':T.accent+'14',border:`1.5px solid ${shareOpen===inv.id?T.accent+'66':T.accent}44`,borderRadius:10,padding:'5px 10px',color:T.accent,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="share" sz={13} c={T.accent}/> Share</button>
         {!paid&&inv.clientEmail&&(<button onClick={()=>handleChase(inv)} style={{display:'flex',alignItems:'center',gap:6,background:chaseOpen===inv.id?(overdue?T.danger+'28':T.accent+'28'):(overdue?T.danger+'18':T.pending+'18'),border:`1.5px solid ${chaseOpen===inv.id?(overdue?T.danger+'88':T.accent+'66'):(overdue?T.danger+'66':T.pending+'44')}`,borderRadius:10,padding:'5px 10px',color:chaseOpen===inv.id?(overdue?T.danger:T.accent):(overdue?T.danger:T.pending),fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="mail" sz={13} c={chaseOpen===inv.id?(overdue?T.danger:T.accent):(overdue?T.danger:T.pending)}/> Chase up</button>)}
         {!paid&&onUpdateInvoice&&(<button onClick={()=>handleMarkPaid(inv)} style={{display:'flex',alignItems:'center',gap:6,background:T.lumpGreen+'18',border:`1.5px solid ${T.lumpGreen}44`,borderRadius:10,padding:'5px 10px',color:T.lumpGreen,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="check" sz={13} c={T.lumpGreen}/> Mark paid</button>)}
@@ -2526,6 +2766,12 @@ return(<Page>
   <SettingsRow label="Phone"><Inp type="tel" placeholder="Optional" value={settings.phone||''} onChange={e=>set('phone',e.target.value)}/></SettingsRow>
   <SettingsRow label="VAT number"><Inp placeholder="Not registered" value={settings.vatNumber||''} onChange={e=>set('vatNumber',e.target.value)}/></SettingsRow>
   <SettingsRow label="Bank details"><Inp placeholder="Sort: 00-00-00 · Acc: 00000000" value={settings.bankDetails||''} onChange={e=>set('bankDetails',e.target.value)}/></SettingsRow>
+  <SettingsRow label="Payment link">
+    <div>
+      <Inp placeholder="monzo.me/yourname" value={settings.paymentLink||''} onChange={e=>set('paymentLink',e.target.value)}/>
+      <div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.55}}>Your monzo.me, revolut.me or paypal.me handle — just the base link, no amount. Honey adds the amount and reference to the QR code itself. Monzo and Revolut links pay by bank transfer, so no card fee.</div>
+    </div>
+  </SettingsRow>
 </SettingsSection>
 
 <SettingsSection title="Invoicing">
@@ -3120,7 +3366,7 @@ const[bankTxns,setBankTxns]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
-const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',defaultRate:35,sheetsUrl:'',bankSyncKey:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
+const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',paymentLink:'',defaultRate:35,sheetsUrl:'',bankSyncKey:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
 const[syncStatus,setSyncStatus]=useState('loading');
 const[loaded,setLoaded]=useState(false);
 const[booted,setBooted]=useState(false);
@@ -3724,7 +3970,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   <div id="hn-main">
   <div style={{maxWidth:900,margin:'0 auto'}}>
   {view==='home'&&<HomeView entries={entries} receipts={receipts} invoices={invoices} setView={go} syncStatus={syncStatus} lastSynced={lastSynced} onSync={syncFromSheets} sheetsUrl={settings.sheetsUrl} settings={settings} oldDataAvailable={oldDataAvailable}/>}
-  {view==='add'&&<AddView onAdd={addE} settings={settings} initialType={addType} back={()=>setView('home')} onAddInvoice={addI} invoiceCounter={settings.invoiceCounter||1}/>}
+  {view==='add'&&<AddView onAdd={addE} settings={settings} initialType={addType} back={()=>setView('home')} onAddInvoice={inv=>{addI(inv);setSettings(s=>({...s,invoiceCounter:(s.invoiceCounter||1)+1}));}} invoiceCounter={settings.invoiceCounter||1}/>}
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}
