@@ -9,9 +9,17 @@ mobile).
 **Live:** https://phoenix238.github.io/Honeypot0101/
 
 ## Getting paid
-Set a **Payment link** and **Bank details** under Settings → Your Profile. A monzo.me,
-revolut.me or paypal.me handle is enough — save just the base link and Honey adds the
-amount and reference itself.
+Fill in **Bank details** under Settings → Your Profile — that alone is enough to start
+taking payments. A **Payment link** is optional and makes it one tap for the client:
+save the full handle including the site (`monzo.me/yourname`, not just `yourname`) and
+Honey adds the amount and reference itself. A link it cannot turn into a working web
+address is rejected with a reason rather than baked into a dead QR code.
+
+With no payment link, the QR points at this app's own `pay.html`, which shows your bank
+details and the reference with tap-to-copy. That matters because a QR holding only plain
+text is refused by many phones — "no apps on your phone can use this QR code" — whereas
+every phone opens a web address. The details ride in the URL fragment, which browsers
+never send to the server.
 
 **Take a payment** sits at the top of Home. Tap it, type the amount (or tap one of the
 quick chips, which learn the amounts you actually charge), optionally add a name, and

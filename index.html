@@ -220,21 +220,55 @@ const QRE=(()=>{
 const cleanRef=s=>(s||'').replace(/^PAYMENT\s+REF[:\s]*/i,'').trim();
 /** The reference the client should quote — what bank-feed matching keys off. */
 const payReference=(settings,extra)=>[cleanRef(settings&&settings.payRef),extra||''].filter(Boolean).join(' ').trim();
-/** Turn the saved handle into a real pay link with the amount and reference baked in. */
+/**
+ * Turn the saved handle into a real pay link with the amount and reference baked in.
+ * Returns '' for anything that would not survive being scanned — a bare username or a
+ * provider name builds a dead address, and a phone answers that with "no app can use
+ * this QR code", so it is better to fall back to the bank-details page.
+ */
 const payUrl=(settings,amount,reference)=>{
   const raw=((settings&&settings.paymentLink)||'').trim();
   if(!raw)return '';
   const amt=(amount||0)>0?(Math.round(amount*100)/100).toFixed(2):'';
-  const u=raw.replace(/^https?:\/\//i,'').replace(/\/+$/,'');
+  const u=raw.replace(/^https?:\/\//i,'').replace(/\s+/g,'').replace(/\/+$/,'');
   const host=u.split('/')[0].toLowerCase();
+  if(!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host))return ''; // not a hostname at all
   const seg=u.slice(host.length).split('/').filter(Boolean);
   // tolerate a handle that was pasted with an amount already on the end
   if(seg.length>1&&/^(gbp)?[\d.]+(gbp)?$/i.test(seg[seg.length-1]))seg.pop();
   const path=seg.join('/');
+  const known=/(^|\.)(monzo|paypal|revolut)\.me$/.test(host);
+  if(known&&!path)return ''; // provider with no username is a dead link
   if(/(^|\.)monzo\.me$/.test(host))return 'https://monzo.me/'+path+(amt?'/'+amt:'')+(reference?'?d='+encodeURIComponent(reference):'');
   if(/(^|\.)paypal\.me$/.test(host))return 'https://paypal.me/'+path+(amt?'/'+amt+'GBP':'');
   if(/(^|\.)revolut\.me$/.test(host))return 'https://revolut.me/'+path+(amt?'/gbp'+amt:'');
   return 'https://'+u; // any other provider: use exactly what was saved
+};
+/** Why the saved payment link is unusable, or '' if it is fine (or simply not set). */
+const payLinkProblem=settings=>{
+  const raw=((settings&&settings.paymentLink)||'').trim();
+  if(!raw||payUrl(settings,1,''))return '';
+  const host=raw.replace(/^https?:\/\//i,'').replace(/\s+/g,'').split('/')[0].toLowerCase();
+  if(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host))return 'Add your username after the site — like monzo.me/yourname.';
+  return 'That is not a full link. Include the site as well as your name — like monzo.me/yourname.';
+};
+/**
+ * A link to this app's own pay.html showing the bank details, used when there is no
+ * provider link. Any phone can open a web address; a QR holding plain text is refused
+ * outright by many of them. The details ride in the fragment, which is never sent to
+ * the server. Returns '' when the app is not served over http(s), since a file:// or
+ * blob: address means nothing on someone else's phone.
+ */
+const payPageUrl=(settings,amount,reference)=>{
+  if(typeof location==='undefined'||!/^https?:$/.test(location.protocol))return '';
+  const bank=(settings&&settings.bankDetails)||'';
+  if(!bank)return '';
+  const q=new URLSearchParams();
+  if(settings&&settings.name)q.set('n',settings.name);
+  q.set('b',bank);
+  if((amount||0)>0)q.set('a',(Math.round(amount*100)/100).toFixed(2));
+  if(reference)q.set('r',reference);
+  return location.origin+location.pathname.replace(/[^/]*$/,'')+'pay.html#'+q.toString();
 };
 /** Plain-text fallback — scannable by any camera, readable by any bank app. */
 const bankPayText=(settings,amount,reference)=>{
@@ -276,20 +310,28 @@ function CopyLine({label,value,mono}){
 function PayFace({settings,amount,reference,tab,setTab,qrPx=224}){
   const link=payUrl(settings,amount,reference);
   const sortAcc=(settings&&settings.bankDetails)||'';
-  const payload=tab==='link'&&link?link:bankPayText(settings,amount,reference);
+  const page=payPageUrl(settings,amount,reference);
+  const problem=payLinkProblem(settings);
+  // a web address every phone can open, falling back to plain text only if we have no
+  // http(s) home to point at
+  const bankPayload=page||bankPayText(settings,amount,reference);
+  const payload=tab==='link'&&link?link:bankPayload;
   return(<div>
     {link&&(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
       {[['link','Pay link'],['bank','Bank details']].map(t=>(
         <button key={t[0]} onClick={()=>setTab(t[0])} style={{background:tab===t[0]?T.accent+'22':T.bg,border:`1.5px solid ${tab===t[0]?T.accent:T.border}`,borderRadius:10,padding:'8px 4px',fontSize:12,fontWeight:700,color:tab===t[0]?T.accent:T.textMuted}}>{t[1]}</button>))}
     </div>)}
+    {problem&&(<div style={{fontSize:12,color:T.danger,background:T.danger+'12',border:`1px solid ${T.danger}44`,borderRadius:10,padding:'9px 12px',marginBottom:14,lineHeight:1.5}}><strong>Your payment link won't scan.</strong> {problem} Showing your bank details instead.</div>)}
     <div style={{textAlign:'center',marginBottom:14}}><QRBox value={payload} px={qrPx}/></div>
     <div style={{fontSize:12,color:T.textMuted,textAlign:'center',lineHeight:1.55,marginBottom:16}}>
       {tab==='link'&&link
         ?'Point a camera at this — it opens their banking app with the amount already filled in.'
+        :page?'Point a camera at this — it opens a page with your bank details and the reference, ready to copy.'
         :(sortAcc?'Scan or copy these details into any banking app.':'Add your bank details in Settings so they show here.')}
     </div>
     {reference&&<CopyLine label="Reference — ask them to include this" value={reference} mono/>}
-    {tab==='bank'&&<CopyLine label="Bank details" value={sortAcc} mono/>}
+    {tab!=='link'&&sortAcc&&<CopyLine label="Bank details" value={sortAcc} mono/>}
+    {tab!=='link'&&page&&<CopyLine label="Link to send instead" value={page}/>}
     {tab==='link'&&link&&<CopyLine label="Pay link" value={link}/>}
     {!link&&!sortAcc&&(<div style={{fontSize:12,color:T.pending,background:T.pending+'14',border:`1px solid ${T.pending}44`,borderRadius:10,padding:'10px 12px'}}>Add a payment link or bank details in Settings → Your Profile to use this.</div>)}
   </div>);
@@ -2873,7 +2915,9 @@ return(<Page>
   <SettingsRow label="Payment link">
     <div>
       <Inp placeholder="monzo.me/yourname" value={settings.paymentLink||''} onChange={e=>set('paymentLink',e.target.value)}/>
-      <div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.55}}>Your monzo.me, revolut.me or paypal.me handle — just the base link, no amount. Honey adds the amount and reference to the QR code itself. Monzo and Revolut links pay by bank transfer, so no card fee.</div>
+      {payLinkProblem(settings)
+        ?<div style={{fontSize:11,color:T.danger,marginTop:6,lineHeight:1.55}}><strong>This won't scan.</strong> {payLinkProblem(settings)}</div>
+        :<div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.55}}>Optional. Include the site, not just your name — <strong>monzo.me/yourname</strong>, revolut.me/yourname or paypal.me/yourname. No amount; Honey adds that and the reference itself. Monzo and Revolut links pay by bank transfer, so no card fee. Leave this empty and the QR shows your bank details instead.</div>}
     </div>
   </SettingsRow>
 </SettingsSection>
