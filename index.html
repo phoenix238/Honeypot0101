@@ -270,6 +270,32 @@ function CopyLine({label,value,mono}){
 }
 
 /**
+ * The scannable face itself: pay-link / bank-details tabs, the QR, and the details
+ * worth copying. Shared by the pop-up and the Take Payment screen.
+ */
+function PayFace({settings,amount,reference,tab,setTab,qrPx=224}){
+  const link=payUrl(settings,amount,reference);
+  const sortAcc=(settings&&settings.bankDetails)||'';
+  const payload=tab==='link'&&link?link:bankPayText(settings,amount,reference);
+  return(<div>
+    {link&&(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
+      {[['link','Pay link'],['bank','Bank details']].map(t=>(
+        <button key={t[0]} onClick={()=>setTab(t[0])} style={{background:tab===t[0]?T.accent+'22':T.bg,border:`1.5px solid ${tab===t[0]?T.accent:T.border}`,borderRadius:10,padding:'8px 4px',fontSize:12,fontWeight:700,color:tab===t[0]?T.accent:T.textMuted}}>{t[1]}</button>))}
+    </div>)}
+    <div style={{textAlign:'center',marginBottom:14}}><QRBox value={payload} px={qrPx}/></div>
+    <div style={{fontSize:12,color:T.textMuted,textAlign:'center',lineHeight:1.55,marginBottom:16}}>
+      {tab==='link'&&link
+        ?'Point a camera at this — it opens their banking app with the amount already filled in.'
+        :(sortAcc?'Scan or copy these details into any banking app.':'Add your bank details in Settings so they show here.')}
+    </div>
+    {reference&&<CopyLine label="Reference — ask them to include this" value={reference} mono/>}
+    {tab==='bank'&&<CopyLine label="Bank details" value={sortAcc} mono/>}
+    {tab==='link'&&link&&<CopyLine label="Pay link" value={link}/>}
+    {!link&&!sortAcc&&(<div style={{fontSize:12,color:T.pending,background:T.pending+'14',border:`1px solid ${T.pending}44`,borderRadius:10,padding:'10px 12px'}}>Add a payment link or bank details in Settings → Your Profile to use this.</div>)}
+  </div>);
+}
+
+/**
  * The screen you hold up at the end of a session. Defaults to the pay link (their
  * banking app opens with the amount already filled in) and falls back to the raw
  * bank details for anyone whose bank will not follow the link.
@@ -279,9 +305,6 @@ function PayQR({open,onClose,amount,reference,client,settings,title}){
   const[tab,setTab]=useState(link?'link':'bank');
   useEffect(()=>{setTab(link?'link':'bank');},[link,open]);
   if(!open)return null;
-  const text=bankPayText(settings,amount,reference);
-  const payload=tab==='link'?link:text;
-  const sortAcc=(settings&&settings.bankDetails)||'';
   return(<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.72)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
     <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:20,padding:'22px 20px 24px',width:'100%',maxWidth:400,maxHeight:'92vh',overflowY:'auto',border:`1px solid ${T.border}`}}>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom:14}}>
@@ -292,20 +315,7 @@ function PayQR({open,onClose,amount,reference,client,settings,title}){
         <button onClick={onClose} style={{background:'none',border:'none',color:T.textMuted,fontSize:24,lineHeight:1,padding:'0 2px'}}>×</button>
       </div>
       {(amount||0)>0&&<div style={{fontFamily:"'Geist Mono',monospace",fontSize:34,fontWeight:700,color:T.accent,marginBottom:16,letterSpacing:'-.02em'}}>{fmt(amount)}</div>}
-      {link&&(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
-        {[['link','Pay link'],['bank','Bank details']].map(t=>(
-          <button key={t[0]} onClick={()=>setTab(t[0])} style={{background:tab===t[0]?T.accent+'22':T.bg,border:`1.5px solid ${tab===t[0]?T.accent:T.border}`,borderRadius:10,padding:'8px 4px',fontSize:12,fontWeight:700,color:tab===t[0]?T.accent:T.textMuted}}>{t[1]}</button>))}
-      </div>)}
-      <div style={{textAlign:'center',marginBottom:14}}><QRBox value={payload} px={224}/></div>
-      <div style={{fontSize:12,color:T.textMuted,textAlign:'center',lineHeight:1.55,marginBottom:16}}>
-        {tab==='link'
-          ?'Point a camera at this — it opens their banking app with the amount already filled in.'
-          :(sortAcc?'Scan or copy these details into any banking app.':'Add your bank details in Settings so they show here.')}
-      </div>
-      {reference&&<CopyLine label="Reference — ask them to include this" value={reference} mono/>}
-      {tab==='bank'&&<CopyLine label="Bank details" value={sortAcc} mono/>}
-      {tab==='link'&&<CopyLine label="Pay link" value={link}/>}
-      {!link&&!sortAcc&&(<div style={{fontSize:12,color:T.pending,background:T.pending+'14',border:`1px solid ${T.pending}44`,borderRadius:10,padding:'10px 12px'}}>Add a payment link or bank details in Settings → Your Profile to use this.</div>)}
+      <PayFace settings={settings} amount={amount} reference={reference} tab={tab} setTab={setTab} qrPx={224}/>
       <Btn full onClick={onClose} outline style={{marginTop:10}}>Done</Btn>
     </div>
   </div>);
@@ -520,6 +530,122 @@ function BankRow({row,onToggle}){
 const CatTag=({cat})=>{const[c,l]=cat==='business'?[T.business,'Business']:[T.reimb,'Reimbursable'];return <span style={{background:c+'20',color:c,border:`1px solid ${c}44`,borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700}}>{l}</span>;};
 const StatusTag=({status})=>{const c=status==='Paid'?T.paid:T.pending;return <span style={{background:c+'22',color:c,border:`1px solid ${c}44`,borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700}}>{status||'Pending'}</span>;};
 function SyncPill({status}){const map={loading:{c:T.textMuted,label:'Loading…'},synced:{c:T.lumpGreen,label:'Synced'},saving:{c:T.accent,label:'Syncing…'},local:{c:T.manual,label:'Local only'},error:{c:T.danger,label:'Sync error'}};const{c,label}=map[status]||{c:T.textMuted,label:''};return(<div style={{display:'flex',alignItems:'center',gap:5,fontSize:10,color:c,fontWeight:700,letterSpacing:.8}}><div style={{width:6,height:6,borderRadius:'50%',background:c,flexShrink:0,...(status==='saving'?{animation:'spin 1s linear infinite'}:{})}}/>{label}</div>);}
+
+/** The amounts this person actually charges — from their own history, plus their rate. */
+const quickAmounts=(entries,settings)=>{
+  const counts={};
+  (entries||[]).filter(e=>e&&e.status!=='Void'&&(e.subtotal||0)>0).slice(0,120)
+    .forEach(e=>{const v=Math.round(e.subtotal*100)/100;counts[v]=(counts[v]||0)+1;});
+  const top=Object.keys(counts).map(Number).sort((a,b)=>counts[b]-counts[a]||b-a).slice(0,4);
+  const dr=Math.round((Number(settings&&settings.defaultRate)||0)*100)/100;
+  if(dr>0&&top.indexOf(dr)<0)top.push(dr);
+  return top.sort((a,b)=>a-b).slice(0,5);
+};
+
+/**
+ * Take a payment on the spot — no work logged, no invoice raised. Type the amount,
+ * hold up the code, and only afterwards decide whether to record it.
+ */
+function TakePaymentView({settings,entries,clients,onAdd,onAddInvoice,invoiceCounter,back}){
+  const[amount,setAmount]=useState('');
+  const[who,setWho]=useState('');
+  const[tab,setTab]=useState('link');
+  const[done,setDone]=useState(null);
+  const amt=parseFloat(amount)||0;
+  const d=today();
+  const tail=[(who||'').trim().split(' ')[0],d.slice(8,10)+d.slice(5,7)].filter(Boolean).join(' ');
+  const reference=payReference(settings,tail);
+  const quick=quickAmounts(entries,settings);
+  const names=Array.from(new Set([].concat((clients||[]).map(c=>c&&c.name),(entries||[]).map(e=>e&&e.client)).filter(Boolean))).slice(0,40);
+
+  const record=docType=>{
+    if(amt<=0)return;
+    const tmpId=mkId();
+    let invId=null,inv=null;
+    if(docType!=='none'&&onAddInvoice){
+      const num=(docType==='receipt'?'RCT-':'INV-')+new Date().getFullYear()+'-'+String(invoiceCounter||1).padStart(3,'0');
+      inv={invoiceNum:num,docType:docType,date:new Date().toISOString(),client:who,clientEmail:'',
+        subtotal:amt,incomeTotal:amt,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',
+        entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};
+      onAddInvoice(inv);invId=num;
+    }
+    const entry={type:'lump',date:d,client:who,description:'Payment taken by QR',rate:null,hours:null,
+      startTime:null,endTime:null,subtotal:amt,tax:amt*TAX,net:amt-amt*TAX,status:'Paid',id:tmpId,invoiceId:invId};
+    onAdd(entry);
+    setDone({amount:amt,client:who,inv:inv,entry:entry});
+  };
+  const reset=()=>{setAmount('');setWho('');setDone(null);};
+
+  if(done)return(<Page><PgTitle back={back}>Payment taken</PgTitle>
+    <Card style={{border:`1.5px solid ${T.lumpGreen}55`,background:T.lumpGreen+'0d',textAlign:'center',padding:'26px 18px',marginBottom:14}}>
+      <I n="paid" sz={38} c={T.lumpGreen}/>
+      <div style={{fontFamily:"'Geist Mono',monospace",fontSize:32,fontWeight:700,color:T.lumpGreen,margin:'10px 0 4px'}}>{fmt(done.amount)}</div>
+      <div style={{fontSize:13,color:T.textMuted}}>recorded as paid{done.client?' · '+done.client:''}</div>
+      {done.inv&&<div style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.textFaint,marginTop:6}}>{done.inv.invoiceNum}</div>}
+    </Card>
+    {done.inv&&done.inv.docType==='receipt'&&(
+      <Btn full onClick={()=>printPaymentDoc(done.inv,{entries:[done.entry],receipts:[],settings:settings},'receipt')} style={{marginBottom:10}}>Print / save the receipt</Btn>)}
+    <Btn full outline onClick={reset} style={{marginBottom:10}}>Take another</Btn>
+    <Btn full outline color={T.textMuted} onClick={back}>Done</Btn>
+  </Page>);
+
+  return(<Page><PgTitle back={back}>Take a payment</PgTitle>
+    <Field label="Amount (£)">
+      <input style={{...iBase,fontFamily:"'Geist Mono',monospace",fontSize:30,fontWeight:700,padding:'14px 16px',textAlign:'center'}}
+        type="text" inputMode="decimal" placeholder="0.00" value={amount}
+        onChange={e=>setAmount(e.target.value.replace(/[^\d.]/g,''))}/>
+    </Field>
+    {quick.length>0&&(<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
+      {quick.map(q=>(<button key={q} onClick={()=>setAmount(String(q))} style={{background:amt===q?T.accent+'26':T.surface,border:`1.5px solid ${amt===q?T.accent:T.border}`,borderRadius:10,padding:'7px 14px',fontFamily:"'Geist Mono',monospace",fontSize:13,fontWeight:700,color:amt===q?T.accent:T.textMuted}}>{fmt(q)}</button>))}
+    </div>)}
+    <Field label="Who's paying? (optional)">
+      <input style={iBase} list="hn-payer-names" placeholder="Name — goes in the reference" value={who} onChange={e=>setWho(e.target.value)}/>
+      <datalist id="hn-payer-names">{names.map(n=><option key={n} value={n}/>)}</datalist>
+    </Field>
+    {amt>0
+      ?(<Card style={{marginTop:6,marginBottom:14}}><PayFace settings={settings} amount={amt} reference={reference} tab={tab} setTab={setTab} qrPx={230}/></Card>)
+      :(<Card style={{marginTop:6,marginBottom:14,textAlign:'center',padding:'34px 18px',color:T.textFaint,fontSize:13}}>Enter an amount and the code appears here.</Card>)}
+    {amt>0&&(<>
+      <Lbl>When they've paid</Lbl>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8}}>
+        <Btn onClick={()=>record('receipt')} color={T.lumpGreen}>Paid — with receipt</Btn>
+        <Btn onClick={()=>record('none')} outline color={T.lumpGreen}>Paid — just log it</Btn>
+      </div>
+      <div style={{fontSize:11,color:T.textFaint,marginTop:9,lineHeight:1.55}}>Records {fmt(amt)} as income received today. Skip both if you would rather not record it yet — nothing is saved until you tap one.</div>
+    </>)}
+  </Page>);
+}
+
+// Print/PDF a saved record as an invoice or a receipt. Module-level so both the
+// invoice list and the Take Payment screen can reach it.
+const printPaymentDoc=(inv,ctx,asType)=>{
+  const entries=ctx.entries||[],receipts=ctx.receipts||[],settings=ctx.settings||{};
+  const es=(inv.entryIds||[]).map(id=>entries.find(e=>e.id===id)).filter(Boolean);
+  const rs=(inv.reimbIds||[]).map(id=>receipts.find(r=>r.id===id)).filter(Boolean);
+  const rows=[
+    ...es.map(e=>[fmtD(e.date),(e.client?e.client+(e.description?' — '+e.description:''):e.description||'Services'),fmt(e.subtotal)]),
+    ...rs.map(r=>[fmtD(r.date),(r.description||'Expense')+' (reimbursable)',fmt(r.amount)])
+  ];
+  if(rows.length===0)rows.push([fmtD((inv.date||'').split('T')[0]),'Services',fmt(inv.incomeTotal||inv.subtotal)]);
+  const rowHtml=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td class="r">${r[2]}</td></tr>`).join('');
+  const isPaid=inv.status==='paid';
+  // Receipts confirm money already in; invoices ask for it. Only ever render a receipt
+  // for a record that is actually paid — an unpaid one falls back to the invoice
+  // layout so it still carries the pay QR. Older records have no docType and stay
+  // invoices unless the caller asks otherwise.
+  const isReceipt=isPaid&&(asType||inv.docType||'invoice')==='receipt';
+  const docTitle=isReceipt?'Receipt':'Invoice';
+  const payRefFull=payReference(settings,inv.invoiceNum);
+  const link=payUrl(settings,inv.subtotal,payRefFull);
+  let qrMarkup='';
+  if(!isReceipt&&!isPaid){
+    const payload=link||bankPayText(settings,inv.subtotal,payRefFull);
+    if(payload){try{qrMarkup=QRE.svg(payload,{px:128,quiet:2});}catch(e){qrMarkup='';}}
+  }
+  const paidOn=inv.paidDate?fmtD(String(inv.paidDate).split('T')[0]):'';
+  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7;white-space:pre-line}.paidnote{margin-top:24px;padding-top:18px;border-top:1px solid #eeeeee;font-size:12px;color:#888888;line-height:1.7}.paybox{margin-top:26px;padding:20px;border:1px solid #e8e8e8;border-radius:10px;display:flex;gap:20px;align-items:flex-start;page-break-inside:avoid}.payqr{flex-shrink:0;line-height:0}.paymeta{flex:1;min-width:0}.paylbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc}.paybtn{display:inline-block;background:#6b7d6a;color:#ffffff;padding:9px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600}.payhint{font-size:11px;color:#999999;line-height:1.6;margin-bottom:8px}.payref{font-size:12px;color:#555555;margin-top:6px}.paybank{font-size:12px;color:#888888;line-height:1.7;margin-top:6px;white-space:pre-line}</style></head><body onload="window.print()"><div class="hd"><div><h1>${docTitle}</h1><div class="num">${inv.invoiceNum}</div>${isReceipt?`<div class="paidtag">PAID IN FULL — thank you</div>`:(isPaid?'<div class="paidtag">PAID — thank you</div>':'')}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${isReceipt?(paidOn?`<div>Paid ${paidOn}</div>`:''):(inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:'')}${payRefFull?`<div><strong>Ref: ${payRefFull}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">${isReceipt?'Received From':'Bill To'}</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid||isReceipt?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${isReceipt?`<div class="paidnote">Paid by bank transfer${paidOn?` on ${paidOn}`:''}. No payment is outstanding — this receipt is for your records.</div>`:''}${!isReceipt&&!isPaid&&(qrMarkup||link)?`<div class="paybox"><div class="payqr">${qrMarkup}</div><div class="paymeta"><div class="paylbl">Pay by bank transfer</div>${link?`<div style="margin:8px 0"><a class="paybtn" href="${link}">Pay online &#8594;</a></div>`:''}<div class="payhint">${qrMarkup?'Scan the code with your phone camera to open your banking app with the amount filled in.':''}</div><div class="payref">Reference: <strong>${payRefFull||inv.invoiceNum}</strong></div>${settings.bankDetails?`<div class="paybank">${settings.bankDetails}</div>`:''}</div></div>`:''}${settings.bankDetails&&!isReceipt&&!isPaid&&!qrMarkup&&!link?`<div class="foot">${settings.bankDetails}</div>`:''}</body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();
+};
 function EntryRow({e,onDelete,onToggleStatus,onToggleVoid,confId,setConfId,onLogAgain,invoiceNum}){
 const c={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[e.type];
 const isC=confId===e.id;
@@ -624,6 +750,10 @@ return(<Page>
     <div style={{fontSize:12,color:T.textMuted,lineHeight:1.5}}>Bring in a bank CSV, your invoices and receipts — guided, one step at a time.</div>
   </Card>
 )}
+<button onClick={()=>setView('pay')} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,width:'100%',background:T.accent,border:'none',borderRadius:16,padding:'17px 14px',color:T.bg,fontWeight:700,fontSize:16,marginBottom:7,cursor:'pointer',boxShadow:`0 6px 18px ${T.accent}22`}}>
+  <I n="scan" sz={23} c={T.bg}/> Take a payment
+</button>
+<div style={{fontSize:11,color:T.textFaint,textAlign:'center',marginBottom:16}}>Show a QR code — no invoice, nothing to log first</div>
 <Card style={{marginBottom:10,background:`linear-gradient(135deg,${T.surface} 0%,${T.bg} 100%)`,border:`1px solid ${T.border}`}}>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
     <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Gross Earned</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.text}}>{fmt(allG)}</div><div style={{fontSize:11,color:T.lumpGreen,marginTop:3,fontWeight:600}}>{fmt(confirmedG)} confirmed</div></div>
@@ -1328,33 +1458,7 @@ const handleSaveOnly=()=>{
 };
 
 // Print/PDF any saved invoice record (incl. ones made from a payment) — no Google needed
-const printInvoiceRecord=(inv,asType)=>{
-  const es=(inv.entryIds||[]).map(id=>entries.find(e=>e.id===id)).filter(Boolean);
-  const rs=(inv.reimbIds||[]).map(id=>receipts.find(r=>r.id===id)).filter(Boolean);
-  const rows=[
-    ...es.map(e=>[fmtD(e.date),(e.client?e.client+(e.description?' — '+e.description:''):e.description||'Services'),fmt(e.subtotal)]),
-    ...rs.map(r=>[fmtD(r.date),(r.description||'Expense')+' (reimbursable)',fmt(r.amount)])
-  ];
-  if(rows.length===0)rows.push([fmtD((inv.date||'').split('T')[0]),'Services',fmt(inv.incomeTotal||inv.subtotal)]);
-  const rowHtml=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td class="r">${r[2]}</td></tr>`).join('');
-  const isPaid=inv.status==='paid';
-  // Receipts confirm money already in; invoices ask for it. Only ever render a receipt
-  // for a record that is actually paid — an unpaid one falls back to the invoice
-  // layout so it still carries the pay QR. Older records have no docType and stay
-  // invoices unless the caller asks otherwise.
-  const isReceipt=isPaid&&(asType||inv.docType||'invoice')==='receipt';
-  const docTitle=isReceipt?'Receipt':'Invoice';
-  const payRefFull=payReference(settings,inv.invoiceNum);
-  const link=payUrl(settings,inv.subtotal,payRefFull);
-  let qrMarkup='';
-  if(!isReceipt&&!isPaid){
-    const payload=link||bankPayText(settings,inv.subtotal,payRefFull);
-    if(payload){try{qrMarkup=QRE.svg(payload,{px:128,quiet:2});}catch(e){qrMarkup='';}}
-  }
-  const paidOn=inv.paidDate?fmtD(String(inv.paidDate).split('T')[0]):'';
-  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7;white-space:pre-line}.paidnote{margin-top:24px;padding-top:18px;border-top:1px solid #eeeeee;font-size:12px;color:#888888;line-height:1.7}.paybox{margin-top:26px;padding:20px;border:1px solid #e8e8e8;border-radius:10px;display:flex;gap:20px;align-items:flex-start;page-break-inside:avoid}.payqr{flex-shrink:0;line-height:0}.paymeta{flex:1;min-width:0}.paylbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc}.paybtn{display:inline-block;background:#6b7d6a;color:#ffffff;padding:9px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600}.payhint{font-size:11px;color:#999999;line-height:1.6;margin-bottom:8px}.payref{font-size:12px;color:#555555;margin-top:6px}.paybank{font-size:12px;color:#888888;line-height:1.7;margin-top:6px;white-space:pre-line}</style></head><body onload="window.print()"><div class="hd"><div><h1>${docTitle}</h1><div class="num">${inv.invoiceNum}</div>${isReceipt?`<div class="paidtag">PAID IN FULL — thank you</div>`:(isPaid?'<div class="paidtag">PAID — thank you</div>':'')}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${isReceipt?(paidOn?`<div>Paid ${paidOn}</div>`:''):(inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:'')}${payRefFull?`<div><strong>Ref: ${payRefFull}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">${isReceipt?'Received From':'Bill To'}</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid||isReceipt?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${isReceipt?`<div class="paidnote">Paid by bank transfer${paidOn?` on ${paidOn}`:''}. No payment is outstanding — this receipt is for your records.</div>`:''}${!isReceipt&&!isPaid&&(qrMarkup||link)?`<div class="paybox"><div class="payqr">${qrMarkup}</div><div class="paymeta"><div class="paylbl">Pay by bank transfer</div>${link?`<div style="margin:8px 0"><a class="paybtn" href="${link}">Pay online &#8594;</a></div>`:''}<div class="payhint">${qrMarkup?'Scan the code with your phone camera to open your banking app with the amount filled in.':''}</div><div class="payref">Reference: <strong>${payRefFull||inv.invoiceNum}</strong></div>${settings.bankDetails?`<div class="paybank">${settings.bankDetails}</div>`:''}</div></div>`:''}${settings.bankDetails&&!isReceipt&&!isPaid&&!qrMarkup&&!link?`<div class="foot">${settings.bankDetails}</div>`:''}</body></html>`;
-  const w=window.open('','_blank');w.document.write(html);w.document.close();
-};
+  const printInvoiceRecord=(inv,asType)=>printPaymentDoc(inv,{entries,receipts,settings},asType);
 
 if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});setSelR({});setDocUrl(null);setSelectedClientId(null);}}>Build Invoice</PgTitle>
 {selEntries.length>0&&(<><Lbl>Added to this invoice</Lbl><div style={{marginBottom:14}}>{selEntries.map(e=>(<EntryRow key={e.id} e={e} confId={confId} setConfId={setConfId} onDelete={id=>{setSelE(s=>{const c={...s};delete c[id];return c;});onDeleteEntry(id);}}/>))}</div></>)}
@@ -3971,6 +4075,7 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   <div style={{maxWidth:900,margin:'0 auto'}}>
   {view==='home'&&<HomeView entries={entries} receipts={receipts} invoices={invoices} setView={go} syncStatus={syncStatus} lastSynced={lastSynced} onSync={syncFromSheets} sheetsUrl={settings.sheetsUrl} settings={settings} oldDataAvailable={oldDataAvailable}/>}
   {view==='add'&&<AddView onAdd={addE} settings={settings} initialType={addType} back={()=>setView('home')} onAddInvoice={inv=>{addI(inv);setSettings(s=>({...s,invoiceCounter:(s.invoiceCounter||1)+1}));}} invoiceCounter={settings.invoiceCounter||1}/>}
+  {view==='pay'&&<TakePaymentView settings={settings} entries={entries} clients={clients} onAdd={addE} back={()=>setView('home')} onAddInvoice={inv=>{addI(inv);setSettings(s=>({...s,invoiceCounter:(s.invoiceCounter||1)+1}));}} invoiceCounter={settings.invoiceCounter||1}/>}
   {view==='log'&&<LogView entries={entries} invoices={invoices} onDelete={delE} onToggleStatus={toggleStatus} onToggleVoid={toggleVoid} onAdd={addE}/>}
   {view==='receipts'&&<ReceiptsView receipts={receipts} onAdd={addR} onUpdate={updR} onDelete={delR} settings={settings} sheetsUrl={settings.sheetsUrl} onSync={syncFromSheets} pendingFile={pendingFile} onConsumePending={()=>setPendingFile(null)}/>}
   {view==='invoice'&&<InvoiceView entries={entries} receipts={receipts} invoices={invoices} clients={clients} onAddInvoice={addI} onUpdateInvoice={updI} onDeleteInvoice={delI} onUpdateReceipt={updR} onUpdateEntry={updE} onDeleteEntry={delE} onSaveClient={addClient} onAddEntry={addE} settings={settings} setSettings={setSettings} sheetsUrl={settings.sheetsUrl} seedBankTxn={bankTxnForInvoice} onConsumeSeedBankTxn={()=>setBankTxnForInvoice(null)} onLinkBankTxn={onLinkBankTxn}/>}

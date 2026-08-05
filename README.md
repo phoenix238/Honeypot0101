@@ -13,8 +13,13 @@ Set a **Payment link** and **Bank details** under Settings → Your Profile. A m
 revolut.me or paypal.me handle is enough — save just the base link and Honey adds the
 amount and reference itself.
 
-Log the session and hit **Show payment QR** while the client is still in the room. They
-scan it, their banking app opens with the amount already filled in, and because it
+**Take a payment** sits at the top of Home. Tap it, type the amount (or tap one of the
+quick chips, which learn the amounts you actually charge), optionally add a name, and
+the code is on screen — no work logged, no invoice raised, nothing saved until you say
+so. When they've paid, one tap records it as income, with or without a receipt.
+
+You can also start from an entry: log the session and hit **Show payment QR**. Either
+way they scan it, their banking app opens with the amount already filled in, and because it
 settles as a bank transfer there is no card fee. If their bank will not follow the link,
 the **Bank details** tab shows a scannable, copyable version of your sort code, account
 number and reference instead. The same QR is printed on any unpaid invoice PDF, so it
