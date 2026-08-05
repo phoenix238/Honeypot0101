@@ -31,18 +31,26 @@ body{background:#16140F;color:#F2EEE3;font-family:'Space Grotesk',-apple-system,
 // these details stay on the two phones involved.
 var p = new URLSearchParams(location.hash.slice(1));
 var name = p.get('n') || '', bank = p.get('b') || '', amt = p.get('a') || '', ref = p.get('r') || '';
+var sortCode = p.get('sc') || '', acctNum = p.get('an') || '';
 var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) {
   return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
 var card = document.getElementById('card');
-if (!bank && !amt && !ref) {
+if (!bank && !sortCode && !acctNum && !amt && !ref) {
   card.innerHTML = '<div class="warn">This link has no payment details in it.<br>Ask for a new one.</div>';
 } else {
   var html = '';
   if (name) html += '<div class="to">Pay</div><div class="name">' + esc(name) + '</div>';
   if (amt) html += '<div class="amt">£' + esc(amt) + '</div>';
   var rows = [];
-  if (bank) rows.push(['Bank details', bank]);
+  // Each line copies on its own — banking apps have separate sort code / account
+  // number fields, so a single combined line has to be retyped or split by hand.
+  if (sortCode || acctNum) {
+    if (sortCode) rows.push(['Sort code', sortCode]);
+    if (acctNum) rows.push(['Account number', acctNum]);
+  } else if (bank) {
+    rows.push(['Bank details', bank]);
+  }
   if (ref) rows.push(['Reference — please include this', ref]);
   rows.forEach(function (r, i) {
     html += '<div class="lbl">' + esc(r[0]) + '</div>' +

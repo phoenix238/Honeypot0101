@@ -277,11 +277,13 @@ const payLinkCaution=settings=>{
  */
 const payPageUrl=(settings,amount,reference)=>{
   if(typeof location==='undefined'||!/^https?:$/.test(location.protocol))return '';
+  const sc=(settings&&settings.sortCode)||'',an=(settings&&settings.accountNumber)||'';
   const bank=(settings&&settings.bankDetails)||'';
-  if(!bank)return '';
+  if(!sc&&!an&&!bank)return '';
   const q=new URLSearchParams();
   if(settings&&settings.name)q.set('n',settings.name);
-  q.set('b',bank);
+  if(sc||an){if(sc)q.set('sc',sc);if(an)q.set('an',an);}
+  else q.set('b',bank);
   if((amount||0)>0)q.set('a',(Math.round(amount*100)/100).toFixed(2));
   if(reference)q.set('r',reference);
   return location.origin+location.pathname.replace(/[^/]*$/,'')+'pay.html#'+q.toString();
@@ -290,10 +292,25 @@ const payPageUrl=(settings,amount,reference)=>{
 const bankPayText=(settings,amount,reference)=>{
   const L=[];
   if(settings&&settings.name)L.push('Pay '+settings.name);
-  if(settings&&settings.bankDetails)L.push(settings.bankDetails);
+  const sc=(settings&&settings.sortCode)||'',an=(settings&&settings.accountNumber)||'';
+  if(sc)L.push('Sort code: '+sc);
+  if(an)L.push('Account number: '+an);
+  if(!sc&&!an&&settings&&settings.bankDetails)L.push(settings.bankDetails);
   if((amount||0)>0)L.push('Amount: '+fmt(amount));
   if(reference)L.push('Reference: '+reference);
   return L.join('\n');
+};
+/**
+ * Best-effort split of the old single-line "Sort: 00-00-00 · Acc: 12345678" text into
+ * separate sort code / account number, so switching to the two-field layout doesn't
+ * force anyone who already saved the old format to retype it.
+ */
+const splitBankDetails=text=>{
+  const s=String(text||'');
+  const sc=(s.match(/\b(\d{2})[\s-]?(\d{2})[\s-]?(\d{2})\b/)||[]).slice(1).join('-');
+  const rest=sc?s.replace(sc.replace(/-/g,''),'').replace(new RegExp(sc.split('-').join('[\\s-]?')),''):s;
+  const an=(rest.match(/\b(\d{7,8})\b/)||[])[1]||'';
+  return{sortCode:sc,accountNumber:an};
 };
 
 /** White-backed QR block. Falls back to a readable note if the payload is too long. */
@@ -325,6 +342,8 @@ function CopyLine({label,value,mono}){
  */
 function PayFace({settings,amount,reference,tab,setTab,qrPx=224}){
   const link=payUrl(settings,amount,reference);
+  const sortCode=(settings&&settings.sortCode)||'',acctNum=(settings&&settings.accountNumber)||'';
+  const structured=!!(sortCode||acctNum);
   const sortAcc=(settings&&settings.bankDetails)||'';
   const page=payPageUrl(settings,amount,reference);
   const problem=payLinkProblem(settings);
@@ -346,10 +365,12 @@ function PayFace({settings,amount,reference,tab,setTab,qrPx=224}){
         :(sortAcc?'Scan or copy these details into any banking app.':'Add your bank details in Settings so they show here.')}
     </div>
     {reference&&<CopyLine label="Reference — ask them to include this" value={reference} mono/>}
-    {tab!=='link'&&sortAcc&&<CopyLine label="Bank details" value={sortAcc} mono/>}
+    {tab!=='link'&&structured&&<CopyLine label="Sort code" value={sortCode} mono/>}
+    {tab!=='link'&&structured&&<CopyLine label="Account number" value={acctNum} mono/>}
+    {tab!=='link'&&!structured&&sortAcc&&<CopyLine label="Bank details" value={sortAcc} mono/>}
     {tab!=='link'&&page&&<CopyLine label="Link to send instead" value={page}/>}
     {tab==='link'&&link&&<CopyLine label="Pay link" value={link}/>}
-    {!link&&!sortAcc&&(<div style={{fontSize:12,color:T.pending,background:T.pending+'14',border:`1px solid ${T.pending}44`,borderRadius:10,padding:'10px 12px'}}>Add a payment link or bank details in Settings → Your Profile to use this.</div>)}
+    {!link&&!structured&&!sortAcc&&(<div style={{fontSize:12,color:T.pending,background:T.pending+'14',border:`1px solid ${T.pending}44`,borderRadius:10,padding:'10px 12px'}}>Add a payment link or bank details in Settings → Your Profile to use this.</div>)}
   </div>);
 }
 
@@ -607,7 +628,11 @@ const quickAmounts=(entries,settings)=>{
 function TakePaymentView({settings,entries,clients,onAdd,onAddInvoice,invoiceCounter,back}){
   const[amount,setAmount]=useState('');
   const[who,setWho]=useState('');
-  const[tab,setTab]=useState('link');
+  // whether a usable pay link exists at all, independent of the amount typed so far —
+  // decides which tab opens by default, same as the pop-up version of this screen
+  const hasLink=!!payUrl(settings,1,'');
+  const[tab,setTab]=useState(hasLink?'link':'bank');
+  useEffect(()=>{setTab(hasLink?'link':'bank');},[hasLink]);
   const[done,setDone]=useState(null);
   const amt=parseFloat(amount)||0;
   const d=today();
@@ -695,13 +720,21 @@ const printPaymentDoc=(inv,ctx,asType)=>{
   const docTitle=isReceipt?'Receipt':'Invoice';
   const payRefFull=payReference(settings,inv.invoiceNum);
   const link=payUrl(settings,inv.subtotal,payRefFull);
+  // prefer a real web link over plain text — same reasoning as the live QR screen: a
+  // phone refuses to act on plain text, but any phone can open a web address
+  const payPage=payPageUrl(settings,inv.subtotal,payRefFull);
   let qrMarkup='';
   if(!isReceipt&&!isPaid){
-    const payload=link||bankPayText(settings,inv.subtotal,payRefFull);
+    const payload=link||payPage||bankPayText(settings,inv.subtotal,payRefFull);
     if(payload){try{qrMarkup=QRE.svg(payload,{px:128,quiet:2});}catch(e){qrMarkup='';}}
   }
   const paidOn=inv.paidDate?fmtD(String(inv.paidDate).split('T')[0]):'';
-  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7;white-space:pre-line}.paidnote{margin-top:24px;padding-top:18px;border-top:1px solid #eeeeee;font-size:12px;color:#888888;line-height:1.7}.paybox{margin-top:26px;padding:20px;border:1px solid #e8e8e8;border-radius:10px;display:flex;gap:20px;align-items:flex-start;page-break-inside:avoid}.payqr{flex-shrink:0;line-height:0}.paymeta{flex:1;min-width:0}.paylbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc}.paybtn{display:inline-block;background:#6b7d6a;color:#ffffff;padding:9px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600}.payhint{font-size:11px;color:#999999;line-height:1.6;margin-bottom:8px}.payref{font-size:12px;color:#555555;margin-top:6px}.paybank{font-size:12px;color:#888888;line-height:1.7;margin-top:6px;white-space:pre-line}</style></head><body onload="window.print()"><div class="hd"><div><h1>${docTitle}</h1><div class="num">${inv.invoiceNum}</div>${isReceipt?`<div class="paidtag">PAID IN FULL — thank you</div>`:(isPaid?'<div class="paidtag">PAID — thank you</div>':'')}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${isReceipt?(paidOn?`<div>Paid ${paidOn}</div>`:''):(inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:'')}${payRefFull?`<div><strong>Ref: ${payRefFull}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">${isReceipt?'Received From':'Bill To'}</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid||isReceipt?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${isReceipt?`<div class="paidnote">Paid by bank transfer${paidOn?` on ${paidOn}`:''}. No payment is outstanding — this receipt is for your records.</div>`:''}${!isReceipt&&!isPaid&&(qrMarkup||link)?`<div class="paybox"><div class="payqr">${qrMarkup}</div><div class="paymeta"><div class="paylbl">Pay by bank transfer</div>${link?`<div style="margin:8px 0"><a class="paybtn" href="${link}">Pay online &#8594;</a></div>`:''}<div class="payhint">${qrMarkup?'Scan the code with your phone camera to open your banking app with the amount filled in.':''}</div><div class="payref">Reference: <strong>${payRefFull||inv.invoiceNum}</strong></div>${settings.bankDetails?`<div class="paybank">${settings.bankDetails}</div>`:''}</div></div>`:''}${settings.bankDetails&&!isReceipt&&!isPaid&&!qrMarkup&&!link?`<div class="foot">${settings.bankDetails}</div>`:''}</body></html>`;
+  const bankLinesHtml=(()=>{
+    const sc=settings.sortCode||'',an=settings.accountNumber||'';
+    if(sc||an)return[sc?'Sort code: '+sc:'',an?'Account number: '+an:''].filter(Boolean).join('<br>');
+    return settings.bankDetails||'';
+  })();
+  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7;white-space:pre-line}.paidnote{margin-top:24px;padding-top:18px;border-top:1px solid #eeeeee;font-size:12px;color:#888888;line-height:1.7}.paybox{margin-top:26px;padding:20px;border:1px solid #e8e8e8;border-radius:10px;display:flex;gap:20px;align-items:flex-start;page-break-inside:avoid}.payqr{flex-shrink:0;line-height:0}.paymeta{flex:1;min-width:0}.paylbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc}.paybtn{display:inline-block;background:#6b7d6a;color:#ffffff;padding:9px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600}.payhint{font-size:11px;color:#999999;line-height:1.6;margin-bottom:8px}.payref{font-size:12px;color:#555555;margin-top:6px}.paybank{font-size:12px;color:#888888;line-height:1.7;margin-top:6px;white-space:pre-line}</style></head><body onload="window.print()"><div class="hd"><div><h1>${docTitle}</h1><div class="num">${inv.invoiceNum}</div>${isReceipt?`<div class="paidtag">PAID IN FULL — thank you</div>`:(isPaid?'<div class="paidtag">PAID — thank you</div>':'')}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${isReceipt?(paidOn?`<div>Paid ${paidOn}</div>`:''):(inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:'')}${payRefFull?`<div><strong>Ref: ${payRefFull}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">${isReceipt?'Received From':'Bill To'}</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid||isReceipt?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${isReceipt?`<div class="paidnote">Paid by bank transfer${paidOn?` on ${paidOn}`:''}. No payment is outstanding — this receipt is for your records.</div>`:''}${!isReceipt&&!isPaid&&(qrMarkup||link)?`<div class="paybox"><div class="payqr">${qrMarkup}</div><div class="paymeta"><div class="paylbl">Pay by bank transfer</div>${link?`<div style="margin:8px 0"><a class="paybtn" href="${link}">Pay online &#8594;</a></div>`:''}<div class="payhint">${qrMarkup?'Scan the code with your phone camera to open your banking app with the amount filled in.':''}</div><div class="payref">Reference: <strong>${payRefFull||inv.invoiceNum}</strong></div>${bankLinesHtml?`<div class="paybank">${bankLinesHtml}</div>`:''}</div></div>`:''}${bankLinesHtml&&!isReceipt&&!isPaid&&!qrMarkup&&!link?`<div class="foot">${bankLinesHtml}</div>`:''}</body></html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();
 };
 function EntryRow({e,onDelete,onToggleStatus,onToggleVoid,confId,setConfId,onLogAgain,invoiceNum}){
@@ -2927,7 +2960,23 @@ return(<Page>
   <SettingsRow label="Email"><Inp type="email" placeholder="your@email.com" value={settings.email||''} onChange={e=>set('email',e.target.value)}/></SettingsRow>
   <SettingsRow label="Phone"><Inp type="tel" placeholder="Optional" value={settings.phone||''} onChange={e=>set('phone',e.target.value)}/></SettingsRow>
   <SettingsRow label="VAT number"><Inp placeholder="Not registered" value={settings.vatNumber||''} onChange={e=>set('vatNumber',e.target.value)}/></SettingsRow>
-  <SettingsRow label="Bank details"><Inp placeholder="Sort: 00-00-00 · Acc: 00000000" value={settings.bankDetails||''} onChange={e=>set('bankDetails',e.target.value)}/></SettingsRow>
+  <SettingsRow label="Sort code">
+    <Inp style={{fontFamily:"'Geist Mono',monospace"}} placeholder="00-00-00" inputMode="numeric" value={settings.sortCode||''}
+      onChange={e=>{const d=e.target.value.replace(/[^\d]/g,'').slice(0,6);set('sortCode',d.replace(/(\d{2})(?=\d)/g,'$1-'));}}/>
+  </SettingsRow>
+  <SettingsRow label="Account number">
+    <Inp style={{fontFamily:"'Geist Mono',monospace"}} placeholder="00000000" inputMode="numeric" value={settings.accountNumber||''}
+      onChange={e=>set('accountNumber',e.target.value.replace(/[^\d]/g,'').slice(0,8))}/>
+  </SettingsRow>
+  {!settings.sortCode&&!settings.accountNumber&&settings.bankDetails&&(
+    <SettingsRow label=" ">
+      <button onClick={()=>{const{sortCode,accountNumber}=splitBankDetails(settings.bankDetails);setSettings(s=>({...s,sortCode:sortCode||s.sortCode,accountNumber:accountNumber||s.accountNumber}));}}
+        style={{background:T.accent+'14',border:`1.5px solid ${T.accent}44`,borderRadius:10,padding:'8px 14px',color:T.accent,fontWeight:700,fontSize:12,cursor:'pointer'}}>
+        Split my old bank details into these fields →
+      </button>
+      <div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.5}}>Found from before: <span style={{fontFamily:"'Geist Mono',monospace"}}>{settings.bankDetails}</span></div>
+    </SettingsRow>
+  )}
   <SettingsRow label="Payment link">
     <div>
       <Inp placeholder="monzo.me/yourname" value={settings.paymentLink||''} onChange={e=>set('paymentLink',e.target.value)}/>
@@ -3532,7 +3581,7 @@ const[bankTxns,setBankTxns]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
-const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',paymentLink:'',defaultRate:35,sheetsUrl:'',bankSyncKey:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
+const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',sortCode:'',accountNumber:'',paymentLink:'',defaultRate:35,sheetsUrl:'',bankSyncKey:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
 const[syncStatus,setSyncStatus]=useState('loading');
 const[loaded,setLoaded]=useState(false);
 const[booted,setBooted]=useState(false);

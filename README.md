@@ -15,11 +15,19 @@ save the full handle including the site (`monzo.me/yourname`, not just `yourname
 Honey adds the amount and reference itself. A link it cannot turn into a working web
 address is rejected with a reason rather than baked into a dead QR code.
 
+Bank details can be entered as a **Sort code** and **Account number** in their own fields
+— each auto-formats as you type and copies on its own line, since banking apps ask for
+them separately and a single combined line just has to be split by hand. If you already
+had the old single "Bank details" text saved, Settings offers a one-tap "Split my old
+bank details into these fields" to carry it across without retyping; the old field still
+works as a fallback for anything the split can't parse (an IBAN, say).
+
 With no payment link, the QR points at this app's own `pay.html`, which shows your bank
-details and the reference with tap-to-copy. That matters because a QR holding only plain
-text is refused by many phones — "no apps on your phone can use this QR code" — whereas
-every phone opens a web address. The details ride in the URL fragment, which browsers
-never send to the server.
+details and the reference with tap-to-copy, sort code and account number on their own
+copyable lines. That matters because a QR holding only plain text is refused by many
+phones — "no apps on your phone can use this QR code" — whereas every phone opens a web
+address. The details ride in the URL fragment, which browsers never send to the server.
+The same page is what an unpaid invoice PDF's QR points at, too.
 
 **Take a payment** sits at the top of Home. Tap it, type the amount (or tap one of the
 quick chips, which learn the amounts you actually charge), optionally add a name, and
