@@ -1423,6 +1423,10 @@ const[mode,setMode]=useState('list');const[selE,setSelE]=useState({});const[selR
 const[linkedBankTxn,setLinkedBankTxn]=useState(null);
 const[confId,setConfId]=useState(null);
 const[leftoverOpen,setLeftoverOpen]=useState(false);
+// Bank-fed payments have already landed, so they default to a receipt rather than
+// an invoice — manual multi-entry invoicing (not seeded from a bank row) keeps
+// defaulting to 'invoice' exactly as before.
+const[docType,setDocType]=useState('invoice');
 useEffect(()=>{
   if(!seedBankTxn)return;
   const draft={id:mkId(),type:'lump',date:seedBankTxn.date,client:'',description:seedBankTxn.description||'',rate:null,hours:null,subtotal:seedBankTxn.amount,tax:0,net:seedBankTxn.amount,status:'Paid'};
@@ -1431,6 +1435,7 @@ useEffect(()=>{
   setClient(c=>({...c,name:seedBankTxn.description||''}));
   setMode('build');
   setLinkedBankTxn(seedBankTxn);
+  setDocType('receipt');
   onConsumeSeedBankTxn();
   // eslint-disable-next-line
 },[seedBankTxn]);
@@ -1471,7 +1476,7 @@ const handleShare=inv=>{
   }
   setShareOpen(shareOpen===inv.id?null:inv.id);
 };
-const invNum=`INV-${new Date().getFullYear()}-${String(settings.invoiceCounter||1).padStart(3,'0')}`;
+const invNum=`${docType==='receipt'?'RCT':'INV'}-${new Date().getFullYear()}-${String(settings.invoiceCounter||1).padStart(3,'0')}`;
 const selEntries=entries.filter(e=>selE[e.id]);const selReimbs=receipts.filter(r=>selR[r.id]);const incomeTotal=selEntries.reduce((a,e)=>a+(e.subtotal||0),0);const reimbTotal=selReimbs.reduce((a,r)=>a+(r.amount||0),0);const deductTotal=deductions.reduce((a,d)=>a+(parseFloat(d.amount)||0),0);const grandTotal=Math.max(0,incomeTotal+reimbTotal-deductTotal);const pendingReimbs=receipts.filter(r=>r.category==='reimbursable'&&r.status==='pending');const hasItems=selEntries.length>0||selReimbs.length>0;
 const invoicePeriod=(()=>{const dates=selEntries.map(e=>e.date).sort();if(dates.length===0)return new Date().toLocaleDateString('en-GB',{month:'long',year:'numeric'});const first=new Date(dates[0]+'T12:00:00');const last=new Date(dates[dates.length-1]+'T12:00:00');const fStr=first.toLocaleDateString('en-GB',{month:'long',year:'numeric'});const lStr=last.toLocaleDateString('en-GB',{month:'long',year:'numeric'});return fStr===lStr?fStr:`${fStr} to ${lStr}`;})();
 
@@ -1516,7 +1521,7 @@ const handleCreateDocAndSave=async()=>{
     }
   }
   // Step 2: save invoice record (with docUrl baked in directly, not from state)
-  const inv={invoiceNum:invNum,date:new Date().toISOString(),client:client.name,clientEmail:client.email,subtotal:grandTotal,incomeTotal,reimbTotal,deductTotal,deductions:deductions.filter(d=>d.description&&parseFloat(d.amount)>0),dueDate,entryIds:selEntries.map(e=>e.id),reimbIds:selReimbs.map(r=>r.id),docUrl:finalDocUrl||null};
+  const inv={invoiceNum:invNum,docType,date:new Date().toISOString(),client:client.name,clientEmail:client.email,subtotal:grandTotal,incomeTotal,reimbTotal,deductTotal,deductions:deductions.filter(d=>d.description&&parseFloat(d.amount)>0),dueDate,entryIds:selEntries.map(e=>e.id),reimbIds:selReimbs.map(r=>r.id),docUrl:finalDocUrl||null};
   if(linkedBankTxn){inv.status='paid';inv.paidDate=linkedBankTxn.date;inv.sourceBankTxnId=linkedBankTxn.id;inv.matchedBankTxnId=linkedBankTxn.id;}
   onAddInvoice(inv);
   selReimbs.forEach(r=>onUpdateReceipt(r.id,{status:'invoiced'}));
@@ -1529,7 +1534,7 @@ const handleCreateDocAndSave=async()=>{
 
 // plain save (no Sheets connected)
 const handleSaveOnly=()=>{
-  const inv={invoiceNum:invNum,date:new Date().toISOString(),client:client.name,clientEmail:client.email,subtotal:grandTotal,incomeTotal,reimbTotal,deductTotal,deductions:deductions.filter(d=>d.description&&parseFloat(d.amount)>0),dueDate,entryIds:selEntries.map(e=>e.id),reimbIds:selReimbs.map(r=>r.id),docUrl:null};
+  const inv={invoiceNum:invNum,docType,date:new Date().toISOString(),client:client.name,clientEmail:client.email,subtotal:grandTotal,incomeTotal,reimbTotal,deductTotal,deductions:deductions.filter(d=>d.description&&parseFloat(d.amount)>0),dueDate,entryIds:selEntries.map(e=>e.id),reimbIds:selReimbs.map(r=>r.id),docUrl:null};
   if(linkedBankTxn){inv.status='paid';inv.paidDate=linkedBankTxn.date;inv.sourceBankTxnId=linkedBankTxn.id;inv.matchedBankTxnId=linkedBankTxn.id;}
   onAddInvoice(inv);
   selReimbs.forEach(r=>onUpdateReceipt(r.id,{status:'invoiced'}));
@@ -1543,7 +1548,7 @@ const handleSaveOnly=()=>{
 // Print/PDF any saved invoice record (incl. ones made from a payment) — no Google needed
   const printInvoiceRecord=(inv,asType)=>printPaymentDoc(inv,{entries,receipts,settings},asType);
 
-if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});setSelR({});setDocUrl(null);setSelectedClientId(null);}}>Build Invoice</PgTitle>
+if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});setSelR({});setDocUrl(null);setSelectedClientId(null);}}>{docType==='receipt'?'Confirm Receipt':'Build Invoice'}</PgTitle>
 {selEntries.length>0&&(<><Lbl>Added to this invoice</Lbl><div style={{marginBottom:14}}>{selEntries.map(e=>(<EntryRow key={e.id} e={e} confId={confId} setConfId={setConfId} onDelete={id=>{setSelE(s=>{const c={...s};delete c[id];return c;});onDeleteEntry(id);}}/>))}</div></>)}
 <div style={{display:'flex',gap:12,marginBottom:10}}>
 <button onClick={()=>setQuickOpen(o=>!o)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,display:'flex',alignItems:'center',gap:5}}><I n="plus" sz={13} c={T.accent}/> {quickOpen?'Hide log-a-day':'Log a day straight onto this invoice'}</button>
@@ -1576,14 +1581,22 @@ if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});s
 <button onClick={()=>setLeftoverOpen(o=>!o)} style={{background:'none',border:'none',color:T.textMuted,fontSize:12,fontWeight:700,padding:0,marginBottom:10,display:'flex',alignItems:'center',gap:5}}>{leftoverOpen?'▾':'▸'} {leftover.length} entr{leftover.length===1?'y':'ies'} logged earlier, not yet invoiced</button>
 {leftoverOpen&&(<div style={{marginBottom:16}}>{leftover.map(e=>(<button key={e.id} onClick={()=>setSelE(s=>({...s,[e.id]:!s[e.id]}))} style={{width:'100%',textAlign:'left',background:selE[e.id]?T.accent+'12':T.surface,border:`1.5px solid ${selE[e.id]?T.accent:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.client||'No client'} · {fmtD(e.date)}</div>{e.description&&<div style={{fontSize:12,color:T.textMuted}}>{e.description}</div>}<StatusTag status={e.status}/></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(e.subtotal)}</span><div style={{width:22,height:22,borderRadius:7,background:selE[e.id]?T.accent:'transparent',border:`2px solid ${selE[e.id]?T.accent:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selE[e.id]&&<I n="check" sz={13} c={T.bg}/>}</div></div></button>))}</div>)}
 </>);})()}
-{pendingReimbs.length>0&&<><Lbl>Reimbursable expenses</Lbl><div style={{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.5}}>Tick to include on invoice.</div><div style={{marginBottom:16}}>{pendingReimbs.map(r=>(<button key={r.id} onClick={()=>setSelR(s=>({...s,[r.id]:!s[r.id]}))} style={{width:'100%',textAlign:'left',background:selR[r.id]?T.reimb+'15':T.surface,border:`1.5px solid ${selR[r.id]?T.reimb:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.description}</div><div style={{fontSize:12,color:T.textMuted}}>{fmtD(r.date)}{r.owedBy?` · ${r.owedBy}`:''}{r.driveUrl&&<span style={{color:T.drive}}> · ☁</span>}</div></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.reimb}}>{fmt(r.amount)}</span><div style={{width:22,height:22,borderRadius:7,background:selR[r.id]?T.reimb:'transparent',border:`2px solid ${selR[r.id]?T.reimb:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selR[r.id]&&<I n="check" sz={13} c={T.bg}/>}</div></div></button>))}</div></>}{!hasItems&&<div style={{textAlign:'center',padding:'20px 20px 30px',color:T.textMuted,fontSize:13}}>Select entries or expenses above</div>}{hasItems&&<><Card style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>{selEntries.length>0&&selReimbs.length>0&&<><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:5,color:T.textMuted}}><span>Services ({selEntries.length})</span><span style={{fontFamily:'Geist Mono,monospace'}}>{fmt(incomeTotal)}</span></div><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.textMuted}}><span>Expenses ({selReimbs.length})</span><span style={{fontFamily:'Geist Mono,monospace',color:T.reimb}}>{fmt(reimbTotal)}</span></div></>}{deductions.map(d=>(<div key={d.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}><Inp placeholder="Deduction (e.g. materials)" value={d.description} onChange={e=>updateDeduction(d.id,'description',e.target.value)} style={{flex:2,fontSize:12}}/><Inp type="number" placeholder="0.00" value={d.amount} onChange={e=>updateDeduction(d.id,'amount',e.target.value)} style={{flex:1,fontSize:12}}/><button onClick={()=>removeDeduction(d.id)} style={{background:'transparent',border:'none',color:T.danger,fontSize:18,padding:'0 4px',flexShrink:0}}>×</button></div>))}<button onClick={addDeduction} style={{background:T.danger+'15',border:`1.5px dashed ${T.danger}44`,borderRadius:10,padding:'7px 14px',color:T.danger,fontSize:12,fontWeight:700,width:'100%',marginBottom:deductTotal>0?10:0}}>+ Add deduction</button>{deductTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.danger}}><span>Deductions</span><span style={{fontFamily:'Geist Mono,monospace'}}>− {fmt(deductTotal)}</span></div>}<Hr/><div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}}><span>Invoice total</span><span style={{fontFamily:'Geist Mono,monospace',color:T.accentBright}}>{fmt(grandTotal)}</span></div><div style={{fontSize:12,color:T.textMuted,marginTop:6}}>Period: {invoicePeriod} · Ref: {invNum}</div></Card>
+{pendingReimbs.length>0&&<><Lbl>Reimbursable expenses</Lbl><div style={{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.5}}>Tick to include on invoice.</div><div style={{marginBottom:16}}>{pendingReimbs.map(r=>(<button key={r.id} onClick={()=>setSelR(s=>({...s,[r.id]:!s[r.id]}))} style={{width:'100%',textAlign:'left',background:selR[r.id]?T.reimb+'15':T.surface,border:`1.5px solid ${selR[r.id]?T.reimb:T.border}`,borderRadius:14,padding:'11px 13px',marginBottom:8,color:T.text,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}><div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.description}</div><div style={{fontSize:12,color:T.textMuted}}>{fmtD(r.date)}{r.owedBy?` · ${r.owedBy}`:''}{r.driveUrl&&<span style={{color:T.drive}}> · ☁</span>}</div></div><div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.reimb}}>{fmt(r.amount)}</span><div style={{width:22,height:22,borderRadius:7,background:selR[r.id]?T.reimb:'transparent',border:`2px solid ${selR[r.id]?T.reimb:T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{selR[r.id]&&<I n="check" sz={13} c={T.bg}/>}</div></div></button>))}</div></>}{!hasItems&&<div style={{textAlign:'center',padding:'20px 20px 30px',color:T.textMuted,fontSize:13}}>Select entries or expenses above</div>}{hasItems&&<><Card style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>{selEntries.length>0&&selReimbs.length>0&&<><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:5,color:T.textMuted}}><span>Services ({selEntries.length})</span><span style={{fontFamily:'Geist Mono,monospace'}}>{fmt(incomeTotal)}</span></div><div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.textMuted}}><span>Expenses ({selReimbs.length})</span><span style={{fontFamily:'Geist Mono,monospace',color:T.reimb}}>{fmt(reimbTotal)}</span></div></>}{deductions.map(d=>(<div key={d.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}><Inp placeholder="Deduction (e.g. materials)" value={d.description} onChange={e=>updateDeduction(d.id,'description',e.target.value)} style={{flex:2,fontSize:12}}/><Inp type="number" placeholder="0.00" value={d.amount} onChange={e=>updateDeduction(d.id,'amount',e.target.value)} style={{flex:1,fontSize:12}}/><button onClick={()=>removeDeduction(d.id)} style={{background:'transparent',border:'none',color:T.danger,fontSize:18,padding:'0 4px',flexShrink:0}}>×</button></div>))}<button onClick={addDeduction} style={{background:T.danger+'15',border:`1.5px dashed ${T.danger}44`,borderRadius:10,padding:'7px 14px',color:T.danger,fontSize:12,fontWeight:700,width:'100%',marginBottom:deductTotal>0?10:0}}>+ Add deduction</button>{deductTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:10,color:T.danger}}><span>Deductions</span><span style={{fontFamily:'Geist Mono,monospace'}}>− {fmt(deductTotal)}</span></div>}<Hr/><div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}}><span>{docType==='receipt'?'Receipt total':'Invoice total'}</span><span style={{fontFamily:'Geist Mono,monospace',color:T.accentBright}}>{fmt(grandTotal)}</span></div><div style={{fontSize:12,color:T.textMuted,marginTop:6}}>Period: {invoicePeriod} · Ref: {invNum}</div></Card>
+{linkedBankTxn&&(<div style={{marginBottom:14}}>
+  <Lbl>Paperwork for this payment</Lbl>
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7}}>
+    {[['receipt','Receipt'],['invoice','Invoice']].map(o=>(
+      <button key={o[0]} onClick={()=>setDocType(o[0])} style={{background:docType===o[0]?T.lumpGreen+'26':T.surface,border:`1.5px solid ${docType===o[0]?T.lumpGreen:T.border}`,borderRadius:10,padding:'7px 4px',fontSize:12,fontWeight:700,color:docType===o[0]?T.lumpGreen:T.textMuted}}>{o[1]}</button>))}
+  </div>
+  <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.5}}>{docType==='receipt'?'The money is already in — this confirms it, with no amount due and no pay QR.':'A formal request for payment, marked paid. Use only if the client needs one for their own records.'}</div>
+</div>)}
 {clients.length>0&&(<div style={{marginBottom:14}}><Lbl>Saved clients</Lbl><div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{clients.map(c=>(<button key={c.id} onClick={()=>pickClient(c)} style={{background:selectedClientId===c.id?T.accent+'22':T.surface,border:`1.5px solid ${selectedClientId===c.id?T.accent:T.border}`,borderRadius:20,padding:'6px 14px',color:selectedClientId===c.id?T.accent:T.text,fontSize:13,fontWeight:700,cursor:'pointer'}}>{c.name}</button>))}</div></div>)}
 <Lbl>Client details</Lbl>
 <Field label="Client name"><Inp placeholder="Person or company" value={client.name} onChange={e=>sc('name',e.target.value)}/></Field>
 <Field label="Client email"><Inp type="email" placeholder="client@example.com" value={client.email} onChange={e=>sc('email',e.target.value)}/></Field>
 <Field label="Client address"><Inp placeholder="Optional" value={client.address} onChange={e=>sc('address',e.target.value)}/></Field>
 {client.name&&!selectedClientId&&onSaveClient&&(<button onClick={handleSaveClient} style={{background:saveClientFlash?T.lumpGreen+'18':T.surface,border:`1.5px solid ${saveClientFlash?T.lumpGreen:T.border}`,borderRadius:10,padding:'7px 14px',color:saveClientFlash?T.lumpGreen:T.textMuted,fontSize:12,fontWeight:700,marginBottom:12,cursor:'pointer'}}>{saveClientFlash?'✓ Saved to client book':'+ Save to client book'}</button>)}
-<Field label="Due date"><Inp type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></Field>
+{docType!=='receipt'&&<Field label="Due date"><Inp type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></Field>}
 <Field label="Notes / bank details"><TA placeholder="Sort code, account no., payment terms..." value={notes} onChange={e=>setNotes(e.target.value)}/></Field>
 
 {/* ── FIX: show created Doc link if available, then unified action row ── */}
@@ -1595,7 +1608,11 @@ if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});s
 {docErr&&<div style={{marginBottom:12,fontSize:12,color:T.danger,lineHeight:1.4,background:T.dangerBg,borderRadius:10,padding:'10px 12px'}}>{docErr}</div>}
 
 <div style={{display:'flex',gap:10,marginTop:4}}>
-  <Btn color={T.timed} onClick={printInvoice} style={{flex:'0 0 auto',padding:'13px 14px'}}>
+  <Btn color={T.timed} onClick={()=>{
+    if(docType!=='receipt'){printInvoice();return;}
+    const draftInv={invoiceNum:invNum,docType:'receipt',date:new Date().toISOString(),client:client.name,clientEmail:client.email,subtotal:grandTotal,incomeTotal,reimbTotal,deductTotal,deductions:deductions.filter(d=>d.description&&parseFloat(d.amount)>0),entryIds:selEntries.map(e=>e.id),reimbIds:selReimbs.map(r=>r.id),status:'paid',paidDate:linkedBankTxn?linkedBankTxn.date:new Date().toISOString()};
+    printInvoiceRecord(draftInv,'receipt');
+  }} style={{flex:'0 0 auto',padding:'13px 14px'}}>
     <I n="print" sz={16} c={T.bg}/>
   </Btn>
   {sheetsUrl?(
@@ -1767,7 +1784,7 @@ function BankTxnRow({txn,invoices,onMakeInvoice,onVoid,onRestore,onMatch,onUnmat
     </div>
     {isIncome&&(
       <div style={{display:'flex',gap:8,marginTop:9,flexWrap:'wrap'}}>
-        {!isDone&&!isVoided&&<Btn small color={T.lumpGreen} onClick={()=>onMakeInvoice(txn.id)}>Make invoice</Btn>}
+        {!isDone&&!isVoided&&<Btn small color={T.lumpGreen} onClick={()=>onMakeInvoice(txn.id)}>Receipt</Btn>}
         {!isDone&&!isVoided&&candidates.length>0&&<Btn small outline color={T.accent} onClick={()=>setMatching(m=>!m)}>Match existing</Btn>}
         {!isDone&&!isVoided&&<Btn small outline color={T.danger} onClick={()=>{if(window.confirm('Void this transaction? You can restore it later.'))onVoid(txn.id);}}>Void</Btn>}
         {isVoided&&<Btn small outline color={T.textMuted} onClick={()=>onRestore(txn.id)}>Restore</Btn>}
@@ -3062,7 +3079,7 @@ return(<Page>
       <button onClick={handleRepairBank} style={{height:40,padding:'0 18px',background:'transparent',border:`1px solid ${T.border}`,borderRadius:10,color:T.textMuted,fontWeight:500,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Repair matches from invoices</button>
     </SettingsRow>
     {repairResult!==null&&<div style={{fontSize:12,fontWeight:600,color:repairResult>0?T.lumpGreen:T.textFaint,marginTop:-6,marginBottom:8}}>{repairResult>0?`Re-linked ${repairResult} bank row${repairResult===1?'':'s'} to ${repairResult===1?'its':'their'} existing invoice${repairResult===1?'':'s'}.`:'Nothing to fix — every bank row already matches its invoice.'}</div>}
-    <div style={{fontSize:12,color:T.textFaint,marginTop:-4}}>If a bank row shows "Make invoice" but you already invoiced it, this re-links it to the correct invoice exactly (using a link stored on the invoice itself) — safe to run any time, and won't create duplicates.</div>
+    <div style={{fontSize:12,color:T.textFaint,marginTop:-4}}>If a bank row shows "Receipt" but you already invoiced or receipted it, this re-links it to the correct invoice exactly (using a link stored on the invoice itself) — safe to run any time, and won't create duplicates.</div>
   </>}
 </SettingsSection>
 
