@@ -77,7 +77,7 @@ if(!localStorage.getItem(GATE_KEY)){
 <script type="text/babel" data-presets="react">
 const{useState,useEffect,useRef}=React;
 const T={bg:'#16140F',surface:'#211E17',border:'#322D23',text:'#F2EEE3',textMuted:'#8A8576',textFaint:'#5C574B',accent:'#E0A92E',accentBright:'#F2C14E',timed:'#3F6FB0',manual:'#7E62C0',lumpGreen:'#5BBF8A',business:'#B07A12',reimb:'#6E86D0',drive:'#3FA672',danger:'#B8392F',dangerBg:'rgba(184,57,47,.15)',paid:'#5BBF8A',pending:'#E0A92E'};
-const TAX=0.20;
+const taxRate=settings=>((settings&&settings.taxPercent)??20)/100;
 const EXPENSE_CATS=[
   ['office','Office supplies'],
   ['software','Software & subscriptions'],
@@ -295,7 +295,7 @@ const buildYearWorkbook=async({year,period,biz,summary,income,expenses,catTotals
     [xCell('Gross income',{color:XW.sub}),xCell(summary.gross,{bold:true})],
     [xCell('Allowable business expenses',{color:XW.sub}),xCell(summary.expenses,{bold:true,color:XW.rust})],
     [xCell('Taxable profit',{bold:true}),xCell(summary.profit,{bold:true})],
-    [xCell('Estimated tax to set aside (20%)',{color:XW.sub}),xCell(summary.taxStash,{bold:true,color:XW.green})],
+    [xCell(`Estimated tax to set aside (${summary.taxRatePct}%)`,{color:XW.sub}),xCell(summary.taxStash,{bold:true,color:XW.green})],
   ];
   const ws1=XLSX.utils.aoa_to_sheet(sRows);
   ws1['!cols']=[{wch:38},{wch:16}];
@@ -393,7 +393,7 @@ function TakePaymentView({settings,entries,clients,onAdd,onAddInvoice,invoiceCou
       onAddInvoice(inv);invId=num;
     }
     const entry={type:'lump',date:d,client:who,description:'Payment received',rate:null,hours:null,
-      startTime:null,endTime:null,subtotal:amt,tax:amt*TAX,net:amt-amt*TAX,status:'Paid',id:tmpId,invoiceId:invId};
+      startTime:null,endTime:null,subtotal:amt,tax:amt*taxRate(settings),net:amt-amt*taxRate(settings),status:'Paid',id:tmpId,invoiceId:invId};
     onAdd(entry);
     setDone({amount:amt,client:who,inv:inv,entry:entry});
   };
@@ -507,10 +507,10 @@ const confirmedG=liveInvoices.filter(i=>i.status==='paid').reduce((a,i)=>a+(i.su
 const unbilledG=activeE.filter(e=>!e.invoiceId).reduce((a,e)=>a+(e.subtotal||0),0);
 const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void').reduce((a,r)=>a+(r.amount||0),0);
 const taxableProfit=Math.max(0,allG-bizCosts);
-const taxReserve=taxableProfit*TAX;
-// Safe Stash: 20% of ALL gross, ignoring business costs — the amount to hold back
+const taxReserve=taxableProfit*taxRate(settings);
+// Safe Stash: your set-aside % of ALL gross, ignoring business costs — the amount to hold back
 // in case some expenses turn out to be disallowed/wrong at self-assessment.
-const safeReserve=allG*TAX;
+const safeReserve=allG*taxRate(settings);
 const trueNet=taxableProfit-taxReserve;
 const mon=activeE.filter(e=>{const d=new Date(e.date+'T12:00:00');return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
 const monG=mon.reduce((a,e)=>a+(e.subtotal||0),0);
@@ -580,14 +580,14 @@ return(<Page>
     <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Business Costs</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.business}}>{fmt(bizCosts)}</div></div>
   </div>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Tax Stash</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div><div style={{fontSize:9,color:T.textMuted}}>20% after costs</div></div>
+    <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Tax Stash</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.danger}}>{fmt(taxReserve)}</div><div style={{fontSize:9,color:T.textMuted}}>{Math.round(taxRate(settings)*100)}% after costs</div></div>
     <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Take Home</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.accentBright}}>{fmt(trueNet)}</div></div>
   </div>
   <div style={{marginBottom:8,padding:'11px 13px',background:T.accent+'0f',borderRadius:10,border:`1px solid ${T.accent}44`}}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
       <div>
         <div style={{fontSize:9,fontWeight:700,color:T.accent,textTransform:'uppercase',letterSpacing:1.2,marginBottom:3}}>Safe Stash</div>
-        <div style={{fontSize:11,color:T.textMuted,lineHeight:1.4}}>If none of your costs are allowed — 20% of all gross</div>
+        <div style={{fontSize:11,color:T.textMuted,lineHeight:1.4}}>If none of your costs are allowed — {Math.round(taxRate(settings)*100)}% of all gross</div>
       </div>
       <div style={{textAlign:'right'}}>
         <div style={{fontFamily:'Geist Mono,monospace',fontSize:22,fontWeight:700,color:T.accent}}>{fmt(safeReserve)}</div>
@@ -610,8 +610,8 @@ return(<Page>
       <div style={{fontWeight:700,color:T.text,marginBottom:6}}>Money set aside for self-assessment</div>
       <div style={{marginBottom:8}}>UK self-employed pay Income Tax plus Class 4 NI on profit (gross minus allowable expenses), after the £12,570 personal allowance.</div>
       <div style={{fontWeight:700,color:T.accent,marginBottom:4}}>Two numbers, on purpose:</div>
-      <div style={{marginBottom:3}}>· <b>Tax Stash</b> — 20% of profit <i>after</i> your business costs. The realistic figure if every expense is allowed.</div>
-      <div style={{marginBottom:8}}>· <b>Safe Stash</b> — 20% of <i>all</i> your gross, as if none of your costs counted. Hold back this larger amount and you're covered even if some expenses turn out to be wrong or disallowed. The gap between the two is the extra buffer.</div>
+      <div style={{marginBottom:3}}>· <b>Tax Stash</b> — {Math.round(taxRate(settings)*100)}% of profit <i>after</i> your business costs. The realistic figure if every expense is allowed.</div>
+      <div style={{marginBottom:8}}>· <b>Safe Stash</b> — {Math.round(taxRate(settings)*100)}% of <i>all</i> your gross, as if none of your costs counted. Hold back this larger amount and you're covered even if some expenses turn out to be wrong or disallowed. The gap between the two is the extra buffer.</div>
       <div style={{fontWeight:700,color:T.accent,marginBottom:4}}>Rough guide for stashing:</div>
       <div style={{marginBottom:3}}>· Profit under £20k: 10 to 15%</div>
       <div style={{marginBottom:3}}>· £20k to £50k: 20 to 25%</div>
@@ -670,7 +670,7 @@ return(<Page>
 // Picks Google Calendar events in a date range and turns them into ready-to-save timed
 // entries (start/end from the event, description from its title). Used by AddView and
 // the invoice maker's quick-add panel — both just get back entry objects to save.
-function CalendarEventPicker({rate,onImport,onClose}){
+function CalendarEventPicker({rate,onImport,onClose,settings}){
   const[from,setFrom]=useState(today());
   const[to,setTo]=useState(today());
   const[events,setEvents]=useState(null);
@@ -696,7 +696,7 @@ function CalendarEventPicker({rate,onImport,onClose}){
       const start=new Date(ev.startISO),end=new Date(ev.endISO||ev.startISO);
       const startTime=start.toTimeString().slice(0,5),endTime=end.toTimeString().slice(0,5);
       const hours=Math.max(0,(end-start)/3600000);
-      const gross=hours*(parseFloat(rate)||0),tax=gross*TAX,net=gross-tax;
+      const gross=hours*(parseFloat(rate)||0),tax=gross*taxRate(settings),net=gross-tax;
       return{id:mkId(),type:'timed',date:start.toISOString().slice(0,10),client:'',description:ev.title,
         rate:parseFloat(rate)||0,hours,startTime,endTime,subtotal:gross,tax,net,status:'Pending'};
     });
@@ -729,9 +729,9 @@ function CalendarEventPicker({rate,onImport,onClose}){
     </div>
   </div>);
 }
-function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[showCalPicker,setShowCalPicker]=useState(false);const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[docType,setDocType]=useState('receipt');const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*TAX,net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null,docNum='';const wantDoc=form.status==='Paid'&&docType!=='none'&&onAddInvoice;if(wantDoc){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');docNum=(docType==='receipt'?'RCT-':'INV-')+yr+'-'+num;const inv={invoiceNum:docNum,docType:docType,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString(),payRef:allocatePayRef(settings).ref};onAddInvoice(inv);invId=docNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div>
+function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[showCalPicker,setShowCalPicker]=useState(false);const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[docType,setDocType]=useState('receipt');const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*taxRate(settings),net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null,docNum='';const wantDoc=form.status==='Paid'&&docType!=='none'&&onAddInvoice;if(wantDoc){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');docNum=(docType==='receipt'?'RCT-':'INV-')+yr+'-'+num;const inv={invoiceNum:docNum,docType:docType,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString(),payRef:allocatePayRef(settings).ref};onAddInvoice(inv);invId=docNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div>
 <button onClick={()=>setShowCalPicker(true)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginBottom:16,display:'flex',alignItems:'center',gap:5}}><I n="clock" sz={13} c={T.accent}/> Select calendar events instead</button>
-{showCalPicker&&<CalendarEventPicker rate={settings.defaultRate||35} onClose={()=>setShowCalPicker(false)} onImport={entries=>entries.forEach(e=>onAdd(e))}/>}
+{showCalPicker&&<CalendarEventPicker rate={settings.defaultRate||35} settings={settings} onClose={()=>setShowCalPicker(false)} onImport={entries=>entries.forEach(e=>onAdd(e))}/>}
 <Field label="Date"><Inp type="date" value={form.date} onChange={e=>set('date',e.target.value)}/></Field><Field label="Client"><Inp placeholder="Client name" value={form.client} onChange={e=>set('client',e.target.value)}/></Field><Field label="Description"><Inp placeholder="What did you do?" value={form.description} onChange={e=>set('description',e.target.value)}/></Field>{type==='timed'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}><Field label="Start"><Inp type="time" value={form.startTime} onChange={e=>set('startTime',e.target.value)}/></Field><Field label="End"><Inp type="time" value={form.endTime} onChange={e=>set('endTime',e.target.value)}/></Field></div>}{type==='manual'&&<Field label="Hours"><Inp type="number" step="0.5" min="0" placeholder="2.5" value={form.hours} onChange={e=>set('hours',e.target.value)}/></Field>}{type!=='lump'&&<Field label="Hourly Rate (£)"><Inp type="number" step="1" min="0" value={form.rate} onChange={e=>set('rate',e.target.value)}/></Field>}{type==='lump'&&<Field label="Amount (£)"><Inp type="number" step="0.01" min="0" placeholder="500.00" value={form.amount} onChange={e=>set('amount',e.target.value)}/></Field>}<Field label="Status"><Sel value={form.status} onChange={e=>set('status',e.target.value)}><option value="Pending">Pending</option><option value="Paid">Paid</option></Sel></Field>{form.status==='Paid'&&onAddInvoice&&(<div style={{padding:'11px 14px',background:T.lumpGreen+'10',borderRadius:12,border:'1px solid '+T.lumpGreen+'33',marginBottom:8}}>
   <div style={{fontSize:13,fontWeight:700,color:T.lumpGreen,marginBottom:8}}>Paperwork for this one</div>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7}}>
@@ -1182,7 +1182,7 @@ const quickGross=quickType==='lump'?(parseFloat(quickForm.amount)||0):(quickType
 const handleQuickAdd=()=>{
   if(quickGross<=0)return;
   const id=mkId();
-  const gross=quickGross,tax=gross*TAX,net=gross-tax;
+  const gross=quickGross,tax=gross*taxRate(settings),net=gross-tax;
   onAddEntry({id,type:quickType,date:quickForm.date,client:client.name||'',description:quickForm.description,
     rate:quickType!=='lump'?parseFloat(quickForm.rate):null,
     hours:quickType==='timed'?quickTimedH():(quickType==='manual'?parseFloat(quickForm.hours):null),
@@ -1293,7 +1293,7 @@ if(mode==='build')return(<Page><PgTitle back={()=>{setMode('list');setSelE({});s
       <button key={v} onClick={()=>setQuickType(v)} style={{background:quickType===v?c+'22':T.bg,border:`1.5px solid ${quickType===v?c:T.border}`,borderRadius:9,padding:'7px 4px',fontSize:11,fontWeight:700,color:quickType===v?c:T.textMuted}}>{l}</button>
     ))}
   </div>
-  {showCalPicker&&<CalendarEventPicker rate={settings.defaultRate||35} onClose={()=>setShowCalPicker(false)} onImport={entries=>{entries.forEach(e=>{onAddEntry(e);setSelE(s=>({...s,[e.id]:true}));});}}/>}
+  {showCalPicker&&<CalendarEventPicker rate={settings.defaultRate||35} settings={settings} onClose={()=>setShowCalPicker(false)} onImport={entries=>{entries.forEach(e=>{onAddEntry(e);setSelE(s=>({...s,[e.id]:true}));});}}/>}
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
     <Field label="Date"><Inp type="date" value={quickForm.date} onChange={e=>qf('date',e.target.value)}/></Field>
     <Field label="Description"><Inp value={quickForm.description} onChange={e=>qf('description',e.target.value)}/></Field>
@@ -1598,8 +1598,8 @@ const liveInvoices=invoices.filter(i=>i.status!=='void'&&inRange((i.date||'').sl
 const totG=liveInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
 const totBiz=bizExp.reduce((a,r)=>a+(r.amount||0),0);
 const taxableP=Math.max(0,totG-totBiz);
-const totTax=taxableP*TAX;
-const safeTax=totG*TAX; // 20% of gross, ignoring costs — safe amount if expenses are disallowed
+const totTax=taxableP*taxRate(settings);
+const safeTax=totG*taxRate(settings); // set-aside % of gross, ignoring costs — safe amount if expenses are disallowed
 const totN=taxableP-totTax;
 const totPend=pending.reduce((a,r)=>a+(r.amount||0),0);
 const totPaid=reimbursed.reduce((a,r)=>a+(r.amount||0),0);
@@ -1631,7 +1631,7 @@ const rangeLabel=()=>{
   return'';
 };
 
-const exportIncome=()=>{const rows=[['ID','Invoice Ref','Date','Client','Description','Type','Start','End','Hours','Rate','Gross','Tax Stash','Take Home','Status']];activeE.forEach(e=>rows.push([e.id||'',e.invoiceRef||'',e.date,e.client||'',e.description||'',e.type,e.startTime||'',e.endTime||'',(e.hours||0).toFixed(2),e.rate||'',(e.subtotal||0).toFixed(2),(e.tax||0).toFixed(2),(e.net||0).toFixed(2),e.status||'Pending']));const loggedTot=activeE.reduce((a,e)=>a+(e.subtotal||0),0);rows.push([],[' ','','','','','','','','','TOTAL LOGGED (may include un-invoiced work)',loggedTot.toFixed(2),(loggedTot*TAX).toFixed(2),(loggedTot-loggedTot*TAX).toFixed(2),'']);dlCSV(rows,`income_${rangeLabel().replace(/\s/g,'_')}_${today()}.csv`);};
+const exportIncome=()=>{const rows=[['ID','Invoice Ref','Date','Client','Description','Type','Start','End','Hours','Rate','Gross','Tax Stash','Take Home','Status']];activeE.forEach(e=>rows.push([e.id||'',e.invoiceRef||'',e.date,e.client||'',e.description||'',e.type,e.startTime||'',e.endTime||'',(e.hours||0).toFixed(2),e.rate||'',(e.subtotal||0).toFixed(2),(e.tax||0).toFixed(2),(e.net||0).toFixed(2),e.status||'Pending']));const loggedTot=activeE.reduce((a,e)=>a+(e.subtotal||0),0);rows.push([],[' ','','','','','','','','','TOTAL LOGGED (may include un-invoiced work)',loggedTot.toFixed(2),(loggedTot*taxRate(settings)).toFixed(2),(loggedTot-loggedTot*taxRate(settings)).toFixed(2),'']);dlCSV(rows,`income_${rangeLabel().replace(/\s/g,'_')}_${today()}.csv`);};
 
 const exportExpenses=()=>{const rows=[['ID','Date','Description','Type','Category','Amount','Status','Paid By','Owed By','Drive Link']];const allInRange=receipts.filter(r=>inRange(r.date));allInRange.forEach(r=>rows.push([r.id||'',r.date,r.description||'',r.category,r.subcategory?catLabel(r.subcategory):'',(r.amount||0).toFixed(2),r.status||'pending',r.paidBy||'',r.owedBy||'',r.driveUrl||'']));rows.push([],[' ','Business expenses','','',totBiz.toFixed(2)],[' ','Still owed to you','','',totPend.toFixed(2)],[' ','Reimbursed','','',totPaid.toFixed(2)]);dlCSV(rows,`expenses_${rangeLabel().replace(/\s/g,'_')}_${today()}.csv`);};
 
@@ -1654,7 +1654,7 @@ const exportTaxYear=()=>{
     ['Gross Income (invoiced)',ge.toFixed(2)],
     ['Allowable Business Expenses',be.toFixed(2)],
     ['Taxable Profit',profit.toFixed(2)],
-    ['Estimated Tax Stash (20%)',(profit*0.20).toFixed(2)],
+    [`Estimated Tax Stash (${Math.round(taxRate(settings)*100)}%)`,(profit*taxRate(settings)).toFixed(2)],
     [],
     ['INVOICES'],
     ['Date','Client','Invoice No','Gross','Status'],
@@ -1692,7 +1692,7 @@ const exportYearWorkbook=async()=>{
       year,
       period:`${fmtD(b.from)} to ${fmtD(b.to)}`,
       biz:settings.business||settings.name||'Year-End Summary',
-      summary:{gross:ge,expenses:be,profit,taxStash:profit*0.20},
+      summary:{gross:ge,expenses:be,profit,taxStash:profit*taxRate(settings),taxRatePct:Math.round(taxRate(settings)*100)},
       income:tyEntries.map(e=>({date:e.date,client:e.client||'',invoiceRef:e.invoiceRef||'',description:e.description||'',hours:e.hours||0,rate:e.rate||0,gross:e.subtotal||0,status:e.status||'Pending'})),
       expenses:tyExp.map(r=>({date:r.date,description:r.description||'',category:catLabel(r.subcategory||'other'),amount:r.amount||0,link:r.driveUrl||''})),
       catTotals,
@@ -2950,7 +2950,7 @@ const confirmInvoices=()=>{
       addI(inv);
     }else{
       const eid=mkId();
-      const newE={id:eid,type:'lump',date:r.date||today(),client:r.client||'Client',description:r.description||('Invoice '+num),rate:null,hours:null,subtotal:amount,tax:amount*TAX,net:amount*(1-TAX),status:'Pending',invoiceId:iid};
+      const newE={id:eid,type:'lump',date:r.date||today(),client:r.client||'Client',description:r.description||('Invoice '+num),rate:null,hours:null,subtotal:amount,tax:amount*taxRate(settings),net:amount*(1-taxRate(settings)),status:'Pending',invoiceId:iid};
       addE(newE);
       linkedE=newE;
       inv={id:iid,invoiceNum:num,date:isoDate(r.date),client:r.client||'Client',clientEmail:'',subtotal:amount,incomeTotal:amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[eid],reimbIds:[],status:'unpaid'};
@@ -2993,8 +2993,8 @@ const allG=liveInvoices.reduce((a,i)=>a+(i.subtotal||0),0);
 const unbilledG=activeE.filter(e=>!e.invoiceId).reduce((a,e)=>a+(e.subtotal||0),0);
 const bizCosts=receipts.filter(r=>r.category==='business'&&r.status!=='void').reduce((a,r)=>a+(r.amount||0),0);
 const taxableProfit=Math.max(0,allG-bizCosts);
-const taxReserve=taxableProfit*TAX;
-const safeReserve=allG*TAX; // 20% of all gross, ignoring costs — the "in case expenses are disallowed" number
+const taxReserve=taxableProfit*taxRate(settings);
+const safeReserve=allG*taxRate(settings); // set-aside % of all gross, ignoring costs — the "in case expenses are disallowed" number
 const trueNet=taxableProfit-taxReserve;
 const dupEntryIds=new Set();
 activeE.forEach((e,i)=>{for(let j=i+1;j<activeE.length;j++){const f=activeE[j];if(Math.abs((e.subtotal||0)-(f.subtotal||0))<0.02&&datesClose(e.date,f.date)&&(e.client||'').toLowerCase().trim()===(f.client||'').toLowerCase().trim()){dupEntryIds.add(e.id);dupEntryIds.add(f.id);}}});
@@ -3170,7 +3170,7 @@ return(<Page>
               <div style={{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.client||e.description||'Entry'}</div>
               <div style={{fontSize:11,color:T.textMuted}}>{fmtD(e.date)}</div>
             </div>
-            <Inp value={e.subtotal} type="number" inputMode="decimal" onChange={ev=>{const v=parseFloat(ev.target.value)||0;updE(e.id,{subtotal:v,tax:v*TAX,net:v*(1-TAX)});}} style={{...miniInp,width:92}}/>
+            <Inp value={e.subtotal} type="number" inputMode="decimal" onChange={ev=>{const v=parseFloat(ev.target.value)||0;updE(e.id,{subtotal:v,tax:v*taxRate(settings),net:v*(1-taxRate(settings))});}} style={{...miniInp,width:92}}/>
             <button onClick={()=>onToggleStatus(e.id)} style={{...secBtn,color:e.status==='Paid'?T.paid:T.pending,borderColor:(e.status==='Paid'?T.paid:T.pending)+'55'}}>{e.status}</button>
             <button onClick={()=>onToggleVoid(e.id)} style={secBtn}>Void</button>
             <div style={{flexBasis:'100%',paddingLeft:2,display:'flex',gap:5}}>
@@ -3740,7 +3740,7 @@ const confirmBankIngest=rows=>{
       updI(row.inv.id,{status:'paid',paidDate:row.date});
       (row.inv.entryIds||[]).forEach(eid=>updE(eid,{status:'Paid'}));
     }else{
-      addE({type:'lump',date:row.date,client:row.description||'Bank income',description:row.description||'',rate:null,hours:null,subtotal:row.amount,tax:row.amount*TAX,net:row.amount*(1-TAX),status:'Paid'});
+      addE({type:'lump',date:row.date,client:row.description||'Bank income',description:row.description||'',rate:null,hours:null,subtotal:row.amount,tax:row.amount*taxRate(settings),net:row.amount*(1-taxRate(settings)),status:'Paid'});
     }
   });
   setBankPending(null);
