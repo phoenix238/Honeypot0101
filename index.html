@@ -112,17 +112,17 @@ const cleanRef=s=>(s||'').replace(/^PAYMENT\s+REF[:\s]*/i,'').trim();
 /** Start-year of the UK tax year containing `d` (tax years run 6 Apr – 5 Apr). */
 const ukTaxYearStart=d=>{const dt=d||new Date();const y=dt.getFullYear();const apr6=new Date(y,3,6);return dt>=apr6?y:y-1;};
 /**
- * The next payment reference a client should quote — e.g. "PTF 0001" — resetting to
- * 0001 at the first one issued in a new UK tax year. Pure: returns the ref plus the
- * settings patch that spends it. A caller that's only previewing (not yet saving) can
- * read `.ref` without ever applying `.patch`, so re-rendering a preview never burns a
+ * The next payment reference a client should quote — e.g. "PTF 1" — resetting to 1 at
+ * the first one issued in a new UK tax year. Pure: returns the ref plus the settings
+ * patch that spends it. A caller that's only previewing (not yet saving) can read
+ * `.ref` without ever applying `.patch`, so re-rendering a preview never burns a
  * number — only an actual save/create applies the patch via setSettings.
  */
 const allocatePayRef=settings=>{
   const ty=ukTaxYearStart(new Date());
   const stale=(settings&&settings.payRefYear)!==ty;
   const n=stale?1:((settings&&settings.payRefCounter)||1);
-  const ref=[cleanRef(settings&&settings.payRef),String(n).padStart(4,'0')].filter(Boolean).join(' ').trim();
+  const ref=[cleanRef(settings&&settings.payRef),String(n)].filter(Boolean).join(' ').trim();
   return{ref,patch:{payRefYear:ty,payRefCounter:n+1}};
 };
 /**
@@ -2720,7 +2720,7 @@ return(<Page>
   <SettingsRow label="Payment reference">
     <div>
       <Inp style={{fontFamily:"'Geist Mono',monospace"}} placeholder="PTF" value={settings.payRef??''} onChange={e=>set('payRef',e.target.value)}/>
-      <div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.55}}>What clients quote on the bank transfer. Next one will read <strong style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{allocatePayRef(settings).ref||'—'}</strong> — the number resets to 0001 each new UK tax year (6 April).</div>
+      <div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.55}}>What clients quote on the bank transfer. Next one will read <strong style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{allocatePayRef(settings).ref||'—'}</strong> — the number resets to 1 each new UK tax year (6 April).</div>
     </div>
   </SettingsRow>
 </SettingsSection>
@@ -3813,7 +3813,7 @@ const bulkConvertBankTxnsToInvoices=ids=>{
     if(!txn||txn.category!=='income'||txn.status!=='unreviewed')return;
     const eid=mkId(),iid=mkId();
     const invNum=`INV-${year}-${String(counter).padStart(3,'0')}`;
-    const payRef=[cleanRef(settings.payRef),String(payRefN).padStart(4,'0')].filter(Boolean).join(' ').trim();
+    const payRef=[cleanRef(settings.payRef),String(payRefN)].filter(Boolean).join(' ').trim();
     const entry={id:eid,type:'lump',date:txn.date,client:txn.description||'',description:txn.description||'',rate:null,hours:null,subtotal:txn.amount,tax:0,net:txn.amount,status:'Paid',invoiceId:iid};
     addE(entry);
     const inv={id:iid,invoiceNum:invNum,date:new Date().toISOString(),client:txn.description||'',clientEmail:'',subtotal:txn.amount,incomeTotal:txn.amount,reimbTotal:0,deductTotal:0,deductions:[],dueDate:txn.date,entryIds:[eid],reimbIds:[],docUrl:null,status:'paid',paidDate:txn.date,sourceBankTxnId:txn.id,matchedBankTxnId:txn.id,payRef};
