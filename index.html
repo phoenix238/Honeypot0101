@@ -107,199 +107,10 @@ const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric
 const mkId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 const PROXY_URL='https://honey-proxy.phoenix-2bc.workers.dev';
 
-// ---- QR encoder — byte mode, ECC level M, versions 1-20. Self-contained so it also
-// works inside the printed invoice/receipt window, which has no scripts of its own.
-const QRE=(()=>{
-  const EXP=new Uint8Array(512),LOG=new Uint8Array(256);
-  {let x=1;for(let i=0;i<255;i++){EXP[i]=x;LOG[x]=i;x<<=1;if(x&0x100)x^=0x11d;}for(let i=255;i<512;i++)EXP[i]=EXP[i-255];}
-  const mul=(a,b)=>(a&&b)?EXP[LOG[a]+LOG[b]]:0;
-  const genPoly=n=>{let p=[1];for(let i=0;i<n;i++){const q=new Array(p.length+1).fill(0);for(let j=0;j<p.length;j++){q[j]^=p[j];q[j+1]^=mul(p[j],EXP[i]);}p=q;}return p;};
-  const rsEnc=(data,ecLen)=>{const g=genPoly(ecLen),res=new Uint8Array(data.length+ecLen);res.set(data);
-    for(let i=0;i<data.length;i++){const f=res[i];if(f)for(let j=1;j<g.length;j++)res[i+j]^=mul(g[j],f);}
-    return res.slice(data.length);};
-  // per version: [ecCodewordsPerBlock, group1Blocks, group1Data, group2Blocks, group2Data] at ECC level M
-  const BLK=[null,[10,1,16,0,0],[16,1,28,0,0],[26,1,44,0,0],[18,2,32,0,0],[24,2,43,0,0],[16,4,27,0,0],[18,4,31,0,0],[22,2,38,2,39],[22,3,36,2,37],[26,4,43,1,44],[30,1,50,4,51],[22,6,36,2,37],[22,8,37,1,38],[24,4,40,5,41],[24,5,41,5,42],[28,7,45,3,46],[28,10,46,1,47],[26,9,43,4,44],[26,3,44,11,45],[26,3,41,13,42]];
-  const ALIGN=[null,[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90]];
-  const dataCw=v=>{const b=BLK[v];return b[1]*b[2]+b[3]*b[4];};
-  const gbit=(x,i)=>(x>>>i)&1;
-  function build(text){
-    const bytes=Array.from(new TextEncoder().encode(text));
-    let ver=0;
-    for(let v=1;v<=20;v++){const cnt=v<10?8:16;if(dataCw(v)*8>=4+cnt+8*bytes.length){ver=v;break;}}
-    if(!ver)throw new Error('QR: content too long');
-    const cap=dataCw(ver)*8,bits=[];
-    const put=(val,n)=>{for(let i=n-1;i>=0;i--)bits.push((val>>>i)&1);};
-    put(4,4);put(bytes.length,ver<10?8:16);bytes.forEach(b=>put(b,8));
-    for(let i=0;i<4&&bits.length<cap;i++)bits.push(0);
-    while(bits.length%8)bits.push(0);
-    for(let p=0;bits.length<cap;p^=1)put(p?0x11:0xEC,8);
-    const cw=new Uint8Array(bits.length/8);
-    for(let i=0;i<bits.length;i++)if(bits[i])cw[i>>3]|=0x80>>(i&7);
-    const b0=BLK[ver],ecLen=b0[0],n1=b0[1],d1=b0[2],n2=b0[3],d2=b0[4];
-    const blocks=[],eccs=[];let off=0;
-    for(let i=0;i<n1+n2;i++){const len=i<n1?d1:d2;const b=cw.slice(off,off+len);off+=len;blocks.push(b);eccs.push(rsEnc(b,ecLen));}
-    const out=[];
-    for(let i=0;i<Math.max(d1,d2);i++)blocks.forEach(b=>{if(i<b.length)out.push(b[i]);});
-    for(let i=0;i<ecLen;i++)eccs.forEach(e=>out.push(e[i]));
-    const final=Uint8Array.from(out);
-    const size=17+4*ver,mod=[],fn=[];
-    for(let y=0;y<size;y++){mod.push(new Array(size).fill(0));fn.push(new Array(size).fill(0));}
-    const setFn=(x,y,d)=>{if(x<0||y<0||x>=size||y>=size)return;mod[y][x]=d?1:0;fn[y][x]=1;};
-    // timing first — the finder patterns overwrite the stretch running through them
-    for(let i=0;i<size;i++){setFn(6,i,i%2===0);setFn(i,6,i%2===0);}
-    const corners=[[3,3],[size-4,3],[3,size-4]];
-    for(let c=0;c<3;c++){const fx=corners[c][0],fy=corners[c][1];
-      for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const d=Math.max(Math.abs(dx),Math.abs(dy));setFn(fx+dx,fy+dy,d!==2&&d!==4);}}
-    const ap=ALIGN[ver],na=ap.length;
-    for(let i=0;i<na;i++)for(let j=0;j<na;j++){
-      if((i===0&&j===0)||(i===0&&j===na-1)||(i===na-1&&j===0))continue;
-      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)setFn(ap[i]+dx,ap[j]+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1);
-    }
-    if(ver>=7){let rem=ver;for(let i=0;i<12;i++)rem=(rem<<1)^((rem>>>11)*0x1F25);
-      const vb=(ver<<12)|rem;
-      for(let i=0;i<18;i++){const b=gbit(vb,i),a=size-11+i%3,c=Math.floor(i/3);setFn(a,c,b);setFn(c,a,b);}}
-    const fmtBits=m=>{const d=(0<<3)|m;let rem=d;for(let i=0;i<10;i++)rem=(rem<<1)^((rem>>>9)*0x537);return((d<<10)|rem)^0x5412;};
-    const placeFmt=(set,m)=>{const b=fmtBits(m);
-      for(let i=0;i<=5;i++)set(8,i,gbit(b,i));
-      set(8,7,gbit(b,6));set(8,8,gbit(b,7));set(7,8,gbit(b,8));
-      for(let i=9;i<15;i++)set(14-i,8,gbit(b,i));
-      for(let i=0;i<8;i++)set(size-1-i,8,gbit(b,i));
-      for(let i=8;i<15;i++)set(8,size-15+i,gbit(b,i));
-      set(8,size-8,1);};
-    placeFmt(setFn,0); // reserve the format areas before laying out data
-    let bi=0;
-    for(let right=size-1;right>=1;right-=2){
-      if(right===6)right=5;
-      for(let vert=0;vert<size;vert++)for(let j=0;j<2;j++){
-        const x=right-j,up=((right+1)&2)===0,y=up?size-1-vert:vert;
-        if(!fn[y][x]&&bi<final.length*8){mod[y][x]=gbit(final[bi>>>3],7-(bi&7));bi++;}
-      }
-    }
-    const maskAt=(m,x,y)=>{
-      if(m===0)return(x+y)%2===0; if(m===1)return y%2===0; if(m===2)return x%3===0;
-      if(m===3)return(x+y)%3===0; if(m===4)return(Math.floor(x/3)+Math.floor(y/2))%2===0;
-      if(m===5)return(x*y)%2+(x*y)%3===0; if(m===6)return((x*y)%2+(x*y)%3)%2===0;
-      return((x+y)%2+(x*y)%3)%2===0;};
-    const FIND=[1,0,1,1,1,0,1,0,0,0,0],FINR=[0,0,0,0,1,0,1,1,1,0,1];
-    const penalty=g=>{
-      let p=0;
-      const run=line=>{let s=0,c=line[0],len=1;
-        for(let i=1;i<line.length;i++){if(line[i]===c)len++;else{if(len>=5)s+=3+(len-5);c=line[i];len=1;}}
-        if(len>=5)s+=3+(len-5);return s;};
-      const hasAt=(line,i,pat)=>{for(let k=0;k<11;k++)if(line[i+k]!==pat[k])return false;return true;};
-      for(let y=0;y<size;y++){const row=g[y];p+=run(row);
-        for(let i=0;i+11<=size;i++)if(hasAt(row,i,FIND)||hasAt(row,i,FINR))p+=40;}
-      for(let x=0;x<size;x++){const col=[];for(let y=0;y<size;y++)col.push(g[y][x]);p+=run(col);
-        for(let i=0;i+11<=size;i++)if(hasAt(col,i,FIND)||hasAt(col,i,FINR))p+=40;}
-      for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){const v=g[y][x];if(v===g[y][x+1]&&v===g[y+1][x]&&v===g[y+1][x+1])p+=3;}
-      let dark=0;for(let y=0;y<size;y++)for(let x=0;x<size;x++)dark+=g[y][x];
-      return p+10*Math.floor(Math.abs(dark*100/(size*size)-50)/5);};
-    let best=null,bestP=Infinity;
-    for(let m=0;m<8;m++){
-      const g=mod.map(r=>r.slice());
-      for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(!fn[y][x]&&maskAt(m,x,y))g[y][x]^=1;
-      placeFmt((x,y,v)=>{g[y][x]=v?1:0;},m);
-      const p=penalty(g);
-      if(p<bestP){bestP=p;best=g;}
-    }
-    return best;
-  }
-  /** SVG markup for `text`. `px` is the rendered size of the whole square. */
-  const svg=(text,o)=>{
-    o=o||{};
-    const px=o.px||200,quiet=o.quiet==null?3:o.quiet,dark=o.dark||'#16140F',light=o.light||'#FFFFFF';
-    const m=build(text),n=m.length,total=n+quiet*2;
-    let d='';
-    for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(m[y][x])d+='M'+(x+quiet)+' '+(y+quiet)+'h1v1h-1z';
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="'+px+'" height="'+px+'" viewBox="0 0 '+total+' '+total+'" shape-rendering="crispEdges"><rect width="'+total+'" height="'+total+'" fill="'+light+'"/><path d="'+d+'" fill="'+dark+'"/></svg>';
-  };
-  return{build:build,svg:svg};
-})();
-
-// ---- Payment links, references and the scannable payload
+// ---- Payment references
 const cleanRef=s=>(s||'').replace(/^PAYMENT\s+REF[:\s]*/i,'').trim();
 /** The reference the client should quote — what bank-feed matching keys off. */
 const payReference=(settings,extra)=>[cleanRef(settings&&settings.payRef),extra||''].filter(Boolean).join(' ').trim();
-/**
- * Turn the saved handle into a real pay link with the amount and reference baked in.
- * Returns '' for anything that would not survive being scanned — a bare username or a
- * provider name builds a dead address, and a phone answers that with "no app can use
- * this QR code", so it is better to fall back to the bank-details page.
- */
-const payUrl=(settings,amount,reference)=>{
-  const raw=((settings&&settings.paymentLink)||'').trim();
-  if(!raw)return '';
-  const amt=(amount||0)>0?(Math.round(amount*100)/100).toFixed(2):'';
-  // drop scheme, and any query/hash — a link shared from a banking app carries the
-  // amount and note it was made for, which we replace with this payment's own
-  const u=raw.replace(/^https?:\/\//i,'').replace(/\s+/g,'').split(/[?#]/)[0].replace(/\/+$/,'');
-  const host=u.split('/')[0].toLowerCase();
-  if(!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host))return ''; // not a hostname at all
-  const seg=u.slice(host.length).split('/').filter(Boolean);
-  // tolerate a handle that was pasted with an amount already on the end
-  if(seg.length>1&&/^(gbp)?[\d.]+(gbp)?$/i.test(seg[seg.length-1]))seg.pop();
-  const path=seg.join('/');
-  const known=/(^|\.)(monzo|paypal|revolut)\.me$/.test(host);
-  if(known&&!path)return ''; // provider with no username is a dead link
-  if(/(^|\.)monzo\.me$/.test(host))return 'https://monzo.me/'+path+(amt?'/'+amt:'')+(reference?'?d='+encodeURIComponent(reference):'');
-  if(/(^|\.)paypal\.me$/.test(host))return 'https://paypal.me/'+path+(amt?'/'+amt+'GBP':'');
-  if(/(^|\.)revolut\.me$/.test(host))return 'https://revolut.me/'+path+(amt?'/gbp'+amt:'');
-  return 'https://'+u; // any other provider: use exactly what was saved
-};
-/** Why the saved payment link is unusable, or '' if it is fine (or simply not set). */
-const payLinkProblem=settings=>{
-  const raw=((settings&&settings.paymentLink)||'').trim();
-  if(!raw||payUrl(settings,1,''))return '';
-  const host=raw.replace(/^https?:\/\//i,'').replace(/\s+/g,'').split('/')[0].toLowerCase();
-  if(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host))return 'Add your username after the site — like monzo.me/yourname.';
-  return 'That is not a full link. Include the site as well as your name — like monzo.me/yourname.';
-};
-/**
- * A softer warning for a link that will scan fine but that Honey cannot safely reuse:
- * anything outside Monzo.me/Revolut.me/PayPal.me is shown exactly as saved, every
- * time, with no amount or reference swapped in. Business "payment link" tools (Monzo
- * Business's included) mint one link per amount — paste one of those here and every
- * client sees whatever amount that link was made for, not what they actually owe.
- */
-const payLinkCaution=settings=>{
-  const raw=((settings&&settings.paymentLink)||'').trim();
-  if(!raw||!payUrl(settings,1,''))return ''; // empty, or already a hard error
-  const host=raw.replace(/^https?:\/\//i,'').replace(/\s+/g,'').split(/[?#/]/)[0].toLowerCase();
-  if(/(^|\.)(monzo|paypal|revolut)\.me$/.test(host))return '';
-  return 'This isn’t a Monzo.me, Revolut.me or PayPal.me link, so Honey can’t swap in the amount or reference — it shows exactly what you saved, for every payment. Make sure it isn’t fixed to one specific amount, or use your bank details instead.';
-};
-/**
- * A link to this app's own pay.html showing the bank details, used when there is no
- * provider link. Any phone can open a web address; a QR holding plain text is refused
- * outright by many of them. The details ride in the fragment, which is never sent to
- * the server. Returns '' when the app is not served over http(s), since a file:// or
- * blob: address means nothing on someone else's phone.
- */
-const payPageUrl=(settings,amount,reference)=>{
-  if(typeof location==='undefined'||!/^https?:$/.test(location.protocol))return '';
-  const sc=(settings&&settings.sortCode)||'',an=(settings&&settings.accountNumber)||'';
-  const bank=(settings&&settings.bankDetails)||'';
-  if(!sc&&!an&&!bank)return '';
-  const q=new URLSearchParams();
-  if(settings&&settings.name)q.set('n',settings.name);
-  if(sc||an){if(sc)q.set('sc',sc);if(an)q.set('an',an);}
-  else q.set('b',bank);
-  if((amount||0)>0)q.set('a',(Math.round(amount*100)/100).toFixed(2));
-  if(reference)q.set('r',reference);
-  return location.origin+location.pathname.replace(/[^/]*$/,'')+'pay.html#'+q.toString();
-};
-/** Plain-text fallback — scannable by any camera, readable by any bank app. */
-const bankPayText=(settings,amount,reference)=>{
-  const L=[];
-  if(settings&&settings.name)L.push('Pay '+settings.name);
-  const sc=(settings&&settings.sortCode)||'',an=(settings&&settings.accountNumber)||'';
-  if(sc)L.push('Sort code: '+sc);
-  if(an)L.push('Account number: '+an);
-  if(!sc&&!an&&settings&&settings.bankDetails)L.push(settings.bankDetails);
-  if((amount||0)>0)L.push('Amount: '+fmt(amount));
-  if(reference)L.push('Reference: '+reference);
-  return L.join('\n');
-};
 /**
  * Best-effort split of the old single-line "Sort: 00-00-00 · Acc: 12345678" text into
  * separate sort code / account number, so switching to the two-field layout doesn't
@@ -312,93 +123,22 @@ const splitBankDetails=text=>{
   const an=(rest.match(/\b(\d{7,8})\b/)||[])[1]||'';
   return{sortCode:sc,accountNumber:an};
 };
-
-/** White-backed QR block. Falls back to a readable note if the payload is too long. */
-function QRBox({value,px=200,pad=12}){
-  if(!value)return null;
-  let markup=null;
-  try{markup=QRE.svg(value,{px:px,quiet:2});}catch(e){markup=null;}
-  if(!markup)return(<div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:16,fontSize:12,color:T.textMuted,maxWidth:px}}>Too long to fit in a QR code.</div>);
-  return(<div style={{background:'#fff',padding:pad,borderRadius:14,display:'inline-block',lineHeight:0}} dangerouslySetInnerHTML={{__html:markup}}/>);
-}
-
-/** A small copy-to-clipboard row. */
-function CopyLine({label,value,mono}){
-  const[done,setDone]=useState(false);
-  if(!value)return null;
-  const copy=()=>{navigator.clipboard.writeText(value).then(()=>{setDone(true);setTimeout(()=>setDone(false),1800);},()=>{});};
-  return(<button onClick={copy} style={{display:'flex',alignItems:'center',gap:10,width:'100%',textAlign:'left',background:T.bg,border:`1px solid ${done?T.lumpGreen+'66':T.border}`,borderRadius:10,padding:'9px 12px',marginBottom:7,cursor:'pointer'}}>
-    <div style={{flex:1,minWidth:0}}>
-      <div style={{fontSize:10,color:T.textFaint,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:2}}>{label}</div>
-      <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:mono?"'Geist Mono',monospace":'inherit',wordBreak:'break-word'}}>{value}</div>
-    </div>
-    <span style={{fontSize:11,fontWeight:700,color:done?T.lumpGreen:T.textMuted,flexShrink:0}}>{done?'Copied':'Copy'}</span>
-  </button>);
-}
-
 /**
- * The scannable face itself: pay-link / bank-details tabs, the QR, and the details
- * worth copying. Shared by the pop-up and the Take Payment screen.
+ * Spells out how a timed/hours entry's total was worked out, for the invoice line
+ * item — e.g. "10-13 @ £16.50/hr" or "8 hours x £16.50/hr". Lump sums carry no rate,
+ * so they get nothing extra.
  */
-function PayFace({settings,amount,reference,tab,setTab,qrPx=224}){
-  const link=payUrl(settings,amount,reference);
-  const sortCode=(settings&&settings.sortCode)||'',acctNum=(settings&&settings.accountNumber)||'';
-  const structured=!!(sortCode||acctNum);
-  const sortAcc=(settings&&settings.bankDetails)||'';
-  const page=payPageUrl(settings,amount,reference);
-  const problem=payLinkProblem(settings);
-  // a web address every phone can open, falling back to plain text only if we have no
-  // http(s) home to point at
-  const bankPayload=page||bankPayText(settings,amount,reference);
-  const payload=tab==='link'&&link?link:bankPayload;
-  return(<div>
-    {link&&(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
-      {[['link','Pay link'],['bank','Bank details']].map(t=>(
-        <button key={t[0]} onClick={()=>setTab(t[0])} style={{background:tab===t[0]?T.accent+'22':T.bg,border:`1.5px solid ${tab===t[0]?T.accent:T.border}`,borderRadius:10,padding:'8px 4px',fontSize:12,fontWeight:700,color:tab===t[0]?T.accent:T.textMuted}}>{t[1]}</button>))}
-    </div>)}
-    {problem&&(<div style={{fontSize:12,color:T.danger,background:T.danger+'12',border:`1px solid ${T.danger}44`,borderRadius:10,padding:'9px 12px',marginBottom:14,lineHeight:1.5}}><strong>Your payment link won't scan.</strong> {problem} Showing your bank details instead.</div>)}
-    <div style={{textAlign:'center',marginBottom:14}}><QRBox value={payload} px={qrPx}/></div>
-    <div style={{fontSize:12,color:T.textMuted,textAlign:'center',lineHeight:1.55,marginBottom:16}}>
-      {tab==='link'&&link
-        ?'Point a camera at this — it opens their banking app with the amount already filled in.'
-        :page?'Point a camera at this — it opens a page with your bank details and the reference, ready to copy.'
-        :(sortAcc?'Scan or copy these details into any banking app.':'Add your bank details in Settings so they show here.')}
-    </div>
-    {reference&&<CopyLine label="Reference — ask them to include this" value={reference} mono/>}
-    {tab!=='link'&&structured&&<CopyLine label="Sort code" value={sortCode} mono/>}
-    {tab!=='link'&&structured&&<CopyLine label="Account number" value={acctNum} mono/>}
-    {tab!=='link'&&!structured&&sortAcc&&<CopyLine label="Bank details" value={sortAcc} mono/>}
-    {tab!=='link'&&page&&<CopyLine label="Link to send instead" value={page}/>}
-    {tab==='link'&&link&&<CopyLine label="Pay link" value={link}/>}
-    {!link&&!structured&&!sortAcc&&(<div style={{fontSize:12,color:T.pending,background:T.pending+'14',border:`1px solid ${T.pending}44`,borderRadius:10,padding:'10px 12px'}}>Add a payment link or bank details in Settings → Your Profile to use this.</div>)}
-  </div>);
-}
-
-/**
- * The screen you hold up at the end of a session. Defaults to the pay link (their
- * banking app opens with the amount already filled in) and falls back to the raw
- * bank details for anyone whose bank will not follow the link.
- */
-function PayQR({open,onClose,amount,reference,client,settings,title}){
-  const link=payUrl(settings,amount,reference);
-  const[tab,setTab]=useState(link?'link':'bank');
-  useEffect(()=>{setTab(link?'link':'bank');},[link,open]);
-  if(!open)return null;
-  return(<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.72)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:20,padding:'22px 20px 24px',width:'100%',maxWidth:400,maxHeight:'92vh',overflowY:'auto',border:`1px solid ${T.border}`}}>
-      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom:14}}>
-        <div style={{minWidth:0}}>
-          <div style={{fontFamily:"'Bricolage Grotesque',serif",fontWeight:800,fontSize:19,letterSpacing:'-.01em'}}>{title||'Scan to pay'}</div>
-          {client&&<div style={{fontSize:13,color:T.textMuted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client}</div>}
-        </div>
-        <button onClick={onClose} style={{background:'none',border:'none',color:T.textMuted,fontSize:24,lineHeight:1,padding:'0 2px'}}>×</button>
-      </div>
-      {(amount||0)>0&&<div style={{fontFamily:"'Geist Mono',monospace",fontSize:34,fontWeight:700,color:T.accent,marginBottom:16,letterSpacing:'-.02em'}}>{fmt(amount)}</div>}
-      <PayFace settings={settings} amount={amount} reference={reference} tab={tab} setTab={setTab} qrPx={224}/>
-      <Btn full onClick={onClose} outline style={{marginTop:10}}>Done</Btn>
-    </div>
-  </div>);
-}
+const entryLineDesc=e=>{
+  if(!e)return '';
+  const trimT=t=>t&&t.endsWith(':00')?t.slice(0,-3):t;
+  if(e.type==='timed'&&e.startTime&&e.endTime&&e.rate!=null)
+    return `${trimT(e.startTime)}-${trimT(e.endTime)} @ £${e.rate}/hr`;
+  if(e.type==='manual'&&(e.hours||e.hours===0)&&e.rate!=null){
+    const h=Number(e.hours);
+    return `${Number.isInteger(h)?h:h.toFixed(2)} hours x £${e.rate}/hr`;
+  }
+  return '';
+};
 
 // Shared matching engine: finds the closest candidate bank income row for an invoice,
 // or vice versa, by amount (±2p) and date proximity (reuses datesClose's <6-day window).
@@ -483,7 +223,7 @@ const Sheets={
     }
   },
   async save(data){if(!this._url)return false;try{const r=(data.receipts||[]).map(r=>r.driveUrl?{...r,imageData:null}:r);await fetch(this._url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({...data,receipts:r})});return true;}catch{return false;}},
-  async createInvoice(inv,settings){if(!this._url)return null;try{const slim={invoiceNum:inv.invoiceNum,client:inv.client,clientEmail:inv.clientEmail||'',clientAddress:inv.clientAddress||'',dueDate:inv.dueDate||'',notes:inv.notes||'',grandTotal:inv.grandTotal,incomeTotal:inv.incomeTotal||0,reimbTotal:inv.reimbTotal||0,payRef:settings.payRef||'',invoicePeriod:inv.invoicePeriod||'',entries:(inv.selEntries||[]).map(e=>({date:e.date,client:e.client||'',description:e.description||'',subtotal:e.subtotal,hours:e.hours||0,rate:e.rate||0,type:e.type})),reimbs:(inv.selReimbs||[]).map(r=>({date:r.date,description:r.description||'',amount:r.amount,driveUrl:r.driveUrl||''}))};const payload={invoice:slim,settings:{name:settings.name||'',business:settings.business||'',email:settings.email||'',payRef:settings.payRef||''}};const encoded=encodeURIComponent(JSON.stringify(payload));if(encoded.length>7000)return{err:'Invoice data too large for URL.'};const d=await this._jsonp(this._url+'?action=createInvoice&data='+encoded,30000);if(d?.url)return{url:d.url};return{err:d?.error||'No URL returned'};}catch(e){return{err:e.message||'Failed'};}},
+  async createInvoice(inv,settings){if(!this._url)return null;try{const slim={invoiceNum:inv.invoiceNum,client:inv.client,clientEmail:inv.clientEmail||'',clientAddress:inv.clientAddress||'',dueDate:inv.dueDate||'',notes:inv.notes||'',grandTotal:inv.grandTotal,incomeTotal:inv.incomeTotal||0,reimbTotal:inv.reimbTotal||0,payRef:settings.payRef||'',invoicePeriod:inv.invoicePeriod||'',entries:(inv.selEntries||[]).map(e=>({date:e.date,client:e.client||'',description:e.description||'',subtotal:e.subtotal,hours:e.hours||0,rate:e.rate||0,type:e.type,startTime:e.startTime||'',endTime:e.endTime||''})),reimbs:(inv.selReimbs||[]).map(r=>({date:r.date,description:r.description||'',amount:r.amount,driveUrl:r.driveUrl||''}))};const payload={invoice:slim,settings:{name:settings.name||'',business:settings.business||'',email:settings.email||'',payRef:settings.payRef||''}};const encoded=encodeURIComponent(JSON.stringify(payload));if(encoded.length>7000)return{err:'Invoice data too large for URL.'};const d=await this._jsonp(this._url+'?action=createInvoice&data='+encoded,30000);if(d?.url)return{url:d.url};return{err:d?.error||'No URL returned'};}catch(e){return{err:e.message||'Failed'};}},
   async uploadReceipt(receipt){if(!this._url||!receipt.imageData)return null;try{const r=await fetch(this._url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'uploadReceipt',receipt:{id:receipt.id,description:receipt.description||'Receipt',date:receipt.date||'',imageData:receipt.imageData,imageName:receipt.imageName||'receipt.jpg',category:receipt.category||'business'}})});const d=await r.json();return d.driveUrl||null;}catch{return null;}},
   async scanGmailReceipts(){if(!this._url)return null;try{return await this._jsonp(this._url+'?action=scanReceipts',35000);}catch{return null;}},
   async labelProcessed(ids){if(!this._url||!ids||!ids.length)return;try{await this._jsonp(this._url+'?action=labelProcessed&ids='+ids.join(','),15000);}catch{}},
@@ -614,22 +354,15 @@ function SyncPill({status}){const map={loading:{c:T.textMuted,label:'Loading…'
 const QUICK_AMOUNTS=[30,35,40,45,50,55,60,65,70,75,80];
 
 /**
- * Take a payment on the spot — no work logged, no invoice raised. Type the amount,
- * hold up the code, and only afterwards decide whether to record it.
+ * Log a payment on the spot — no work logged, no invoice raised. Type the amount and
+ * who paid, then record it once the money is actually in.
  */
 function TakePaymentView({settings,entries,clients,onAdd,onAddInvoice,invoiceCounter,back}){
   const[amount,setAmount]=useState('');
   const[who,setWho]=useState('');
-  // whether a usable pay link exists at all, independent of the amount typed so far —
-  // decides which tab opens by default, same as the pop-up version of this screen
-  const hasLink=!!payUrl(settings,1,'');
-  const[tab,setTab]=useState(hasLink?'link':'bank');
-  useEffect(()=>{setTab(hasLink?'link':'bank');},[hasLink]);
   const[done,setDone]=useState(null);
   const amt=parseFloat(amount)||0;
   const d=today();
-  const tail=[(who||'').trim().split(' ')[0],d.slice(8,10)+d.slice(5,7)].filter(Boolean).join(' ');
-  const reference=payReference(settings,tail);
   const quick=QUICK_AMOUNTS;
   const names=Array.from(new Set([].concat((clients||[]).map(c=>c&&c.name),(entries||[]).map(e=>e&&e.client)).filter(Boolean))).slice(0,40);
 
@@ -644,14 +377,14 @@ function TakePaymentView({settings,entries,clients,onAdd,onAddInvoice,invoiceCou
         entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};
       onAddInvoice(inv);invId=num;
     }
-    const entry={type:'lump',date:d,client:who,description:'Payment taken by QR',rate:null,hours:null,
+    const entry={type:'lump',date:d,client:who,description:'Payment received',rate:null,hours:null,
       startTime:null,endTime:null,subtotal:amt,tax:amt*TAX,net:amt-amt*TAX,status:'Paid',id:tmpId,invoiceId:invId};
     onAdd(entry);
     setDone({amount:amt,client:who,inv:inv,entry:entry});
   };
   const reset=()=>{setAmount('');setWho('');setDone(null);};
 
-  if(done)return(<Page><PgTitle back={back}>Payment taken</PgTitle>
+  if(done)return(<Page><PgTitle back={back}>Payment logged</PgTitle>
     <Card style={{border:`1.5px solid ${T.lumpGreen}55`,background:T.lumpGreen+'0d',textAlign:'center',padding:'26px 18px',marginBottom:14}}>
       <I n="paid" sz={38} c={T.lumpGreen}/>
       <div style={{fontFamily:"'Geist Mono',monospace",fontSize:32,fontWeight:700,color:T.lumpGreen,margin:'10px 0 4px'}}>{fmt(done.amount)}</div>
@@ -660,11 +393,11 @@ function TakePaymentView({settings,entries,clients,onAdd,onAddInvoice,invoiceCou
     </Card>
     {done.inv&&done.inv.docType==='receipt'&&(
       <Btn full onClick={()=>printPaymentDoc(done.inv,{entries:[done.entry],receipts:[],settings:settings},'receipt')} style={{marginBottom:10}}>Print / save the receipt</Btn>)}
-    <Btn full outline onClick={reset} style={{marginBottom:10}}>Take another</Btn>
+    <Btn full outline onClick={reset} style={{marginBottom:10}}>Log another</Btn>
     <Btn full outline color={T.textMuted} onClick={back}>Done</Btn>
   </Page>);
 
-  return(<Page><PgTitle back={back}>Take a payment</PgTitle>
+  return(<Page><PgTitle back={back}>Log a payment</PgTitle>
     <Field label="Amount (£)">
       <input style={{...iBase,fontFamily:"'Geist Mono',monospace",fontSize:30,fontWeight:700,padding:'14px 16px',textAlign:'center'}}
         type="text" inputMode="decimal" placeholder="0.00" value={amount}
@@ -673,15 +406,12 @@ function TakePaymentView({settings,entries,clients,onAdd,onAddInvoice,invoiceCou
     {quick.length>0&&(<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
       {quick.map(q=>(<button key={q} onClick={()=>setAmount(String(q))} style={{background:amt===q?T.accent+'26':T.surface,border:`1.5px solid ${amt===q?T.accent:T.border}`,borderRadius:10,padding:'7px 14px',fontFamily:"'Geist Mono',monospace",fontSize:13,fontWeight:700,color:amt===q?T.accent:T.textMuted}}>{fmt(q)}</button>))}
     </div>)}
-    <Field label="Who's paying? (optional)">
-      <input style={iBase} list="hn-payer-names" placeholder="Name — goes in the reference" value={who} onChange={e=>setWho(e.target.value)}/>
+    <Field label="Who paid? (optional)">
+      <input style={iBase} list="hn-payer-names" placeholder="Name" value={who} onChange={e=>setWho(e.target.value)}/>
       <datalist id="hn-payer-names">{names.map(n=><option key={n} value={n}/>)}</datalist>
     </Field>
-    {amt>0
-      ?(<Card style={{marginTop:6,marginBottom:14}}><PayFace settings={settings} amount={amt} reference={reference} tab={tab} setTab={setTab} qrPx={230}/></Card>)
-      :(<Card style={{marginTop:6,marginBottom:14,textAlign:'center',padding:'34px 18px',color:T.textFaint,fontSize:13}}>Enter an amount and the code appears here.</Card>)}
     {amt>0&&(<>
-      <Lbl>When they've paid</Lbl>
+      <Lbl>Once the money's in</Lbl>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8}}>
         <Btn onClick={()=>record('receipt')} color={T.lumpGreen}>Paid — with receipt</Btn>
         <Btn onClick={()=>record('none')} outline color={T.lumpGreen}>Paid — just log it</Btn>
@@ -698,7 +428,7 @@ const printPaymentDoc=(inv,ctx,asType)=>{
   const es=(inv.entryIds||[]).map(id=>entries.find(e=>e.id===id)).filter(Boolean);
   const rs=(inv.reimbIds||[]).map(id=>receipts.find(r=>r.id===id)).filter(Boolean);
   const rows=[
-    ...es.map(e=>[fmtD(e.date),(e.client?e.client+(e.description?' — '+e.description:''):e.description||'Services'),fmt(e.subtotal)]),
+    ...es.map(e=>{const base=e.client?e.client+(e.description?' — '+e.description:''):(e.description||'Services');const detail=entryLineDesc(e);return[fmtD(e.date),detail?`${base} (${detail})`:base,fmt(e.subtotal)];}),
     ...rs.map(r=>[fmtD(r.date),(r.description||'Expense')+' (reimbursable)',fmt(r.amount)])
   ];
   if(rows.length===0)rows.push([fmtD((inv.date||'').split('T')[0]),'Services',fmt(inv.incomeTotal||inv.subtotal)]);
@@ -706,27 +436,19 @@ const printPaymentDoc=(inv,ctx,asType)=>{
   const isPaid=inv.status==='paid';
   // Receipts confirm money already in; invoices ask for it. Only ever render a receipt
   // for a record that is actually paid — an unpaid one falls back to the invoice
-  // layout so it still carries the pay QR. Older records have no docType and stay
-  // invoices unless the caller asks otherwise.
+  // layout. Older records have no docType and stay invoices unless the caller asks
+  // otherwise.
   const isReceipt=isPaid&&(asType||inv.docType||'invoice')==='receipt';
   const docTitle=isReceipt?'Receipt':'Invoice';
   const payRefFull=payReference(settings,inv.invoiceNum);
-  const link=payUrl(settings,inv.subtotal,payRefFull);
-  // prefer a real web link over plain text — same reasoning as the live QR screen: a
-  // phone refuses to act on plain text, but any phone can open a web address
-  const payPage=payPageUrl(settings,inv.subtotal,payRefFull);
-  let qrMarkup='';
-  if(!isReceipt&&!isPaid){
-    const payload=link||payPage||bankPayText(settings,inv.subtotal,payRefFull);
-    if(payload){try{qrMarkup=QRE.svg(payload,{px:128,quiet:2});}catch(e){qrMarkup='';}}
-  }
   const paidOn=inv.paidDate?fmtD(String(inv.paidDate).split('T')[0]):'';
   const bankLinesHtml=(()=>{
     const sc=settings.sortCode||'',an=settings.accountNumber||'';
     if(sc||an)return[sc?'Sort code: '+sc:'',an?'Account number: '+an:''].filter(Boolean).join('<br>');
     return settings.bankDetails||'';
   })();
-  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7;white-space:pre-line}.paidnote{margin-top:24px;padding-top:18px;border-top:1px solid #eeeeee;font-size:12px;color:#888888;line-height:1.7}.paybox{margin-top:26px;padding:20px;border:1px solid #e8e8e8;border-radius:10px;display:flex;gap:20px;align-items:flex-start;page-break-inside:avoid}.payqr{flex-shrink:0;line-height:0}.paymeta{flex:1;min-width:0}.paylbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc}.paybtn{display:inline-block;background:#6b7d6a;color:#ffffff;padding:9px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600}.payhint{font-size:11px;color:#999999;line-height:1.6;margin-bottom:8px}.payref{font-size:12px;color:#555555;margin-top:6px}.paybank{font-size:12px;color:#888888;line-height:1.7;margin-top:6px;white-space:pre-line}</style></head><body onload="window.print()"><div class="hd"><div><h1>${docTitle}</h1><div class="num">${inv.invoiceNum}</div>${isReceipt?`<div class="paidtag">PAID IN FULL — thank you</div>`:(isPaid?'<div class="paidtag">PAID — thank you</div>':'')}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${isReceipt?(paidOn?`<div>Paid ${paidOn}</div>`:''):(inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:'')}${payRefFull?`<div><strong>Ref: ${payRefFull}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">${isReceipt?'Received From':'Bill To'}</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid||isReceipt?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${isReceipt?`<div class="paidnote">Paid by bank transfer${paidOn?` on ${paidOn}`:''}. No payment is outstanding — this receipt is for your records.</div>`:''}${!isReceipt&&!isPaid&&(qrMarkup||link)?`<div class="paybox"><div class="payqr">${qrMarkup}</div><div class="paymeta"><div class="paylbl">Pay by bank transfer</div>${link?`<div style="margin:8px 0"><a class="paybtn" href="${link}">Pay online &#8594;</a></div>`:''}<div class="payhint">${qrMarkup?'Scan the code with your phone camera to open your banking app with the amount filled in.':''}</div><div class="payref">Reference: <strong>${payRefFull||inv.invoiceNum}</strong></div>${bankLinesHtml?`<div class="paybank">${bankLinesHtml}</div>`:''}</div></div>`:''}${bankLinesHtml&&!isReceipt&&!isPaid&&!qrMarkup&&!link?`<div class="foot">${bankLinesHtml}</div>`:''}</body></html>`;
+  const payFootHtml=!isReceipt&&!isPaid&&bankLinesHtml?`<div class="foot">Pay by bank transfer.<br>${bankLinesHtml}<br>Reference: <strong>${payRefFull||inv.invoiceNum}</strong></div>`:'';
+  const html=`<!DOCTYPE html><html><head><title>${inv.invoiceNum}</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#2a2a2a;max-width:720px;margin:0 auto;padding:50px 40px;-webkit-print-color-adjust:exact}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}h1{font-size:38px;font-weight:300;letter-spacing:-1px;margin:0;color:#1a1a1a}.num{font-size:11px;color:#aaaaaa;margin-top:4px}.meta{font-size:12px;color:#888888;text-align:right;line-height:2}.paidtag{display:inline-block;background:#e7f3ee;color:#2e7d5b;border:1px solid #bfe0d2;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-top:8px}hr{border:none;border-top:1px solid #e8e8e8;margin:22px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:20px 0}.plbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#cccccc;margin-bottom:8px}.pname{font-size:15px;font-weight:600;color:#1a1a1a}.pdetail{font-size:12px;color:#777777;line-height:1.6}table{width:100%;border-collapse:collapse}th{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#cccccc;text-align:left;padding-bottom:10px;border-bottom:1px solid #eeeeee}th.r,td.r{text-align:right}td{padding:11px 0;font-size:13px;border-bottom:1px solid #f4f4f4;color:#444444}.tot{margin-top:20px;padding-top:16px;border-top:2px solid #1a1a1a;text-align:right}.tot-amt{font-size:30px;font-weight:300;color:#6b7d6a}.foot{margin-top:28px;font-size:12px;color:#888888;line-height:1.7}.paidnote{margin-top:24px;padding-top:18px;border-top:1px solid #eeeeee;font-size:12px;color:#888888;line-height:1.7}</style></head><body onload="window.print()"><div class="hd"><div><h1>${docTitle}</h1><div class="num">${inv.invoiceNum}</div>${isReceipt?`<div class="paidtag">PAID IN FULL — thank you</div>`:(isPaid?'<div class="paidtag">PAID — thank you</div>':'')}</div><div class="meta"><div>${fmtD((inv.date||'').split('T')[0])}</div>${isReceipt?(paidOn?`<div>Paid ${paidOn}</div>`:''):(inv.dueDate?`<div>Due ${fmtD(inv.dueDate)}</div>`:'')}${payRefFull?`<div><strong>Ref: ${payRefFull}</strong></div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">${isReceipt?'Received From':'Bill To'}</div><div class="pname">${inv.client||'Client'}</div><div class="pdetail">${inv.clientEmail||''}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${rowHtml}</table><div class="tot"><div style="font-size:11px;color:#888888;margin-bottom:4px">Total ${isPaid||isReceipt?'Paid':'Due'}</div><div class="tot-amt">${fmt(inv.subtotal)}</div></div>${isReceipt?`<div class="paidnote">Paid by bank transfer${paidOn?` on ${paidOn}`:''}. No payment is outstanding — this receipt is for your records.</div>`:''}${payFootHtml}</body></html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();
 };
 function EntryRow({e,onDelete,onToggleStatus,onToggleVoid,confId,setConfId,onLogAgain,invoiceNum}){
@@ -834,9 +556,9 @@ return(<Page>
   </Card>
 )}
 <button onClick={()=>setView('pay')} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,width:'100%',background:T.accent,border:'none',borderRadius:16,padding:'17px 14px',color:T.bg,fontWeight:700,fontSize:16,marginBottom:7,cursor:'pointer',boxShadow:`0 6px 18px ${T.accent}22`}}>
-  <I n="scan" sz={23} c={T.bg}/> Take a payment
+  <I n="money" sz={23} c={T.bg}/> Log a payment
 </button>
-<div style={{fontSize:11,color:T.textFaint,textAlign:'center',marginBottom:16}}>Show a QR code — no invoice, nothing to log first</div>
+<div style={{fontSize:11,color:T.textFaint,textAlign:'center',marginBottom:16}}>Record money received — no invoice, nothing to log first</div>
 <Card style={{marginBottom:10,background:`linear-gradient(135deg,${T.surface} 0%,${T.bg} 100%)`,border:`1px solid ${T.border}`}}>
   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
     <div><div style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:1.2,marginBottom:4}}>Gross Earned</div><div style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:T.text}}>{fmt(allG)}</div><div style={{fontSize:11,color:T.lumpGreen,marginTop:3,fontWeight:600}}>{fmt(confirmedG)} confirmed</div></div>
@@ -992,7 +714,7 @@ function CalendarEventPicker({rate,onImport,onClose}){
     </div>
   </div>);
 }
-function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[showCalPicker,setShowCalPicker]=useState(false);const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[docType,setDocType]=useState('receipt');const[qrFor,setQrFor]=useState(null);const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*TAX,net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null,docNum='';const wantDoc=form.status==='Paid'&&docType!=='none'&&onAddInvoice;if(wantDoc){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');docNum=(docType==='receipt'?'RCT-':'INV-')+yr+'-'+num;const inv={invoiceNum:docNum,docType:docType,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};onAddInvoice(inv);invId=docNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});if(form.status!=='Paid'){const tail=docNum||[(form.client||'').split(' ')[0],form.date?form.date.slice(8,10)+form.date.slice(5,7):''].filter(Boolean).join(' ');setQrFor({client:form.client||'',amount:gross,reference:payReference(settings,tail)});}setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div>
+function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){const[showCalPicker,setShowCalPicker]=useState(false);const[type,setType]=useState(initialType||'timed');const[form,setForm]=useState({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});const[flash,setFlash]=useState(false);const[docType,setDocType]=useState('receipt');const set=(k,v)=>setForm(f=>({...f,[k]:v}));const timedH=()=>{if(!form.startTime||!form.endTime)return 0;const[sh,sm]=form.startTime.split(':').map(Number);const[eh,em]=form.endTime.split(':').map(Number);return Math.max(0,(eh*60+em-sh*60-sm)/60);};const gross=type==='lump'?(parseFloat(form.amount)||0):(type==='timed'?timedH():(parseFloat(form.hours)||0))*(parseFloat(form.rate)||0);const tax=gross*TAX,net=gross-tax;const tc={timed:T.timed,manual:T.manual,lump:T.lumpGreen}[type];const handleAdd=()=>{if(gross<=0)return;const tmpId='e'+Date.now().toString(36)+Math.random().toString(36).slice(2);let invId=null,docNum='';const wantDoc=form.status==='Paid'&&docType!=='none'&&onAddInvoice;if(wantDoc){const yr=new Date().getFullYear();const num=String(invoiceCounter||1).padStart(3,'0');docNum=(docType==='receipt'?'RCT-':'INV-')+yr+'-'+num;const inv={invoiceNum:docNum,docType:docType,date:new Date().toISOString(),client:form.client||'',clientEmail:'',subtotal:gross,incomeTotal:gross,reimbTotal:0,deductTotal:0,deductions:[],dueDate:'',entryIds:[tmpId],reimbIds:[],docUrl:null,status:'paid',paidDate:new Date().toISOString()};onAddInvoice(inv);invId=docNum;}onAdd({type,date:form.date,client:form.client,description:form.description,invoiceRef:settings.payRef||undefined,rate:type!=='lump'?parseFloat(form.rate):null,hours:type==='timed'?timedH():type==='manual'?parseFloat(form.hours):null,startTime:type==='timed'?form.startTime:null,endTime:type==='timed'?form.endTime:null,subtotal:gross,tax,net,status:form.status,id:tmpId,invoiceId:invId});setFlash(true);setTimeout(()=>{setFlash(false);setForm({date:today(),client:'',description:'',startTime:'',endTime:'',rate:settings.defaultRate||35,hours:'',amount:'',status:'Pending'});},1400);};return(<Page><PgTitle back={back}>Add Entry</PgTitle><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>{[['timed','Timed',T.timed],['manual','Hours',T.manual],['lump','Lump Sum',T.lumpGreen]].map(([t,l,c])=>(<button key={t} onClick={()=>setType(t)} style={{background:type===t?c+'20':T.surface,border:`1.5px solid ${type===t?c:T.border}`,borderRadius:12,padding:'10px 4px',color:type===t?c:T.textMuted,fontSize:13,fontWeight:700}}>{l}</button>))}</div>
 <button onClick={()=>setShowCalPicker(true)} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:700,padding:0,marginBottom:16,display:'flex',alignItems:'center',gap:5}}><I n="clock" sz={13} c={T.accent}/> Select calendar events instead</button>
 {showCalPicker&&<CalendarEventPicker rate={settings.defaultRate||35} onClose={()=>setShowCalPicker(false)} onImport={entries=>entries.forEach(e=>onAdd(e))}/>}
 <Field label="Date"><Inp type="date" value={form.date} onChange={e=>set('date',e.target.value)}/></Field><Field label="Client"><Inp placeholder="Client name" value={form.client} onChange={e=>set('client',e.target.value)}/></Field><Field label="Description"><Inp placeholder="What did you do?" value={form.description} onChange={e=>set('description',e.target.value)}/></Field>{type==='timed'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}><Field label="Start"><Inp type="time" value={form.startTime} onChange={e=>set('startTime',e.target.value)}/></Field><Field label="End"><Inp type="time" value={form.endTime} onChange={e=>set('endTime',e.target.value)}/></Field></div>}{type==='manual'&&<Field label="Hours"><Inp type="number" step="0.5" min="0" placeholder="2.5" value={form.hours} onChange={e=>set('hours',e.target.value)}/></Field>}{type!=='lump'&&<Field label="Hourly Rate (£)"><Inp type="number" step="1" min="0" value={form.rate} onChange={e=>set('rate',e.target.value)}/></Field>}{type==='lump'&&<Field label="Amount (£)"><Inp type="number" step="0.01" min="0" placeholder="500.00" value={form.amount} onChange={e=>set('amount',e.target.value)}/></Field>}<Field label="Status"><Sel value={form.status} onChange={e=>set('status',e.target.value)}><option value="Pending">Pending</option><option value="Paid">Paid</option></Sel></Field>{form.status==='Paid'&&onAddInvoice&&(<div style={{padding:'11px 14px',background:T.lumpGreen+'10',borderRadius:12,border:'1px solid '+T.lumpGreen+'33',marginBottom:8}}>
@@ -1007,9 +729,7 @@ function AddView({onAdd,settings,initialType,back,onAddInvoice,invoiceCounter}){
       :'Logs the income only. Nothing to send.'}
   </div>
 </div>)}
-{form.status!=='Paid'&&gross>0&&(<button onClick={()=>setQrFor({client:form.client||'',amount:gross,reference:payReference(settings,[(form.client||'').split(' ')[0],form.date?form.date.slice(8,10)+form.date.slice(5,7):''].filter(Boolean).join(' '))})} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,width:'100%',background:T.accent+'14',border:`1.5px solid ${T.accent}44`,borderRadius:12,padding:'11px 14px',color:T.accent,fontWeight:700,fontSize:13,marginBottom:8,cursor:'pointer'}}><I n="scan" sz={16} c={T.accent}/> Show payment QR</button>)}{gross>0&&(<Card style={{marginTop:6,marginBottom:16,border:`1px solid ${tc}44`}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.textMuted}}>{type==='timed'?`${timedH().toFixed(2)}h @ £${form.rate}/hr`:type==='manual'?`${form.hours}h @ £${form.rate}/hr`:'Lump sum'}</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(gross)}</span></div><div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}><span style={{fontSize:13,color:T.textMuted}}>Tax Stash (20%)</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.danger}}>{fmt(tax)}</span></div><Hr/><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700}}>Take home</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:tc}}>{fmt(net)}</span></div></Card>)}<Btn full onClick={handleAdd} disabled={gross<=0} color={flash?T.lumpGreen:tc}>{flash?<><I n="check" sz={17} c={T.bg}/> Saved!</>:'Add Entry'}</Btn>
-<PayQR open={!!qrFor} onClose={()=>setQrFor(null)} client={qrFor&&qrFor.client} amount={qrFor&&qrFor.amount} reference={qrFor&&qrFor.reference} settings={settings}/>
-</Page>);}
+{gross>0&&(<Card style={{marginTop:6,marginBottom:16,border:`1px solid ${tc}44`}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.textMuted}}>{type==='timed'?`${timedH().toFixed(2)}h @ £${form.rate}/hr`:type==='manual'?`${form.hours}h @ £${form.rate}/hr`:'Lump sum'}</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14}}>{fmt(gross)}</span></div><div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}><span style={{fontSize:13,color:T.textMuted}}>Tax Stash (20%)</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:14,color:T.danger}}>{fmt(tax)}</span></div><Hr/><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700}}>Take home</span><span style={{fontFamily:'Geist Mono,monospace',fontSize:20,fontWeight:700,color:tc}}>{fmt(net)}</span></div></Card>)}<Btn full onClick={handleAdd} disabled={gross<=0} color={flash?T.lumpGreen:tc}>{flash?<><I n="check" sz={17} c={T.bg}/> Saved!</>:'Add Entry'}</Btn></Page>);}
 
 // ── LOG ──────────────────────────────────────────────────────────────────────
 function LogView({entries,invoices=[],onDelete,onToggleStatus,onToggleVoid,onAdd}){const[confId,setConfId]=useState(null);const[filter,setFilter]=useState('all');const invoicedMap={};invoices.forEach(inv=>(inv.entryIds||[]).forEach(eid=>{if(!invoicedMap[eid])invoicedMap[eid]=inv.invoiceNum||'INV';}));const getInvNum=eid=>invoicedMap[eid]||null;const[logAgainFlash,setLogAgainFlash]=useState(null);useEffect(()=>{if(confId){const t=setTimeout(()=>setConfId(null),3000);return()=>clearTimeout(t);}},[confId]);const filtered=filter==='all'?entries:filter==='uninvoiced'?entries.filter(e=>!e.invoiceId&&!invoicedMap[e.id]):entries.filter(e=>(e.status||'Pending')===filter);const tot=filtered.reduce((a,e)=>({g:a.g+(e.subtotal||0),n:a.n+(e.net||0)}),{g:0,n:0});const handleLogAgain=onAdd?e=>{onAdd({type:e.type==='timed'?'lump':e.type,date:today(),client:e.client||'',description:e.description||'',rate:e.rate,hours:e.type==='timed'?null:e.hours,startTime:null,endTime:null,subtotal:e.subtotal,tax:e.tax,net:e.net,status:'Pending'});setLogAgainFlash(e.id);setTimeout(()=>setLogAgainFlash(null),1600);}:null;return(<Page><div style={{fontFamily:'Geist Mono,monospace',fontSize:18,fontWeight:700,marginBottom:4}}>Entry Log</div><div style={{fontSize:13,color:T.textMuted,marginBottom:14}}>{filtered.length} entries · {fmt(tot.g)} gross · {fmt(tot.n)} take home</div>{logAgainFlash&&<div style={{background:T.lumpGreen+'18',border:`1px solid ${T.lumpGreen}44`,borderRadius:10,padding:'9px 14px',marginBottom:10,fontSize:12,color:T.lumpGreen,fontWeight:700,display:'flex',alignItems:'center',gap:6}}><I n="check" sz={14} c={T.lumpGreen}/>Logged again — dated today, status Pending</div>}<div style={{display:'flex',gap:8,marginBottom:16}}>{[['all','All'],['uninvoiced','Uninvoiced'],['Pending','Pending'],['Paid','Paid']].map(([v,l])=>(<button key={v} onClick={()=>setFilter(v)} style={{background:filter===v?T.accent+'22':T.surface,border:`1.5px solid ${filter===v?T.accent:T.border}`,borderRadius:10,padding:'6px 14px',fontSize:12,fontWeight:700,color:filter===v?T.accent:T.textMuted}}>{l}</button>))}</div>{filtered.length===0?<div style={{textAlign:'center',padding:'60px 20px',color:T.textMuted}}>No entries</div>:filtered.map(e=><EntryRow key={e.id} e={e} onDelete={onDelete} onToggleStatus={onToggleStatus} onToggleVoid={onToggleVoid} confId={confId} setConfId={setConfId} onLogAgain={handleLogAgain} invoiceNum={getInvNum(e.id)}/>)}</Page>);}
@@ -1435,7 +1155,7 @@ useEffect(()=>{
   // eslint-disable-next-line
 },[seedBankTxn]);
 const sc=(k,v)=>setClient(c=>({...c,[k]:v}));const pickClient=c=>{setClient({name:c.name,email:c.email||'',address:c.address||''});setSelectedClientId(c.id);};const handleSaveClient=()=>{if(!client.name)return;onSaveClient({name:client.name,email:client.email||'',address:client.address||''});setSaveClientFlash(true);setTimeout(()=>setSaveClientFlash(false),1800);};
-const[qrInv,setQrInv]=useState(null);const[justPaid,setJustPaid]=useState(null);const[chaseOpen,setChaseOpen]=useState(null);const[chaseSending,setChaseSending]=useState(null);const[chaseResult,setChaseResult]=useState({});
+const[justPaid,setJustPaid]=useState(null);const[chaseOpen,setChaseOpen]=useState(null);const[chaseSending,setChaseSending]=useState(null);const[chaseResult,setChaseResult]=useState({});
 const[shareOpen,setShareOpen]=useState(null);const[shareTo,setShareTo]=useState('');const[shareSending,setShareSending]=useState(null);const[shareResult,setShareResult]=useState({});const[shareBody,setShareBody]=useState('');const[editingShareBody,setEditingShareBody]=useState({});
 // Inline quick-add: log a new day (timed/manual/lump) straight into the invoice being
 // built, without leaving this screen — reuses the exact gross/tax/net formula from AddView.
@@ -1477,7 +1197,7 @@ const invoicePeriod=(()=>{const dates=selEntries.map(e=>e.date).sort();if(dates.
 
 const printInvoice=()=>{
 const both=selEntries.length>0&&selReimbs.length>0;
-const iR=selEntries.map(e=>`<tr><td>${fmtD(e.date)}</td><td>${e.client?`<strong>${e.client}</strong>${e.description?' — '+e.description:''}`:(e.description||'–')}</td><td class="r">${fmt(e.subtotal)}</td></tr>`).join('');
+const iR=selEntries.map(e=>{const detail=entryLineDesc(e);const base=e.client?`<strong>${e.client}</strong>${e.description?' — '+e.description:''}`:(e.description||'–');return `<tr><td>${fmtD(e.date)}</td><td>${detail?`${base} (${detail})`:base}</td><td class="r">${fmt(e.subtotal)}</td></tr>`;}).join('');
 const rR=selReimbs.map(r=>`<tr><td>${fmtD(r.date)}</td><td>${r.description||'–'}${r.driveUrl?` <a href="${r.driveUrl.replace(/"/g,'&quot;')}" target="_blank" style="font-size:10px;color:#6b7d6a;text-decoration:none;margin-left:8px;border:1px solid #ddd;border-radius:3px;padding:1px 5px;">receipt ↗</a>`:''}</td><td class="r">${fmt(r.amount)}</td></tr>`).join('');
 const dR=deductions.filter(d=>d.description&&parseFloat(d.amount)>0).map(d=>`<tr><td></td><td style="color:#c05048">${d.description}</td><td class="r" style="color:#c05048">− ${fmt(parseFloat(d.amount))}</td></tr>`).join('');
 const html=`<!DOCTYPE html><html><head><title>${invNum}</title><link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet"><style>*{box-sizing:border-box}body{font-family:'DM Sans',Arial,sans-serif;color:#2a2a2a;max-width:760px;margin:0 auto;padding:60px 56px;-webkit-print-color-adjust:exact}@media print{body{padding:30px 40px}}.hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px}.inv-title{font-size:42px;font-weight:300;letter-spacing:-2px;color:#1a1a1a}.inv-num{font-size:11px;color:#aaaaaa;margin-top:6px}.meta{font-size:12px;color:#888;text-align:right;line-height:2.1}.meta .ref{color:#1a1a1a;font-weight:600;font-size:13px}hr{border:none;border-top:1px solid #e8e8e8;margin:28px 0}.parties{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin:28px 0}.plbl{font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#ccc;margin-bottom:10px}.pname{font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:4px}.pdetail{font-size:12px;color:#777;line-height:1.7}table{width:100%;border-collapse:collapse;margin-top:4px}th{font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#ccc;padding:0 0 14px;text-align:left;border-bottom:1px solid #eee}th.r,td.r{text-align:right}td{padding:13px 0;font-size:13px;border-bottom:1px solid #f4f4f4;vertical-align:top;color:#444}.sec td{padding:18px 0 6px;font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#bbb;border-bottom:none}.sub td{font-size:11px;color:#999;border-bottom:1px solid #eee;padding:8px 0}.tot-section{margin-top:24px;padding-top:20px;border-top:2px solid #1a1a1a;display:flex;justify-content:flex-end}.tot-block{text-align:right}.tot-lbl{font-size:11px;color:#888;margin-bottom:6px}.tot-amt{font-size:34px;font-weight:300;letter-spacing:-1.5px;color:#6b7d6a}.foot{margin-top:36px;padding-top:24px;border-top:1px solid #eee;font-size:12px;color:#888;line-height:1.8;white-space:pre-line}.late{margin-top:20px;font-size:9px;color:#ccc;line-height:1.7;font-style:italic}</style></head><body onload="window.print()"><div class="hd"><div><div class="inv-title">Invoice</div><div class="inv-num">${invNum}</div></div><div class="meta"><div>${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</div>${dueDate?`<div>Due ${fmtD(dueDate)}</div>`:''}${settings.payRef?`<div class="ref">Ref: ${settings.payRef.replace(/^PAYMENT\s+REF[:\s]*/i,'').trim()||settings.payRef} &middot; ${invNum}</div>`:''}</div></div><hr><div class="parties"><div><div class="plbl">From</div><div class="pname">${settings.name||'Your Name'}</div><div class="pdetail">${[settings.business,settings.email].filter(Boolean).join('<br>')}</div></div><div><div class="plbl">Bill To</div><div class="pname">${client.name||'Client'}</div><div class="pdetail">${[client.email,client.address].filter(Boolean).join('<br>')}</div></div></div><hr><table><tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>${both?'<tr class="sec"><td colspan="3">Services</td></tr>':''}${iR}${both&&selEntries.length>0?`<tr class="sub"><td colspan="2">Services total</td><td class="r">${fmt(incomeTotal)}</td></tr>`:''}${selReimbs.length>0?`<tr class="sec"><td colspan="3">Reimbursable Expenses</td></tr>${rR}${both?`<tr class="sub"><td colspan="2">Expenses total</td><td class="r">${fmt(reimbTotal)}</td></tr>`:''}`:''}${dR?`<tr class="sec"><td colspan="3">Deductions</td></tr>${dR}`:''}</table><div class="tot-section"><div class="tot-block"><div class="tot-lbl">Total Due</div><div class="tot-amt">${fmt(grandTotal)}</div></div></div>${notes?`<div class="foot">${notes}</div>`:''}<div class="late">Late payments are subject to a statutory interest charge of 8% per annum above the Bank of England base rate, in accordance with the Late Payment of Commercial Debts (Interest) Act 1998.</div></body></html>`;
@@ -1678,9 +1398,7 @@ ${settings.name||''}`;
       <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
         {inv.docUrl&&(<a href={inv.docUrl} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:6,background:T.drive+'18',borderRadius:10,padding:'6px 10px',color:T.drive,fontWeight:700,fontSize:12,textDecoration:'none'}}><I n="link" sz={13} c={T.drive}/> Open Doc</a>)}
         <button onClick={()=>printInvoiceRecord(inv)} style={{display:'flex',alignItems:'center',gap:6,background:T.timed+'14',border:`1.5px solid ${T.timed}44`,borderRadius:10,padding:'5px 10px',color:T.timed,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="print" sz={13} c={T.timed}/> PDF</button>
-        {!paid&&(<button onClick={()=>setQrInv(inv.id)} style={{display:'flex',alignItems:'center',gap:6,background:T.accent+'14',border:`1.5px solid ${T.accent}44`,borderRadius:10,padding:'5px 10px',color:T.accent,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="scan" sz={13} c={T.accent}/> Payment QR</button>)}
         {paid&&(<button onClick={()=>printInvoiceRecord(inv,'receipt')} style={{display:'flex',alignItems:'center',gap:6,background:T.lumpGreen+'14',border:`1.5px solid ${T.lumpGreen}44`,borderRadius:10,padding:'5px 10px',color:T.lumpGreen,fontWeight:700,fontSize:12,cursor:'pointer'}}><I n="receipt" sz={13} c={T.lumpGreen}/> Receipt</button>)}
-        {qrInv===inv.id&&<PayQR open onClose={()=>setQrInv(null)} client={inv.client} amount={inv.subtotal} reference={payReference(settings,inv.invoiceNum)} settings={settings}/>}
         {justPaid===inv.id&&paid&&(<div style={{flexBasis:'100%',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:T.lumpGreen+'12',border:`1px solid ${T.lumpGreen}44`,borderRadius:10,padding:'9px 12px',marginTop:2}}>
           <div style={{flex:'1 1 150px',fontSize:12,color:T.lumpGreen,fontWeight:700}}>Payment in — send them a receipt?</div>
           <button onClick={()=>printInvoiceRecord(inv,'receipt')} style={{background:T.lumpGreen,border:'none',borderRadius:8,padding:'6px 12px',color:T.bg,fontWeight:700,fontSize:12,cursor:'pointer'}}>Generate receipt</button>
@@ -2615,7 +2333,11 @@ function createInvoiceDoc(inv, settings) {
   if(both&&entries.length>0){tData.push(['','Services','']);rowT.push('section');}
   entries.forEach(function(e){
     var d=e.date?fmtDate(new Date(e.date+'T12:00:00')):'';
-    var desc=(e.client||'')+(e.client&&e.description?' \\u2014 ':'')+( e.description||'');
+    var trimT=function(t){return t&&t.slice(-3)===':00'?t.slice(0,-3):t;};
+    var detail='';
+    if(e.type==='timed'&&e.startTime&&e.endTime&&e.rate)detail=trimT(e.startTime)+'-'+trimT(e.endTime)+' @ \\u00a3'+e.rate+'/hr';
+    else if(e.type==='manual'&&(e.hours||e.hours===0)&&e.rate){var h=Number(e.hours);detail=(h===Math.floor(h)?h:h.toFixed(2))+' hours x \\u00a3'+e.rate+'/hr';}
+    var desc=(e.client||'')+(e.client&&e.description?' \\u2014 ':'')+( e.description||'')+(detail?' ('+detail+')':'');
     tData.push([d,desc,fmtGBP(e.subtotal)]);rowT.push('item');
   });
   if(both&&entries.length>0){tData.push(['','Services total',fmtGBP(inv.incomeTotal||0)]);rowT.push('subtotal');}
@@ -2969,16 +2691,6 @@ return(<Page>
       <div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.5}}>Found from before: <span style={{fontFamily:"'Geist Mono',monospace"}}>{settings.bankDetails}</span></div>
     </SettingsRow>
   )}
-  <SettingsRow label="Payment link">
-    <div>
-      <Inp placeholder="monzo.me/yourname" value={settings.paymentLink||''} onChange={e=>set('paymentLink',e.target.value)}/>
-      {payLinkProblem(settings)
-        ?<div style={{fontSize:11,color:T.danger,marginTop:6,lineHeight:1.55}}><strong>This won't scan.</strong> {payLinkProblem(settings)}</div>
-        :payLinkCaution(settings)
-        ?<div style={{fontSize:11,color:T.pending,marginTop:6,lineHeight:1.55}}><strong>Careful —</strong> {payLinkCaution(settings)}</div>
-        :<div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.55}}>Optional. Include the site, not just your name — <strong>monzo.me/yourname</strong>, revolut.me/yourname or paypal.me/yourname. No amount; Honey adds that and the reference itself. Monzo and Revolut links pay by bank transfer, so no card fee. Leave this empty and the QR shows your bank details instead.</div>}
-    </div>
-  </SettingsRow>
 </SettingsSection>
 
 <SettingsSection title="Invoicing">
@@ -3573,7 +3285,7 @@ const[bankTxns,setBankTxns]=useState([]);
 const[trash,setTrash]=useState(()=>{const t=LS.get('mhq-trash')||[];const cut=Date.now()-30*86400000;return t.filter(x=>x.deletedAt&&new Date(x.deletedAt).getTime()>cut);});
 useEffect(()=>{LS.set('mhq-trash',trash);},[trash]);
 const TRASH_MS=30*86400000;
-const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',sortCode:'',accountNumber:'',paymentLink:'',defaultRate:35,sheetsUrl:'',bankSyncKey:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
+const[settings,setSettings]=useState({name:'',business:'',email:'',phone:'',vatNumber:'',bankDetails:'',sortCode:'',accountNumber:'',defaultRate:35,sheetsUrl:'',bankSyncKey:'',payRef:'PAYMENT REF: PTF',invoiceCounter:1,anthropicKey:'',taxPercent:20,holidayPayPercent:12.07,paymentTermsDays:30,invoicePrefix:'INV-',invoiceFooter:'Thank you for your business.',setupDone:false,setupStep:0,migratedInvoiceModel:false});
 const[syncStatus,setSyncStatus]=useState('loading');
 const[loaded,setLoaded]=useState(false);
 const[booted,setBooted]=useState(false);
