@@ -208,7 +208,69 @@ const aiScanImage=async(dataUrl,isPdf,{model='claude-haiku-4-5-20251001',kind='r
   }
 };
 const SCAN_MODEL='claude-sonnet-5'; // used by the guided setup importer for higher-accuracy document reads
-const LS={get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
+// Storage failures used to be swallowed, so a full localStorage quota stopped every
+// save with no warning. Anything that fails here now reaches the UI instead.
+let onStorageFail=()=>{};
+const setStorageFailHandler=fn=>{onStorageFail=fn;};
+const LS={
+  get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},
+  set:(k,v)=>{
+    try{localStorage.setItem(k,JSON.stringify(v));return true;}
+    catch(e){
+      const quota=e&&(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED'||e.code===22);
+      onStorageFail(quota?"This browser's storage is full, so your latest change was not saved. Export a backup from Settings, then clear older receipt photos.":"Your latest change could not be saved to this browser.");
+      return false;
+    }
+  }
+};
+
+// Receipt photos are base64 and used to sit in localStorage alongside everything else,
+// which overflowed its ~5MB cap and made every unrelated edit re-serialize megabytes.
+// They live in IndexedDB now: no practical size cap, and writes stay off the hot path.
+const ImgDB=(()=>{
+  const NAME='honey-images',STORE='img';
+  let dbp=null;
+  const open=()=>{
+    if(dbp)return dbp;
+    dbp=new Promise((res,rej)=>{
+      let r;
+      try{r=indexedDB.open(NAME,1);}catch(e){rej(e);return;}
+      r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE);};
+      r.onsuccess=()=>res(r.result);
+      r.onerror=()=>rej(r.error);
+      r.onblocked=()=>rej(new Error('IndexedDB blocked'));
+    }).catch(e=>{dbp=null;throw e;});
+    return dbp;
+  };
+  const run=async(mode,fn)=>{
+    const db=await open();
+    return new Promise((res,rej)=>{
+      const t=db.transaction(STORE,mode),q=fn(t.objectStore(STORE));
+      t.oncomplete=()=>res(q?q.result:undefined);
+      t.onerror=()=>rej(t.error);
+      t.onabort=()=>rej(t.error||new Error('aborted'));
+    });
+  };
+  return{
+    get:id=>run('readonly',s=>s.get(id)).catch(()=>null),
+    set:(id,data)=>run('readwrite',s=>s.put(data,id)),
+    del:id=>run('readwrite',s=>s.delete(id)).catch(()=>{}),
+    getAll:async()=>{
+      try{
+        const db=await open();
+        return await new Promise((res,rej)=>{
+          const t=db.transaction(STORE,'readonly'),s=t.objectStore(STORE);
+          const kq=s.getAllKeys(),vq=s.getAll();
+          t.oncomplete=()=>{const out={};kq.result.forEach((k,i)=>{out[k]=vq.result[i];});res(out);};
+          t.onerror=()=>rej(t.error);
+        });
+      }catch{return{};}
+    }
+  };
+})();
+
+// localStorage keeps receipt metadata only; the photo travels separately via ImgDB.
+const stripImages=receipts=>receipts.map(r=>r.imageData?{...r,imageData:null}:r);
 
 const Sheets={
   _url:'',init(url){this._url=url||'';},
@@ -1635,8 +1697,23 @@ const exportIncome=()=>{const rows=[['ID','Invoice Ref','Date','Client','Descrip
 
 const exportExpenses=()=>{const rows=[['ID','Date','Description','Type','Category','Amount','Status','Paid By','Owed By','Drive Link']];const allInRange=receipts.filter(r=>inRange(r.date));allInRange.forEach(r=>rows.push([r.id||'',r.date,r.description||'',r.category,r.subcategory?catLabel(r.subcategory):'',(r.amount||0).toFixed(2),r.status||'pending',r.paidBy||'',r.owedBy||'',r.driveUrl||'']));rows.push([],[' ','Business expenses','','',totBiz.toFixed(2)],[' ','Still owed to you','','',totPend.toFixed(2)],[' ','Reimbursed','','',totPaid.toFixed(2)]);dlCSV(rows,`expenses_${rangeLabel().replace(/\s/g,'_')}_${today()}.csv`);};
 
-const exportBackup=()=>{const KEYS=['mhq-entries','mhq-receipts','mhq-invoices','mhq-clients','mhq-settings','mhq-trash','mhq-banktxns'];const keys={};KEYS.forEach(k=>{try{const v=localStorage.getItem(k);if(v!=null)keys[k]=JSON.parse(v);}catch{}});const blob=new Blob([JSON.stringify({app:'money-tracker-backup',v:1,exportedAt:new Date().toISOString(),keys},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`money-backup-${today()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);};
-const importBackup=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='application/json,.json';inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);const keys=j.keys||j.data||j;let n=0;Object.keys(keys).forEach(k=>{if(/^mhq-/.test(k)){localStorage.setItem(k,JSON.stringify(keys[k]));n++;}});if(!n){alert('No Float / Honey data found in that file.');return;}alert('Imported '+n+' data set'+(n>1?'s':'')+'. Honey will now reload.');location.reload();}catch(e){alert('That file is not a valid backup.');}};r.readAsText(f);};inp.click();};
+const exportBackup=async()=>{const KEYS=['mhq-entries','mhq-receipts','mhq-invoices','mhq-clients','mhq-settings','mhq-trash','mhq-banktxns'];const keys={};KEYS.forEach(k=>{try{const v=localStorage.getItem(k);if(v!=null)keys[k]=JSON.parse(v);}catch{}});
+// Photos live in IndexedDB, so fold them back in here — a backup missing them would look
+// complete and restore blank receipts.
+const imgs=await ImgDB.getAll();if(Array.isArray(keys['mhq-receipts']))keys['mhq-receipts']=keys['mhq-receipts'].map(r=>imgs[r.id]?{...r,imageData:imgs[r.id]}:r);
+const blob=new Blob([JSON.stringify({app:'money-tracker-backup',v:1,exportedAt:new Date().toISOString(),keys},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`money-backup-${today()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);};
+const importBackup=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='application/json,.json';inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f)return;const r=new FileReader();r.onload=async()=>{try{const j=JSON.parse(r.result);const keys=j.keys||j.data||j;let n=0;
+for(const k of Object.keys(keys)){
+  if(!/^mhq-/.test(k))continue;
+  let v=keys[k];
+  // Photos are routed to IndexedDB; localStorage keeps receipt metadata only.
+  if(k==='mhq-receipts'&&Array.isArray(v)){
+    for(const rec of v)if(rec&&rec.imageData){try{await ImgDB.set(rec.id,rec.imageData);}catch{}}
+    v=v.map(rec=>rec&&rec.imageData?{...rec,imageData:null}:rec);
+  }
+  localStorage.setItem(k,JSON.stringify(v));n++;
+}
+if(!n){alert('No Float / Honey data found in that file.');return;}alert('Imported '+n+' data set'+(n>1?'s':'')+'. Honey will now reload.');location.reload();}catch(e){alert('That file is not a valid backup.');}};r.readAsText(f);};inp.click();};
 const exportTaxYear=()=>{
   const year=range==='lastTax'?currentTaxYearStart-1:currentTaxYearStart;
   const b=taxYearBounds(year);
@@ -3323,6 +3400,11 @@ const[bankSyncLastSynced,setBankSyncLastSynced]=useState(null);
 const bankSyncTimer=useRef(null);
 const bankSyncHydrated=useRef(false); // mirrors sheetHydrated.current, but for bank data synced via Cloudflare
 const bankIsSaving=useRef(false);
+const[storageErr,setStorageErr]=useState('');
+const imgSaved=useRef(new Map()); // receipt id → the imageData already committed to ImgDB
+const onStorageFailRef=useRef(()=>{});
+onStorageFailRef.current=setStorageErr;
+useEffect(()=>{setStorageFailHandler(msg=>setStorageErr(msg));},[]);
 
 useEffect(()=>{
   (async()=>{
@@ -3331,15 +3413,24 @@ useEffect(()=>{
     const bankKey=localSettings?.bankSyncKey||'';
     if(localSettings)setSettings(s=>({...s,...localSettings}));
     // Paint the UI immediately from local data — Sheets/Cloudflare sync continues in the background
-    setEntries(LS.get('mhq-entries')||[]);setReceipts(LS.get('mhq-receipts')||[]);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);setBankTxns(LS.get('mhq-banktxns')||[]);
+    const localReceipts=LS.get('mhq-receipts')||[];
+    setEntries(LS.get('mhq-entries')||[]);setReceipts(localReceipts);setInvoices(LS.get('mhq-invoices')||[]);setClients(LS.get('mhq-clients')||[]);setBankTxns(LS.get('mhq-banktxns')||[]);
     setBooted(true);
+    // Photos come from IndexedDB. Anyone upgrading still has them inside the localStorage
+    // copy, so carry those across first — and only trust the move once the write lands.
+    const imgs=await ImgDB.getAll();
+    for(const r of localReceipts){
+      if(!r.imageData||imgs[r.id])continue;
+      try{await ImgDB.set(r.id,r.imageData);imgs[r.id]=r.imageData;}catch{}
+    }
+    Object.keys(imgs).forEach(id=>imgSaved.current.set(id,imgs[id]));
+    if(Object.keys(imgs).length)setReceipts(p=>p.map(r=>r.imageData||!imgs[r.id]?r:{...r,imageData:imgs[r.id]}));
     let sd=null;
     if(url){
       Sheets.init(url);setSyncStatus('loading');
       sd=await Sheets.load();
       if(sd&&Array.isArray(sd.entries)){
-        const lr=LS.get('mhq-receipts')||[];
-        const merged=(sd.receipts||[]).map(r=>{const l=lr.find(x=>x.id===r.id);return l?.imageData?{...r,imageData:l.imageData}:r;});
+        const merged=(sd.receipts||[]).map(r=>{const img=imgSaved.current.get(r.id);return img?{...r,imageData:img}:r;});
         setEntries(sd.entries||[]);setReceipts(merged);setInvoices(sd.invoices||[]);setClients(sd.clients||[]);
         if(sd.settings)setSettings(s=>({...s,...sd.settings}));
         sheetHydrated.current=true;
@@ -3443,9 +3534,37 @@ useEffect(()=>{
   setBankTxns(p=>p.map(t=>orphanedIds.has(t.id)?{...t,status:'unreviewed',matchedInvoiceId:null}:t));
 },[loaded,invoices,bankTxns]);
 
+// One effect per slice: editing a settings field no longer re-serializes every entry,
+// invoice and receipt photo you own. Each writes only what actually changed.
+useEffect(()=>{if(loaded)LS.set('mhq-entries',entries);},[entries,loaded]);
+useEffect(()=>{if(loaded)LS.set('mhq-invoices',invoices);},[invoices,loaded]);
+useEffect(()=>{if(loaded)LS.set('mhq-clients',clients);},[clients,loaded]);
+useEffect(()=>{if(loaded)LS.set('mhq-settings',settings);},[settings,loaded]);
+useEffect(()=>{if(loaded)LS.set('mhq-banktxns',bankTxns);},[bankTxns,loaded]);
+// Receipts split in two: metadata to localStorage, photos to IndexedDB. The photo is
+// written first and only dropped from the metadata copy once that write succeeded, so
+// a failed image write can never silently lose the picture.
 useEffect(()=>{
   if(!loaded)return;
-  LS.set('mhq-entries',entries);LS.set('mhq-receipts',receipts);LS.set('mhq-invoices',invoices);LS.set('mhq-clients',clients);LS.set('mhq-settings',settings);LS.set('mhq-banktxns',bankTxns);
+  let cancelled=false;
+  (async()=>{
+    const withPhotos=receipts.filter(r=>r.imageData);
+    for(const r of withPhotos){
+      if(cancelled)return;
+      if(imgSaved.current.get(r.id)===r.imageData)continue;
+      try{await ImgDB.set(r.id,r.imageData);imgSaved.current.set(r.id,r.imageData);}
+      catch{onStorageFailRef.current('A receipt photo could not be saved to this browser.');return;}
+    }
+    if(cancelled)return;
+    const live=new Set(receipts.map(r=>r.id));
+    for(const id of Array.from(imgSaved.current.keys()))if(!live.has(id)){ImgDB.del(id);imgSaved.current.delete(id);}
+    LS.set('mhq-receipts',stripImages(receipts));
+  })();
+  return()=>{cancelled=true;};
+},[receipts,loaded]);
+
+useEffect(()=>{
+  if(!loaded)return;
   const url=settings.sheetsUrl;
   if(!url){setSyncStatus('local');return;}
   // Never push an empty state to a sheet we haven't successfully read yet — protects existing sheet data on a fresh device
@@ -3473,8 +3592,7 @@ useEffect(()=>{
     const remoteKey=(sd.entries||[]).slice(0,3).map(e=>e.id).join(',');
     const localKey=entries.slice(0,3).map(e=>e.id).join(',');
     if(remoteKey===localKey&&(sd.invoices||[]).length===invoices.length&&(sd.receipts||[]).length===receipts.length)return;
-    const lr=LS.get('mhq-receipts')||[];
-    const merged=(sd.receipts||[]).map(r=>{const l=lr.find(x=>x.id===r.id);return l?.imageData?{...r,imageData:l.imageData}:r;});
+    const merged=(sd.receipts||[]).map(r=>{const img=imgSaved.current.get(r.id);return img?{...r,imageData:img}:r;});
     setEntries(sd.entries||[]);setReceipts(merged);setInvoices(sd.invoices||[]);
     if(sd.clients)setClients(sd.clients);
     if(sd.settings)setSettings(s=>({...s,...sd.settings}));
@@ -3491,8 +3609,7 @@ const syncFromSheets=async()=>{
   Sheets.init(settings.sheetsUrl);setSyncStatus('loading');
   const sd=await Sheets.load();
   if(sd&&Array.isArray(sd.entries)){
-    const lr=LS.get('mhq-receipts')||[];
-    const merged=(sd.receipts||[]).map(r=>{const l=lr.find(x=>x.id===r.id);return l?.imageData?{...r,imageData:l.imageData}:r;});
+    const merged=(sd.receipts||[]).map(r=>{const img=imgSaved.current.get(r.id);return img?{...r,imageData:img}:r;});
     setEntries(sd.entries||[]);setReceipts(merged);setInvoices(sd.invoices||[]);
     if(sd.clients)setClients(sd.clients);
     if(sd.settings)setSettings(s=>({...s,...sd.settings}));
@@ -3918,6 +4035,10 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
   <Sidebar view={view} setView={go} onSnap={snapPhoto} userName={settings.name}/>
   <div id="hn-main">
   <div style={{maxWidth:900,margin:'0 auto'}}>
+  {storageErr&&<div style={{background:T.dangerBg,border:`1px solid ${T.danger}`,borderRadius:12,padding:'12px 14px',margin:'12px 16px',display:'flex',alignItems:'center',gap:10}}>
+    <div style={{flex:1,fontSize:13,color:T.text,lineHeight:1.5}}><strong style={{color:T.danger}}>Not saved.</strong> {storageErr}</div>
+    <button onClick={()=>setStorageErr('')} style={{background:'none',border:'none',color:T.textMuted,fontSize:18,fontWeight:700,padding:'0 4px'}}>×</button>
+  </div>}
   {view==='home'&&<HomeView entries={entries} receipts={receipts} invoices={invoices} setView={go} syncStatus={syncStatus} lastSynced={lastSynced} onSync={syncFromSheets} sheetsUrl={settings.sheetsUrl} settings={settings} oldDataAvailable={oldDataAvailable}/>}
   {view==='add'&&<AddView onAdd={addE} settings={settings} initialType={addType} back={()=>setView('home')} onAddInvoice={inv=>{addI(inv);setSettings(s=>({...s,invoiceCounter:(s.invoiceCounter||1)+1,...allocatePayRef(settings).patch}));}} invoiceCounter={settings.invoiceCounter||1}/>}
   {view==='pay'&&<TakePaymentView settings={settings} entries={entries} clients={clients} onAdd={addE} back={()=>setView('home')} onAddInvoice={inv=>{addI(inv);setSettings(s=>({...s,invoiceCounter:(s.invoiceCounter||1)+1,...allocatePayRef(settings).patch}));}} invoiceCounter={settings.invoiceCounter||1}/>}
