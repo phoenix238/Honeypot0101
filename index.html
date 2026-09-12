@@ -103,6 +103,33 @@ const catLabel=k=>{const f=EXPENSE_CATS.find(c=>c[0]===k);return f?f[1]:'Uncateg
 const fmt=n=>'£'+Math.max(0,n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
 const today=()=>new Date().toISOString().split('T')[0];
 const datesClose=(a,b)=>{if(!a||!b)return false;const da=new Date(String(a).slice(0,10)).getTime(),db=new Date(String(b).slice(0,10)).getTime();return isFinite(da)&&isFinite(db)&&Math.abs(da-db)<6*86400000;};
+/**
+ * Flag records that look like accidental duplicates: same label, amounts within a penny,
+ * dates within six days. Comparing every record against every other one grew quadratically
+ * (19ms per render at 2000 entries), so group by label first — a duplicate must match there
+ * exactly — then walk each group in amount order and stop as soon as the amount gap exceeds
+ * the tolerance. Same pairs, same result, without the quadratic blow-up.
+ */
+const findDuplicates=(records,labelOf,amountOf)=>{
+  const flagged=new Set(),groups=new Map();
+  records.forEach(r=>{
+    const key=(labelOf(r)||'').toLowerCase().trim();
+    const g=groups.get(key);
+    if(g)g.push(r);else groups.set(key,[r]);
+  });
+  groups.forEach(group=>{
+    group.sort((a,b)=>(amountOf(a)||0)-(amountOf(b)||0));
+    for(let i=0;i<group.length;i++){
+      const a=group[i];
+      for(let j=i+1;j<group.length;j++){
+        const b=group[j];
+        if((amountOf(b)||0)-(amountOf(a)||0)>=0.02)break;
+        if(datesClose(a.date,b.date)){flagged.add(a.id);flagged.add(b.id);}
+      }
+    }
+  });
+  return flagged;
+};
 const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
 const mkId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 const PROXY_URL='https://honey-proxy.phoenix-2bc.workers.dev';
@@ -3073,11 +3100,9 @@ const taxableProfit=Math.max(0,allG-bizCosts);
 const taxReserve=taxableProfit*taxRate(settings);
 const safeReserve=allG*taxRate(settings); // set-aside % of all gross, ignoring costs — the "in case expenses are disallowed" number
 const trueNet=taxableProfit-taxReserve;
-const dupEntryIds=new Set();
-activeE.forEach((e,i)=>{for(let j=i+1;j<activeE.length;j++){const f=activeE[j];if(Math.abs((e.subtotal||0)-(f.subtotal||0))<0.02&&datesClose(e.date,f.date)&&(e.client||'').toLowerCase().trim()===(f.client||'').toLowerCase().trim()){dupEntryIds.add(e.id);dupEntryIds.add(f.id);}}});
+const dupEntryIds=findDuplicates(activeE,e=>e.client,e=>e.subtotal);
 const liveR=receipts.filter(r=>r.status!=='void');
-const dupReceiptIds=new Set();
-liveR.forEach((e,i)=>{for(let j=i+1;j<liveR.length;j++){const f=liveR[j];if(Math.abs((e.amount||0)-(f.amount||0))<0.02&&datesClose(e.date,f.date)&&(e.description||'').toLowerCase().trim()===(f.description||'').toLowerCase().trim()){dupReceiptIds.add(e.id);dupReceiptIds.add(f.id);}}});
+const dupReceiptIds=findDuplicates(liveR,r=>r.description,r=>r.amount);
 
 const stepTitle=['Welcome to Honey','Connect your bank','Your invoices','Receipts & reimbursements','Check it over'][step];
 const rowStyle={display:'flex',alignItems:'center',gap:8,padding:'9px 11px',marginBottom:7,borderRadius:10,background:T.bg,border:`1px solid ${T.border}`,flexWrap:'wrap'};
