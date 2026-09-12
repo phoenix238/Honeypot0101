@@ -73,8 +73,7 @@ if(!localStorage.getItem(GATE_KEY)){
 </div>
 <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
-<script type="text/babel" data-presets="react">
+<script type="text/babel" data-presets="react" id="app-src" data-build-hash="343447a89c405e0b972d8ff646bcc20de5a5314df0d0d10d6e5d182fa177e46f">
 const{useState,useEffect,useRef}=React;
 const T={bg:'#16140F',surface:'#211E17',border:'#322D23',text:'#F2EEE3',textMuted:'#8A8576',textFaint:'#5C574B',accent:'#E0A92E',accentBright:'#F2C14E',timed:'#3F6FB0',manual:'#7E62C0',lumpGreen:'#5BBF8A',business:'#B07A12',reimb:'#6E86D0',drive:'#3FA672',danger:'#B8392F',dangerBg:'rgba(184,57,47,.15)',paid:'#5BBF8A',pending:'#E0A92E'};
 const taxRate=settings=>((settings&&settings.taxPercent)??20)/100;
@@ -4104,6 +4103,46 @@ return(<div style={{background:T.bg,minHeight:'100vh',color:T.text}}>
 </div>);}
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+<script>
+/*
+ * The JSX above is the source of truth and stays hand-editable. `npm run build` compiles
+ * it to app.build.js and stamps this page with the hash of the source it compiled.
+ *
+ * On load we hash the JSX actually sitting in this file and compare. Match means
+ * app.build.js is current, so it runs directly and neither the 2.3MB Babel compiler nor
+ * the half-second compile ever happens. Any mismatch — source edited by hand, build not
+ * re-run, file missing, no crypto.subtle — quietly falls back to compiling in the browser.
+ * Slower, but never wrong, and never a blank page.
+ */
+(function(){
+  var el=document.getElementById('app-src');
+  var expected=el.getAttribute('data-build-hash');
+  var settled=false;
+
+  function loadBabel(){
+    if(settled)return;
+    settled=true;
+    var s=document.createElement('script');
+    s.src='https://unpkg.com/@babel/standalone@7.23.5/babel.min.js';
+    document.head.appendChild(s);
+  }
+  function loadCompiled(){
+    var s=document.createElement('script');
+    s.src='app.build.js';
+    s.onload=function(){settled=true;};
+    s.onerror=loadBabel; // build artefact missing or blocked — compile in the browser instead
+    document.head.appendChild(s);
+  }
+
+  if(!expected||expected==='__UNBUILT__'||!window.crypto||!crypto.subtle){loadBabel();return;}
+  try{
+    crypto.subtle.digest('SHA-256',new TextEncoder().encode(el.textContent)).then(function(buf){
+      var hash=Array.prototype.map.call(new Uint8Array(buf),function(b){return b.toString(16).padStart(2,'0');}).join('');
+      if(hash===expected)loadCompiled();else loadBabel();
+    }).catch(loadBabel);
+  }catch(e){loadBabel();}
+})();
 </script>
 </body>
 </html>
