@@ -1,0 +1,25 @@
+{
+  "name": "@borderlines/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "refresh": "tsx src/refresh.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --import tsx test/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "borderlines",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A geography guessing game where every fact is sourced from Wikidata.",
+  "type": "module",
+  "workspaces": ["packages/server", "packages/web"],
+  "engines": { "node": ">=20.11" },
+  "scripts": {
+    "refresh": "npm run refresh -w @borderlines/server",
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w @borderlines/server",
+    "dev:web": "npm run dev -w @borderlines/web",
+    "build": "npm run build -w @borderlines/web && npm run build -w @borderlines/server",
+    "start": "npm run start -w @borderlines/server",
+    "typecheck": "npm run typecheck -w @borderlines/server && npm run typecheck -w @borderlines/web",
+    "test": "npm run test -w @borderlines/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
