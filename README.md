@@ -60,5 +60,36 @@ the Home banner.
 ## Run locally
 Open `index.html` in a browser, or serve the folder (`python3 -m http.server`).
 
+## Editing and the build step
+`index.html` is still the app and still the source of truth — the JSX lives inside it and
+you can edit it by hand exactly as before.
+
+What changed is that the JSX no longer gets compiled on every visitor's device. Loading a
+2.3MB compiler and spending half a second (far longer on a phone) recompiling the same
+320KB of source on every page load was the single biggest cost in the app. `npm run build`
+compiles it once into `app.build.js` and stamps `index.html` with a hash of the source it
+compiled from.
+
+On load the page hashes its own JSX and compares. If it matches, the compiled file runs and
+neither the download nor the compile happens. If it doesn't — you edited the JSX and haven't
+rebuilt, or `app.build.js` is missing — the page quietly falls back to compiling in the
+browser. Slower, but always correct, and never a blank screen.
+
+```
+npm install     # once
+npm run build   # after editing the JSX in index.html
+npm test        # storage round-trip, duplicate detection, build integrity
+```
+
+Commit `app.build.js` along with `index.html`; GitHub Pages serves it directly. Forgetting
+to rebuild costs speed, never correctness.
+
+## Where your data lives
+Entries, invoices, clients, bank transactions and settings are in `localStorage`. Receipt
+photos are in **IndexedDB** — they used to sit in `localStorage` too, which capped out around
+5MB and then failed silently, so saves stopped working with no warning. Existing photos are
+migrated across automatically on first load, and a failed write now shows an error in the app
+instead of being swallowed. Backups (Settings and Reports) include the photos.
+
 `honey-proxy/` is the Cloudflare Worker used for AI document scanning (receipt snap
 and the guided setup importer). `_design/` holds the design source + integration specs.

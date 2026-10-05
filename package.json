@@ -1,0 +1,15 @@
+{
+  "name": "honey",
+  "private": true,
+  "type": "module",
+  "description": "Freelance finance tracker. index.html is the app and the source of truth; build.mjs precompiles its JSX so browsers skip the in-page Babel step.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test/storage.test.mjs && node test/duplicates.test.mjs && node test/build.test.mjs"
+  },
+  "devDependencies": {
+    "@babel/standalone": "7.23.5",
+    "fake-indexeddb": "^6.0.0",
+    "jsdom": "^25.0.0"
+  }
+}
